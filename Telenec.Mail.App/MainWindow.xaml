@@ -6,7 +6,10 @@
         mc:Ignorable="d"
         Title="{Binding ApplicationTitle}"
         Height="450"
-        Width="800">
+        Width="800"
+        Background="{StaticResource Surface.Background}"
+        Foreground="{StaticResource Text.Primary}"
+        FontFamily="{StaticResource Typography.FontFamily}">
 
     <Grid>
 
