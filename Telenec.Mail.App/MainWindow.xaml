@@ -5,13 +5,714 @@
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
         mc:Ignorable="d"
         Title="{Binding ApplicationTitle}"
-        Height="450"
-        Width="800"
+        Width="1400"
+        Height="820"
+        MinWidth="1100"
+        MinHeight="650"
+        WindowStartupLocation="CenterScreen"
         Background="{StaticResource Surface.Background}"
         Foreground="{StaticResource Text.Primary}"
-        FontFamily="{StaticResource Typography.FontFamily}">
+        FontFamily="{StaticResource Typography.FontFamily}"
+        UseLayoutRounding="True"
+        SnapsToDevicePixels="True">
 
     <Grid>
 
+        <Grid.ColumnDefinitions>
+            <ColumnDefinition Width="240" />
+            <ColumnDefinition Width="380" />
+            <ColumnDefinition Width="*" />
+        </Grid.ColumnDefinitions>
+
+        <!-- =====================================================
+             LINKE NAVIGATION
+             ===================================================== -->
+
+        <Border
+            Grid.Column="0"
+            Background="{StaticResource Navigation.Background}">
+
+            <Grid>
+
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="*" />
+                    <RowDefinition Height="Auto" />
+                </Grid.RowDefinitions>
+
+                <!-- Branding -->
+
+                <StackPanel
+                    Grid.Row="0"
+                    Margin="22,22,22,18">
+
+                    <Image
+                        Source="/Assets/Brand/TelenecLogo.png"
+                        Height="72"
+                        HorizontalAlignment="Left"
+                        Stretch="Uniform" />
+
+                    <TextBlock
+                        Text="MAIL"
+                        Margin="4,5,0,0"
+                        Foreground="{StaticResource Navigation.TextSecondary}"
+                        FontSize="12"
+                        FontWeight="SemiBold" />
+
+                </StackPanel>
+
+                <!-- Connection Status -->
+
+                <Border
+                    Grid.Row="1"
+                    Margin="16,0,16,18"
+                    Padding="12,9"
+                    CornerRadius="6"
+                    Background="{StaticResource Navigation.Selected}">
+
+                    <StackPanel Orientation="Horizontal">
+
+                        <Ellipse
+                            Width="8"
+                            Height="8"
+                            Margin="0,0,8,0"
+                            Fill="{StaticResource Status.Success}"
+                            VerticalAlignment="Center" />
+
+                        <TextBlock
+                            Text="Verbunden"
+                            Foreground="{StaticResource Navigation.TextSecondary}"
+                            FontSize="12"
+                            VerticalAlignment="Center" />
+
+                    </StackPanel>
+
+                </Border>
+
+                <!-- Mail folders -->
+
+                <StackPanel Grid.Row="2">
+
+                    <!-- Selected inbox -->
+
+                    <Border Style="{StaticResource Navigation.Item.Selected}">
+                        <Grid>
+
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="4" />
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+
+                            <Border
+                                Grid.Column="0"
+                                Width="3"
+                                Height="24"
+                                CornerRadius="2"
+                                Background="{StaticResource Brand.Primary}"
+                                VerticalAlignment="Center" />
+
+                            <TextBlock
+                                Grid.Column="1"
+                                Margin="12,0,0,0"
+                                Text="Posteingang"
+                                Style="{StaticResource Navigation.ItemText}"
+                                FontWeight="SemiBold" />
+
+                            <Border
+                                Grid.Column="2"
+                                MinWidth="26"
+                                Height="22"
+                                Padding="7,0"
+                                CornerRadius="11"
+                                Background="{StaticResource Brand.Primary}"
+                                VerticalAlignment="Center">
+
+                                <TextBlock
+                                    Text="12"
+                                    Foreground="White"
+                                    FontSize="11"
+                                    FontWeight="SemiBold"
+                                    HorizontalAlignment="Center"
+                                    VerticalAlignment="Center" />
+
+                            </Border>
+
+                        </Grid>
+                    </Border>
+
+                    <Border Style="{StaticResource Navigation.Item}">
+                        <TextBlock
+                            Text="Gesendet"
+                            Style="{StaticResource Navigation.ItemText}" />
+                    </Border>
+
+                    <Border Style="{StaticResource Navigation.Item}">
+                        <TextBlock
+                            Text="Entwürfe"
+                            Style="{StaticResource Navigation.ItemText}" />
+                    </Border>
+
+                    <Border
+                        Height="1"
+                        Margin="24,14"
+                        Background="{StaticResource Navigation.Selected}" />
+
+                    <Border Style="{StaticResource Navigation.Item}">
+                        <TextBlock
+                            Text="Archiv"
+                            Style="{StaticResource Navigation.ItemText}" />
+                    </Border>
+
+                    <Border Style="{StaticResource Navigation.Item}">
+                        <TextBlock
+                            Text="Junk"
+                            Style="{StaticResource Navigation.ItemText}" />
+                    </Border>
+
+                    <Border Style="{StaticResource Navigation.Item}">
+                        <TextBlock
+                            Text="Papierkorb"
+                            Style="{StaticResource Navigation.ItemText}" />
+                    </Border>
+
+                </StackPanel>
+
+                <!-- Account footer -->
+
+                <Border
+                    Grid.Row="3"
+                    Padding="20,18"
+                    BorderBrush="{StaticResource Navigation.Selected}"
+                    BorderThickness="0,1,0,0">
+
+                    <Grid>
+
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+
+                        <StackPanel>
+
+                            <TextBlock
+                                Text="max.mustermann@necnet.de"
+                                Foreground="{StaticResource Navigation.Text}"
+                                FontSize="12"
+                                FontWeight="SemiBold"
+                                TextTrimming="CharacterEllipsis" />
+
+                            <TextBlock
+                                Text="Telenec Mail"
+                                Margin="0,3,0,0"
+                                Foreground="{StaticResource Navigation.TextSecondary}"
+                                FontSize="11" />
+
+                        </StackPanel>
+
+                        <TextBlock
+                            Grid.Column="1"
+                            Text="&#xE713;"
+                            FontFamily="Segoe Fluent Icons"
+                            Foreground="{StaticResource Navigation.TextSecondary}"
+                            FontSize="18"
+                            VerticalAlignment="Center"
+                            Margin="10,0,0,0" />
+
+                    </Grid>
+
+                </Border>
+
+            </Grid>
+        </Border>
+
+        <!-- =====================================================
+             NACHRICHTENLISTE
+             ===================================================== -->
+
+        <Border
+            Grid.Column="1"
+            Background="{StaticResource Surface.Card}"
+            BorderBrush="{StaticResource Border.Default}"
+            BorderThickness="0,0,1,0">
+
+            <Grid>
+
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="*" />
+                </Grid.RowDefinitions>
+
+                <!-- Header -->
+
+                <Grid
+                    Grid.Row="0"
+                    Margin="22,22,22,14">
+
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="Auto" />
+                    </Grid.ColumnDefinitions>
+
+                    <StackPanel>
+
+                        <TextBlock
+                            Text="Posteingang"
+                            FontSize="24"
+                            FontWeight="SemiBold"
+                            Foreground="{StaticResource Text.Primary}" />
+
+                        <TextBlock
+                            Text="12 ungelesene Nachrichten"
+                            Margin="0,4,0,0"
+                            FontSize="12"
+                            Foreground="{StaticResource Text.Secondary}" />
+
+                    </StackPanel>
+
+                    <TextBlock
+                        Grid.Column="1"
+                        Text="&#xE72C;"
+                        FontFamily="Segoe Fluent Icons"
+                        FontSize="18"
+                        Foreground="{StaticResource Text.Secondary}"
+                        VerticalAlignment="Center" />
+
+                </Grid>
+
+                <!-- Search -->
+
+                <Border
+                    Grid.Row="1"
+                    Margin="18,0,18,14"
+                    Height="38"
+                    Background="{StaticResource Surface.Background}"
+                    BorderBrush="{StaticResource Border.Default}"
+                    BorderThickness="1"
+                    CornerRadius="6">
+
+                    <Grid Margin="12,0">
+
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto" />
+                            <ColumnDefinition Width="*" />
+                        </Grid.ColumnDefinitions>
+
+                        <TextBlock
+                            Text="&#xE721;"
+                            FontFamily="Segoe Fluent Icons"
+                            FontSize="15"
+                            Foreground="{StaticResource Text.Secondary}"
+                            VerticalAlignment="Center" />
+
+                        <TextBlock
+                            Grid.Column="1"
+                            Margin="9,0,0,0"
+                            Text="E-Mails durchsuchen"
+                            FontSize="13"
+                            Foreground="{StaticResource Text.Muted}"
+                            VerticalAlignment="Center" />
+
+                    </Grid>
+
+                </Border>
+
+                <!-- Static demo mails -->
+
+                <ScrollViewer
+                    Grid.Row="2"
+                    VerticalScrollBarVisibility="Auto">
+
+                    <StackPanel>
+
+                        <!-- Selected -->
+
+                        <Border Style="{StaticResource MailList.Item.Selected}">
+
+                            <Grid>
+
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="4" />
+                                    <ColumnDefinition Width="*" />
+                                </Grid.ColumnDefinitions>
+
+                                <Border
+                                    Grid.Column="0"
+                                    Width="3"
+                                    CornerRadius="2"
+                                    Background="{StaticResource Brand.Primary}" />
+
+                                <StackPanel
+                                    Grid.Column="1"
+                                    Margin="13,0,0,0">
+
+                                    <Grid>
+
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*" />
+                                            <ColumnDefinition Width="Auto" />
+                                        </Grid.ColumnDefinitions>
+
+                                        <StackPanel Orientation="Horizontal">
+
+                                            <Ellipse
+                                                Width="7"
+                                                Height="7"
+                                                Margin="0,0,8,0"
+                                                Fill="{StaticResource Brand.Primary}"
+                                                VerticalAlignment="Center" />
+
+                                            <TextBlock
+                                                Text="Telenec Technik"
+                                                FontSize="13"
+                                                FontWeight="SemiBold"
+                                                Foreground="{StaticResource Text.Primary}" />
+
+                                        </StackPanel>
+
+                                        <TextBlock
+                                            Grid.Column="1"
+                                            Text="10:42"
+                                            FontSize="11"
+                                            Foreground="{StaticResource Text.Secondary}" />
+
+                                    </Grid>
+
+                                    <TextBlock
+                                        Margin="0,7,0,0"
+                                        Text="Willkommen bei Telenec Mail"
+                                        FontSize="14"
+                                        FontWeight="SemiBold"
+                                        Foreground="{StaticResource Text.Primary}" />
+
+                                    <TextBlock
+                                        Margin="0,5,0,0"
+                                        Text="Ihr neues Telenec-Mailkonto ist eingerichtet und bereit..."
+                                        FontSize="12"
+                                        Foreground="{StaticResource Text.Secondary}"
+                                        TextTrimming="CharacterEllipsis" />
+
+                                </StackPanel>
+
+                            </Grid>
+
+                        </Border>
+
+                        <!-- Mail 2 -->
+
+                        <Border Style="{StaticResource MailList.Item}">
+
+                            <StackPanel>
+
+                                <Grid>
+
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="Auto" />
+                                    </Grid.ColumnDefinitions>
+
+                                    <TextBlock
+                                        Text="Stadtwerke Neustadt"
+                                        FontSize="13"
+                                        FontWeight="SemiBold"
+                                        Foreground="{StaticResource Text.Primary}" />
+
+                                    <TextBlock
+                                        Grid.Column="1"
+                                        Text="09:18"
+                                        FontSize="11"
+                                        Foreground="{StaticResource Text.Secondary}" />
+
+                                </Grid>
+
+                                <TextBlock
+                                    Margin="0,7,0,0"
+                                    Text="Ihre Rechnung für August 2026"
+                                    FontSize="14"
+                                    Foreground="{StaticResource Text.Primary}" />
+
+                                <TextBlock
+                                    Margin="0,5,0,0"
+                                    Text="Guten Tag, Ihre aktuelle Rechnung steht für Sie bereit..."
+                                    FontSize="12"
+                                    Foreground="{StaticResource Text.Secondary}"
+                                    TextTrimming="CharacterEllipsis" />
+
+                            </StackPanel>
+
+                        </Border>
+
+                        <!-- Mail 3 -->
+
+                        <Border Style="{StaticResource MailList.Item}">
+
+                            <StackPanel>
+
+                                <Grid>
+
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="Auto" />
+                                    </Grid.ColumnDefinitions>
+
+                                    <TextBlock
+                                        Text="Anna Müller"
+                                        FontSize="13"
+                                        Foreground="{StaticResource Text.Primary}" />
+
+                                    <TextBlock
+                                        Grid.Column="1"
+                                        Text="Gestern"
+                                        FontSize="11"
+                                        Foreground="{StaticResource Text.Secondary}" />
+
+                                </Grid>
+
+                                <TextBlock
+                                    Margin="0,7,0,0"
+                                    Text="Termin am kommenden Dienstag"
+                                    FontSize="14"
+                                    Foreground="{StaticResource Text.Primary}" />
+
+                                <TextBlock
+                                    Margin="0,5,0,0"
+                                    Text="Hallo, ich wollte den vereinbarten Termin noch einmal bestätigen..."
+                                    FontSize="12"
+                                    Foreground="{StaticResource Text.Secondary}"
+                                    TextTrimming="CharacterEllipsis" />
+
+                            </StackPanel>
+
+                        </Border>
+
+                        <!-- Mail 4 -->
+
+                        <Border Style="{StaticResource MailList.Item}">
+
+                            <StackPanel>
+
+                                <Grid>
+
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="Auto" />
+                                    </Grid.ColumnDefinitions>
+
+                                    <TextBlock
+                                        Text="Telenec Kundenservice"
+                                        FontSize="13"
+                                        Foreground="{StaticResource Text.Primary}" />
+
+                                    <TextBlock
+                                        Grid.Column="1"
+                                        Text="Dienstag"
+                                        FontSize="11"
+                                        Foreground="{StaticResource Text.Secondary}" />
+
+                                </Grid>
+
+                                <TextBlock
+                                    Margin="0,7,0,0"
+                                    Text="Ihre Anfrage wurde bearbeitet"
+                                    FontSize="14"
+                                    Foreground="{StaticResource Text.Primary}" />
+
+                                <TextBlock
+                                    Margin="0,5,0,0"
+                                    Text="Vielen Dank für Ihre Nachricht. Wir haben Ihre Anfrage geprüft..."
+                                    FontSize="12"
+                                    Foreground="{StaticResource Text.Secondary}"
+                                    TextTrimming="CharacterEllipsis" />
+
+                            </StackPanel>
+
+                        </Border>
+
+                    </StackPanel>
+
+                </ScrollViewer>
+
+            </Grid>
+
+        </Border>
+
+        <!-- =====================================================
+             LESEBEREICH
+             ===================================================== -->
+
+        <Border
+            Grid.Column="2"
+            Background="{StaticResource Surface.Card}">
+
+            <Grid>
+
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="1" />
+                    <RowDefinition Height="*" />
+                </Grid.RowDefinitions>
+
+                <!-- Message header -->
+
+                <Grid
+                    Grid.Row="0"
+                    Margin="32,26,32,22">
+
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="Auto" />
+                    </Grid.RowDefinitions>
+
+                    <TextBlock
+                        Text="Willkommen bei Telenec Mail"
+                        FontSize="25"
+                        FontWeight="SemiBold"
+                        Foreground="{StaticResource Text.Primary}" />
+
+                    <Grid
+                        Grid.Row="1"
+                        Margin="0,20,0,0">
+
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="44" />
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+
+                        <Border
+                            Width="40"
+                            Height="40"
+                            CornerRadius="20"
+                            Background="{StaticResource Brand.Primary}">
+
+                            <TextBlock
+                                Text="T"
+                                Foreground="White"
+                                FontSize="17"
+                                FontWeight="SemiBold"
+                                HorizontalAlignment="Center"
+                                VerticalAlignment="Center" />
+
+                        </Border>
+
+                        <StackPanel
+                            Grid.Column="1"
+                            Margin="12,0,0,0"
+                            VerticalAlignment="Center">
+
+                            <TextBlock
+                                Text="Telenec Technik"
+                                FontSize="13"
+                                FontWeight="SemiBold"
+                                Foreground="{StaticResource Text.Primary}" />
+
+                            <TextBlock
+                                Margin="0,3,0,0"
+                                Text="support@telenec.de → max.mustermann@necnet.de"
+                                FontSize="11"
+                                Foreground="{StaticResource Text.Secondary}" />
+
+                        </StackPanel>
+
+                        <TextBlock
+                            Grid.Column="2"
+                            Text="Heute, 10:42"
+                            FontSize="11"
+                            Foreground="{StaticResource Text.Secondary}"
+                            VerticalAlignment="Center" />
+
+                    </Grid>
+
+                </Grid>
+
+                <Border
+                    Grid.Row="1"
+                    Background="{StaticResource Border.Subtle}" />
+
+                <!-- Mail content -->
+
+                <ScrollViewer
+                    Grid.Row="2"
+                    VerticalScrollBarVisibility="Auto">
+
+                    <StackPanel
+                        Margin="44,36,44,36"
+                        MaxWidth="760"
+                        HorizontalAlignment="Left">
+
+                        <TextBlock
+                            Text="Guten Tag,"
+                            FontSize="14"
+                            Foreground="{StaticResource Text.Primary}" />
+
+                        <TextBlock
+                            Margin="0,20,0,0"
+                            TextWrapping="Wrap"
+                            FontSize="14"
+                            LineHeight="22"
+                            Foreground="{StaticResource Text.Primary}">
+                            Ihr Telenec-Mailkonto ist eingerichtet und bereit.
+                            Mit Telenec Mail erhalten Sie künftig eine einfache und
+                            übersichtliche Anwendung für Ihre E-Mails.
+                        </TextBlock>
+
+                        <TextBlock
+                            Margin="0,20,0,0"
+                            TextWrapping="Wrap"
+                            FontSize="14"
+                            LineHeight="22"
+                            Foreground="{StaticResource Text.Primary}">
+                            Servereinstellungen und technische Details übernimmt
+                            die Anwendung automatisch. Sie benötigen lediglich
+                            Ihre E-Mail-Adresse und Ihr Passwort.
+                        </TextBlock>
+
+                        <Border
+                            Margin="0,28,0,28"
+                            Padding="18"
+                            CornerRadius="8"
+                            Background="{StaticResource Brand.PrimaryLight}">
+
+                            <StackPanel>
+
+                                <TextBlock
+                                    Text="Einfach. Sicher. Telenec."
+                                    FontSize="14"
+                                    FontWeight="SemiBold"
+                                    Foreground="{StaticResource Text.Primary}" />
+
+                                <TextBlock
+                                    Margin="0,6,0,0"
+                                    Text="Technische Komplexität bleibt im Hintergrund."
+                                    FontSize="12"
+                                    Foreground="{StaticResource Text.Secondary}" />
+
+                            </StackPanel>
+
+                        </Border>
+
+                        <TextBlock
+                            Text="Viele Grüße"
+                            FontSize="14"
+                            Foreground="{StaticResource Text.Primary}" />
+
+                        <TextBlock
+                            Margin="0,5,0,0"
+                            Text="Ihre Telenec Technik"
+                            FontSize="14"
+                            FontWeight="SemiBold"
+                            Foreground="{StaticResource Text.Primary}" />
+
+                    </StackPanel>
+
+                </ScrollViewer>
+
+            </Grid>
+
+        </Border>
+
     </Grid>
+
 </Window>

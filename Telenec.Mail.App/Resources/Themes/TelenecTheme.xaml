@@ -14,16 +14,26 @@
     <Color x:Key="Brand.PrimaryLight.Color">#E8F4FC</Color>
     <Color x:Key="Brand.Dark.Color">#24272B</Color>
 
+    <!-- Navigation Colors -->
+    <Color x:Key="Navigation.Background.Color">#24272B</Color>
+    <Color x:Key="Navigation.Selected.Color">#303B45</Color>
+    <Color x:Key="Navigation.Text.Color">#FFFFFF</Color>
+    <Color x:Key="Navigation.TextSecondary.Color">#AEB7C0</Color>
+
     <!-- Surface Colors -->
     <Color x:Key="Surface.Background.Color">#F3F5F7</Color>
     <Color x:Key="Surface.Card.Color">#FFFFFF</Color>
+    <Color x:Key="Surface.Hover.Color">#F6F8FA</Color>
+    <Color x:Key="Surface.Selected.Color">#EAF5FC</Color>
 
     <!-- Text Colors -->
     <Color x:Key="Text.Primary.Color">#1F2328</Color>
     <Color x:Key="Text.Secondary.Color">#66707A</Color>
+    <Color x:Key="Text.Muted.Color">#8C959F</Color>
 
     <!-- Border Colors -->
     <Color x:Key="Border.Default.Color">#D8DEE4</Color>
+    <Color x:Key="Border.Subtle.Color">#E8EBEF</Color>
 
     <!-- Status Colors -->
     <Color x:Key="Status.Success.Color">#238636</Color>
@@ -31,7 +41,10 @@
     <Color x:Key="Status.Error.Color">#CF222E</Color>
     <Color x:Key="Status.Information.Color">#0969DA</Color>
 
-    <!-- Semantic Brushes -->
+    <!-- =========================================================
+         Semantic Brushes
+         ========================================================= -->
+
     <SolidColorBrush
         x:Key="Brand.Primary"
         Color="{StaticResource Brand.Primary.Color}" />
@@ -49,12 +62,36 @@
         Color="{StaticResource Brand.Dark.Color}" />
 
     <SolidColorBrush
+        x:Key="Navigation.Background"
+        Color="{StaticResource Navigation.Background.Color}" />
+
+    <SolidColorBrush
+        x:Key="Navigation.Selected"
+        Color="{StaticResource Navigation.Selected.Color}" />
+
+    <SolidColorBrush
+        x:Key="Navigation.Text"
+        Color="{StaticResource Navigation.Text.Color}" />
+
+    <SolidColorBrush
+        x:Key="Navigation.TextSecondary"
+        Color="{StaticResource Navigation.TextSecondary.Color}" />
+
+    <SolidColorBrush
         x:Key="Surface.Background"
         Color="{StaticResource Surface.Background.Color}" />
 
     <SolidColorBrush
         x:Key="Surface.Card"
         Color="{StaticResource Surface.Card.Color}" />
+
+    <SolidColorBrush
+        x:Key="Surface.Hover"
+        Color="{StaticResource Surface.Hover.Color}" />
+
+    <SolidColorBrush
+        x:Key="Surface.Selected"
+        Color="{StaticResource Surface.Selected.Color}" />
 
     <SolidColorBrush
         x:Key="Text.Primary"
@@ -65,8 +102,16 @@
         Color="{StaticResource Text.Secondary.Color}" />
 
     <SolidColorBrush
+        x:Key="Text.Muted"
+        Color="{StaticResource Text.Muted.Color}" />
+
+    <SolidColorBrush
         x:Key="Border.Default"
         Color="{StaticResource Border.Default.Color}" />
+
+    <SolidColorBrush
+        x:Key="Border.Subtle"
+        Color="{StaticResource Border.Subtle.Color}" />
 
     <SolidColorBrush
         x:Key="Status.Success"
@@ -84,10 +129,16 @@
         x:Key="Status.Information"
         Color="{StaticResource Status.Information.Color}" />
 
-    <!-- Typography -->
+    <!-- =========================================================
+         Typography
+         ========================================================= -->
+
     <FontFamily x:Key="Typography.FontFamily">Segoe UI Variable</FontFamily>
 
-    <!-- Base Button Style -->
+    <!-- =========================================================
+         Primary Button
+         ========================================================= -->
+
     <Style x:Key="Button.Primary" TargetType="Button">
         <Setter Property="Background" Value="{StaticResource Brand.Primary}" />
         <Setter Property="Foreground" Value="White" />
@@ -129,6 +180,50 @@
                 </ControlTemplate>
             </Setter.Value>
         </Setter>
+    </Style>
+
+    <!-- =========================================================
+         Navigation
+         ========================================================= -->
+
+    <Style x:Key="Navigation.Item" TargetType="Border">
+        <Setter Property="Height" Value="42" />
+        <Setter Property="Margin" Value="12,2" />
+        <Setter Property="Padding" Value="14,0" />
+        <Setter Property="CornerRadius" Value="6" />
+        <Setter Property="Background" Value="Transparent" />
+    </Style>
+
+    <Style
+        x:Key="Navigation.Item.Selected"
+        TargetType="Border"
+        BasedOn="{StaticResource Navigation.Item}">
+        <Setter Property="Background" Value="{StaticResource Navigation.Selected}" />
+    </Style>
+
+    <Style x:Key="Navigation.ItemText" TargetType="TextBlock">
+        <Setter Property="Foreground" Value="{StaticResource Navigation.Text}" />
+        <Setter Property="FontFamily" Value="{StaticResource Typography.FontFamily}" />
+        <Setter Property="FontSize" Value="14" />
+        <Setter Property="VerticalAlignment" Value="Center" />
+    </Style>
+
+    <!-- =========================================================
+         Mail list
+         ========================================================= -->
+
+    <Style x:Key="MailList.Item" TargetType="Border">
+        <Setter Property="Background" Value="{StaticResource Surface.Card}" />
+        <Setter Property="BorderBrush" Value="{StaticResource Border.Subtle}" />
+        <Setter Property="BorderThickness" Value="0,0,0,1" />
+        <Setter Property="Padding" Value="18,15" />
+    </Style>
+
+    <Style
+        x:Key="MailList.Item.Selected"
+        TargetType="Border"
+        BasedOn="{StaticResource MailList.Item}">
+        <Setter Property="Background" Value="{StaticResource Surface.Selected}" />
     </Style>
 
 </ResourceDictionary>
