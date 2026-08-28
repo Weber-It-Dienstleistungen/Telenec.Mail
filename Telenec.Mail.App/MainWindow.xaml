@@ -459,10 +459,11 @@
                     </Grid.RowDefinitions>
 
                     <TextBlock
-                        Text="Willkommen bei Telenec Mail"
+                        Text="{Binding SelectedMessage.Subject}"
                         FontSize="25"
                         FontWeight="SemiBold"
-                        Foreground="{StaticResource Text.Primary}" />
+                        Foreground="{StaticResource Text.Primary}"
+                        TextWrapping="Wrap" />
 
                     <Grid
                         Grid.Row="1"
@@ -481,7 +482,7 @@
                             Background="{StaticResource Brand.Primary}">
 
                             <TextBlock
-                                Text="T"
+                                Text="{Binding SelectedMessage.SenderInitial}"
                                 Foreground="White"
                                 FontSize="17"
                                 FontWeight="SemiBold"
@@ -496,25 +497,27 @@
                             VerticalAlignment="Center">
 
                             <TextBlock
-                                Text="Telenec Technik"
+                                Text="{Binding SelectedMessage.Sender}"
                                 FontSize="13"
                                 FontWeight="SemiBold"
                                 Foreground="{StaticResource Text.Primary}" />
 
                             <TextBlock
                                 Margin="0,3,0,0"
-                                Text="support@telenec.de → max.mustermann@necnet.de"
+                                Text="{Binding SelectedMessage.AddressLine}"
                                 FontSize="11"
-                                Foreground="{StaticResource Text.Secondary}" />
+                                Foreground="{StaticResource Text.Secondary}"
+                                TextTrimming="CharacterEllipsis" />
 
                         </StackPanel>
 
                         <TextBlock
                             Grid.Column="2"
-                            Text="Heute, 10:42"
+                            Text="{Binding SelectedMessage.DisplayDateTime}"
                             FontSize="11"
                             Foreground="{StaticResource Text.Secondary}"
-                            VerticalAlignment="Center" />
+                            VerticalAlignment="Center"
+                            Margin="18,0,0,0" />
 
                     </Grid>
 
@@ -536,31 +539,17 @@
                         HorizontalAlignment="Left">
 
                         <TextBlock
-                            Text="Guten Tag,"
+                            Text="{Binding SelectedMessage.Greeting}"
                             FontSize="14"
                             Foreground="{StaticResource Text.Primary}" />
 
                         <TextBlock
                             Margin="0,20,0,0"
+                            Text="{Binding SelectedMessage.Body}"
                             TextWrapping="Wrap"
                             FontSize="14"
                             LineHeight="22"
-                            Foreground="{StaticResource Text.Primary}">
-                            Ihr Telenec-Mailkonto ist eingerichtet und bereit.
-                            Mit Telenec Mail erhalten Sie künftig eine einfache und
-                            übersichtliche Anwendung für Ihre E-Mails.
-                        </TextBlock>
-
-                        <TextBlock
-                            Margin="0,20,0,0"
-                            TextWrapping="Wrap"
-                            FontSize="14"
-                            LineHeight="22"
-                            Foreground="{StaticResource Text.Primary}">
-                            Servereinstellungen und technische Details übernimmt
-                            die Anwendung automatisch. Sie benötigen lediglich
-                            Ihre E-Mail-Adresse und Ihr Passwort.
-                        </TextBlock>
+                            Foreground="{StaticResource Text.Primary}" />
 
                         <Border
                             Margin="0,28,0,28"
@@ -568,32 +557,59 @@
                             CornerRadius="8"
                             Background="{StaticResource Brand.PrimaryLight}">
 
+                            <Border.Style>
+
+                                <Style TargetType="Border">
+
+                                    <Setter
+                                        Property="Visibility"
+                                        Value="Collapsed" />
+
+                                    <Style.Triggers>
+
+                                        <DataTrigger
+                                            Binding="{Binding SelectedMessage.HasHighlight}"
+                                            Value="True">
+
+                                            <Setter
+                                                Property="Visibility"
+                                                Value="Visible" />
+
+                                        </DataTrigger>
+
+                                    </Style.Triggers>
+
+                                </Style>
+
+                            </Border.Style>
+
                             <StackPanel>
 
                                 <TextBlock
-                                    Text="Einfach. Sicher. Telenec."
+                                    Text="{Binding SelectedMessage.HighlightTitle}"
                                     FontSize="14"
                                     FontWeight="SemiBold"
                                     Foreground="{StaticResource Text.Primary}" />
 
                                 <TextBlock
                                     Margin="0,6,0,0"
-                                    Text="Technische Komplexität bleibt im Hintergrund."
+                                    Text="{Binding SelectedMessage.HighlightText}"
                                     FontSize="12"
-                                    Foreground="{StaticResource Text.Secondary}" />
+                                    Foreground="{StaticResource Text.Secondary}"
+                                    TextWrapping="Wrap" />
 
                             </StackPanel>
 
                         </Border>
 
                         <TextBlock
-                            Text="Viele Grüße"
+                            Text="{Binding SelectedMessage.Closing}"
                             FontSize="14"
                             Foreground="{StaticResource Text.Primary}" />
 
                         <TextBlock
                             Margin="0,5,0,0"
-                            Text="Ihre Telenec Technik"
+                            Text="{Binding SelectedMessage.Signature}"
                             FontSize="14"
                             FontWeight="SemiBold"
                             Foreground="{StaticResource Text.Primary}" />
