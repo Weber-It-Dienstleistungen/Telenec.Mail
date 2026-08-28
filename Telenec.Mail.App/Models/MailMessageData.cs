@@ -1,0 +1,19 @@
+﻿namespace Telenec.Mail.App.Models;
+
+public sealed record MailMessageData(
+    string Sender,
+    string SenderAddress,
+    string RecipientAddress,
+    string Subject,
+    string Preview,
+    string DisplayTime,
+    string DisplayDateTime,
+    string SenderInitial,
+    string Greeting,
+    string Body,
+    string Closing,
+    string Signature,
+    bool IsUnread = false,
+    bool EmphasizeSender = false,
+    string? HighlightTitle = null,
+    string? HighlightText = null);
