@@ -18,6 +18,7 @@
     <!-- Navigation Colors -->
 
     <Color x:Key="Navigation.Background.Color">#24272B</Color>
+    <Color x:Key="Navigation.Hover.Color">#2A3239</Color>
     <Color x:Key="Navigation.Selected.Color">#303B45</Color>
     <Color x:Key="Navigation.Text.Color">#FFFFFF</Color>
     <Color x:Key="Navigation.TextSecondary.Color">#AEB7C0</Color>
@@ -70,6 +71,10 @@
     <SolidColorBrush
         x:Key="Navigation.Background"
         Color="{StaticResource Navigation.Background.Color}" />
+
+    <SolidColorBrush
+        x:Key="Navigation.Hover"
+        Color="{StaticResource Navigation.Hover.Color}" />
 
     <SolidColorBrush
         x:Key="Navigation.Selected"
@@ -145,7 +150,8 @@
          Primary Button
          ========================================================= -->
 
-    <Style x:Key="Button.Primary" TargetType="Button">
+    <Style x:Key="Button.Primary"
+           TargetType="Button">
 
         <Setter Property="Background"
                 Value="{StaticResource Brand.Primary}" />
@@ -372,6 +378,20 @@
 
                     <ControlTemplate.Triggers>
 
+                        <!-- Hover zuerst.
+                             Der nachfolgende IsSelected-Trigger hat dadurch
+                             für ausgewählte Elemente weiterhin Vorrang. -->
+
+                        <Trigger Property="IsMouseOver"
+                                 Value="True">
+
+                            <Setter
+                                TargetName="NavigationItemBorder"
+                                Property="Background"
+                                Value="{StaticResource Navigation.Hover}" />
+
+                        </Trigger>
+
                         <Trigger Property="IsSelected"
                                  Value="True">
 
@@ -387,8 +407,9 @@
 
                         </Trigger>
 
-                        <DataTrigger Binding="{Binding HasSeparatorAfter}"
-                                     Value="True">
+                        <DataTrigger
+                            Binding="{Binding HasSeparatorAfter}"
+                            Value="True">
 
                             <Setter
                                 TargetName="SectionSeparator"
