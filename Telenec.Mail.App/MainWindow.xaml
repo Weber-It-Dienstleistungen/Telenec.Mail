@@ -258,13 +258,13 @@
                     <StackPanel>
 
                         <TextBlock
-                            Text="Posteingang"
+                            Text="{Binding SelectedFolder.DisplayName}"
                             FontSize="24"
                             FontWeight="SemiBold"
                             Foreground="{StaticResource Text.Primary}" />
 
                         <TextBlock
-                            Text="12 ungelesene Nachrichten"
+                            Text="{Binding SelectedFolder.HeaderSubtitle}"
                             Margin="0,4,0,0"
                             FontSize="12"
                             Foreground="{StaticResource Text.Secondary}" />

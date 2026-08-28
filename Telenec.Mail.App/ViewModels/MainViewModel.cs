@@ -13,23 +13,29 @@ public sealed class MainViewModel : BaseViewModel
         [
             new MailFolderItemViewModel(
                 displayName: "Posteingang",
+                headerSubtitle: "12 ungelesene Nachrichten",
                 unreadCount: 12),
 
             new MailFolderItemViewModel(
-                displayName: "Gesendet"),
+                displayName: "Gesendet",
+                headerSubtitle: "Gesendete Nachrichten"),
 
             new MailFolderItemViewModel(
                 displayName: "Entwürfe",
+                headerSubtitle: "Gespeicherte Entwürfe",
                 hasSeparatorAfter: true),
 
             new MailFolderItemViewModel(
-                displayName: "Archiv"),
+                displayName: "Archiv",
+                headerSubtitle: "Archivierte Nachrichten"),
 
             new MailFolderItemViewModel(
-                displayName: "Junk"),
+                displayName: "Junk",
+                headerSubtitle: "Als Junk erkannte Nachrichten"),
 
             new MailFolderItemViewModel(
-                displayName: "Papierkorb")
+                displayName: "Papierkorb",
+                headerSubtitle: "Gelöschte Nachrichten")
         ];
 
         DemoMessages =
