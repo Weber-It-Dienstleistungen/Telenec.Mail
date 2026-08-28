@@ -378,10 +378,6 @@
 
                     <ControlTemplate.Triggers>
 
-                        <!-- Hover zuerst.
-                             Der nachfolgende IsSelected-Trigger hat dadurch
-                             für ausgewählte Elemente weiterhin Vorrang. -->
-
                         <Trigger Property="IsMouseOver"
                                  Value="True">
 
@@ -456,6 +452,128 @@
 
         <Setter Property="Background"
                 Value="{StaticResource Surface.Selected}" />
+
+    </Style>
+
+    <!-- Interactive mail list -->
+
+    <Style x:Key="MailList.MessageList"
+           TargetType="ListBox">
+
+        <Setter Property="Background"
+                Value="{StaticResource Surface.Card}" />
+
+        <Setter Property="BorderThickness"
+                Value="0" />
+
+        <Setter Property="Padding"
+                Value="0" />
+
+        <Setter Property="SelectionMode"
+                Value="Single" />
+
+        <Setter Property="ScrollViewer.HorizontalScrollBarVisibility"
+                Value="Disabled" />
+
+        <Setter Property="ScrollViewer.VerticalScrollBarVisibility"
+                Value="Auto" />
+
+    </Style>
+
+    <Style x:Key="MailList.MessageItem"
+           TargetType="ListBoxItem">
+
+        <Setter Property="Background"
+                Value="{StaticResource Surface.Card}" />
+
+        <Setter Property="BorderBrush"
+                Value="{StaticResource Border.Subtle}" />
+
+        <Setter Property="BorderThickness"
+                Value="0,0,0,1" />
+
+        <Setter Property="Padding"
+                Value="0" />
+
+        <Setter Property="Margin"
+                Value="0" />
+
+        <Setter Property="HorizontalContentAlignment"
+                Value="Stretch" />
+
+        <Setter Property="Cursor"
+                Value="Hand" />
+
+        <Setter Property="Template">
+
+            <Setter.Value>
+
+                <ControlTemplate TargetType="ListBoxItem">
+
+                    <Border
+                        x:Name="MessageBorder"
+                        Background="{TemplateBinding Background}"
+                        BorderBrush="{TemplateBinding BorderBrush}"
+                        BorderThickness="{TemplateBinding BorderThickness}">
+
+                        <Grid>
+
+                            <Border
+                                x:Name="SelectionIndicator"
+                                Width="3"
+                                HorizontalAlignment="Left"
+                                Background="{StaticResource Brand.Primary}"
+                                Visibility="Collapsed" />
+
+                            <ContentPresenter
+                                x:Name="MessageContent"
+                                Margin="18,15"
+                                HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}"
+                                VerticalAlignment="Center" />
+
+                        </Grid>
+
+                    </Border>
+
+                    <ControlTemplate.Triggers>
+
+                        <Trigger Property="IsMouseOver"
+                                 Value="True">
+
+                            <Setter
+                                TargetName="MessageBorder"
+                                Property="Background"
+                                Value="{StaticResource Surface.Hover}" />
+
+                        </Trigger>
+
+                        <Trigger Property="IsSelected"
+                                 Value="True">
+
+                            <Setter
+                                TargetName="MessageBorder"
+                                Property="Background"
+                                Value="{StaticResource Surface.Selected}" />
+
+                            <Setter
+                                TargetName="SelectionIndicator"
+                                Property="Visibility"
+                                Value="Visible" />
+
+                            <Setter
+                                TargetName="MessageContent"
+                                Property="Margin"
+                                Value="31,15,18,15" />
+
+                        </Trigger>
+
+                    </ControlTemplate.Triggers>
+
+                </ControlTemplate>
+
+            </Setter.Value>
+
+        </Setter>
 
     </Style>
 

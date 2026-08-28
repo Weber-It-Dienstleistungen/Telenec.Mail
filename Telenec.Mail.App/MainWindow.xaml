@@ -318,220 +318,114 @@
 
                 </Border>
 
-                <!-- Static demo mails -->
+                <!-- Interactive demo mails -->
 
-                <ScrollViewer
+                <ListBox
                     Grid.Row="2"
-                    VerticalScrollBarVisibility="Auto">
+                    ItemsSource="{Binding DemoMessages}"
+                    SelectedItem="{Binding SelectedMessage, Mode=TwoWay}"
+                    Style="{StaticResource MailList.MessageList}"
+                    ItemContainerStyle="{StaticResource MailList.MessageItem}">
 
-                    <StackPanel>
+                    <ListBox.ItemTemplate>
 
-                        <!-- Selected -->
+                        <DataTemplate>
 
-                        <Border Style="{StaticResource MailList.Item.Selected}">
+                            <StackPanel>
 
-                            <Grid>
+                                <Grid>
 
-                                <Grid.ColumnDefinitions>
-                                    <ColumnDefinition Width="4" />
-                                    <ColumnDefinition Width="*" />
-                                </Grid.ColumnDefinitions>
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="Auto" />
+                                    </Grid.ColumnDefinitions>
 
-                                <Border
-                                    Grid.Column="0"
-                                    Width="3"
-                                    CornerRadius="2"
-                                    Background="{StaticResource Brand.Primary}" />
+                                    <StackPanel
+                                        Grid.Column="0"
+                                        Orientation="Horizontal">
 
-                                <StackPanel
-                                    Grid.Column="1"
-                                    Margin="13,0,0,0">
-
-                                    <Grid>
-
-                                        <Grid.ColumnDefinitions>
-                                            <ColumnDefinition Width="*" />
-                                            <ColumnDefinition Width="Auto" />
-                                        </Grid.ColumnDefinitions>
-
-                                        <StackPanel Orientation="Horizontal">
-
-                                            <Ellipse
-                                                Width="7"
-                                                Height="7"
-                                                Margin="0,0,8,0"
-                                                Fill="{StaticResource Brand.Primary}"
-                                                VerticalAlignment="Center" />
-
-                                            <TextBlock
-                                                Text="Telenec Technik"
-                                                FontSize="13"
-                                                FontWeight="SemiBold"
-                                                Foreground="{StaticResource Text.Primary}" />
-
-                                        </StackPanel>
+                                        <Ellipse
+                                            x:Name="UnreadIndicator"
+                                            Width="7"
+                                            Height="7"
+                                            Margin="0,0,8,0"
+                                            Fill="{StaticResource Brand.Primary}"
+                                            VerticalAlignment="Center"
+                                            Visibility="Collapsed" />
 
                                         <TextBlock
-                                            Grid.Column="1"
-                                            Text="10:42"
-                                            FontSize="11"
-                                            Foreground="{StaticResource Text.Secondary}" />
+                                            x:Name="SenderText"
+                                            Text="{Binding Sender}"
+                                            FontSize="13"
+                                            Foreground="{StaticResource Text.Primary}" />
 
-                                    </Grid>
-
-                                    <TextBlock
-                                        Margin="0,7,0,0"
-                                        Text="Willkommen bei Telenec Mail"
-                                        FontSize="14"
-                                        FontWeight="SemiBold"
-                                        Foreground="{StaticResource Text.Primary}" />
-
-                                    <TextBlock
-                                        Margin="0,5,0,0"
-                                        Text="Ihr neues Telenec-Mailkonto ist eingerichtet und bereit..."
-                                        FontSize="12"
-                                        Foreground="{StaticResource Text.Secondary}"
-                                        TextTrimming="CharacterEllipsis" />
-
-                                </StackPanel>
-
-                            </Grid>
-
-                        </Border>
-
-                        <!-- Mail 2 -->
-
-                        <Border Style="{StaticResource MailList.Item}">
-
-                            <StackPanel>
-
-                                <Grid>
-
-                                    <Grid.ColumnDefinitions>
-                                        <ColumnDefinition Width="*" />
-                                        <ColumnDefinition Width="Auto" />
-                                    </Grid.ColumnDefinitions>
-
-                                    <TextBlock
-                                        Text="Stadtwerke Neustadt"
-                                        FontSize="13"
-                                        FontWeight="SemiBold"
-                                        Foreground="{StaticResource Text.Primary}" />
+                                    </StackPanel>
 
                                     <TextBlock
                                         Grid.Column="1"
-                                        Text="09:18"
+                                        Text="{Binding DisplayTime}"
                                         FontSize="11"
                                         Foreground="{StaticResource Text.Secondary}" />
 
                                 </Grid>
 
                                 <TextBlock
+                                    x:Name="SubjectText"
                                     Margin="0,7,0,0"
-                                    Text="Ihre Rechnung für August 2026"
+                                    Text="{Binding Subject}"
                                     FontSize="14"
                                     Foreground="{StaticResource Text.Primary}" />
 
                                 <TextBlock
                                     Margin="0,5,0,0"
-                                    Text="Guten Tag, Ihre aktuelle Rechnung steht für Sie bereit..."
+                                    Text="{Binding Preview}"
                                     FontSize="12"
                                     Foreground="{StaticResource Text.Secondary}"
                                     TextTrimming="CharacterEllipsis" />
 
                             </StackPanel>
 
-                        </Border>
+                            <DataTemplate.Triggers>
 
-                        <!-- Mail 3 -->
+                                <DataTrigger
+                                    Binding="{Binding IsUnread}"
+                                    Value="True">
 
-                        <Border Style="{StaticResource MailList.Item}">
+                                    <Setter
+                                        TargetName="UnreadIndicator"
+                                        Property="Visibility"
+                                        Value="Visible" />
 
-                            <StackPanel>
+                                    <Setter
+                                        TargetName="SenderText"
+                                        Property="FontWeight"
+                                        Value="SemiBold" />
 
-                                <Grid>
+                                    <Setter
+                                        TargetName="SubjectText"
+                                        Property="FontWeight"
+                                        Value="SemiBold" />
 
-                                    <Grid.ColumnDefinitions>
-                                        <ColumnDefinition Width="*" />
-                                        <ColumnDefinition Width="Auto" />
-                                    </Grid.ColumnDefinitions>
+                                </DataTrigger>
 
-                                    <TextBlock
-                                        Text="Anna Müller"
-                                        FontSize="13"
-                                        Foreground="{StaticResource Text.Primary}" />
+                                <DataTrigger
+                                    Binding="{Binding EmphasizeSender}"
+                                    Value="True">
 
-                                    <TextBlock
-                                        Grid.Column="1"
-                                        Text="Gestern"
-                                        FontSize="11"
-                                        Foreground="{StaticResource Text.Secondary}" />
+                                    <Setter
+                                        TargetName="SenderText"
+                                        Property="FontWeight"
+                                        Value="SemiBold" />
 
-                                </Grid>
+                                </DataTrigger>
 
-                                <TextBlock
-                                    Margin="0,7,0,0"
-                                    Text="Termin am kommenden Dienstag"
-                                    FontSize="14"
-                                    Foreground="{StaticResource Text.Primary}" />
+                            </DataTemplate.Triggers>
 
-                                <TextBlock
-                                    Margin="0,5,0,0"
-                                    Text="Hallo, ich wollte den vereinbarten Termin noch einmal bestätigen..."
-                                    FontSize="12"
-                                    Foreground="{StaticResource Text.Secondary}"
-                                    TextTrimming="CharacterEllipsis" />
+                        </DataTemplate>
 
-                            </StackPanel>
+                    </ListBox.ItemTemplate>
 
-                        </Border>
-
-                        <!-- Mail 4 -->
-
-                        <Border Style="{StaticResource MailList.Item}">
-
-                            <StackPanel>
-
-                                <Grid>
-
-                                    <Grid.ColumnDefinitions>
-                                        <ColumnDefinition Width="*" />
-                                        <ColumnDefinition Width="Auto" />
-                                    </Grid.ColumnDefinitions>
-
-                                    <TextBlock
-                                        Text="Telenec Kundenservice"
-                                        FontSize="13"
-                                        Foreground="{StaticResource Text.Primary}" />
-
-                                    <TextBlock
-                                        Grid.Column="1"
-                                        Text="Dienstag"
-                                        FontSize="11"
-                                        Foreground="{StaticResource Text.Secondary}" />
-
-                                </Grid>
-
-                                <TextBlock
-                                    Margin="0,7,0,0"
-                                    Text="Ihre Anfrage wurde bearbeitet"
-                                    FontSize="14"
-                                    Foreground="{StaticResource Text.Primary}" />
-
-                                <TextBlock
-                                    Margin="0,5,0,0"
-                                    Text="Vielen Dank für Ihre Nachricht. Wir haben Ihre Anfrage geprüft..."
-                                    FontSize="12"
-                                    Foreground="{StaticResource Text.Secondary}"
-                                    TextTrimming="CharacterEllipsis" />
-
-                            </StackPanel>
-
-                        </Border>
-
-                    </StackPanel>
-
-                </ScrollViewer>
+                </ListBox>
 
             </Grid>
 
