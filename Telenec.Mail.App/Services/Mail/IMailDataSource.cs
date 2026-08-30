@@ -4,7 +4,11 @@ namespace Telenec.Mail.App.Services.Mail;
 
 public interface IMailDataSource
 {
-    IReadOnlyList<MailFolderData> GetFolders();
+    Task<IReadOnlyList<MailFolderData>> GetFoldersAsync(
+        CancellationToken cancellationToken = default);
 
-    IReadOnlyList<MailMessageData> GetMessages();
+    Task<IReadOnlyList<MailMessageData>> GetMessagesAsync(
+        string folderId,
+        int maximumMessageCount = 20,
+        CancellationToken cancellationToken = default);
 }

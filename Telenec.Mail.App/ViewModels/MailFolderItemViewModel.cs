@@ -3,16 +3,20 @@
 public sealed class MailFolderItemViewModel
 {
     public MailFolderItemViewModel(
+        string folderId,
         string displayName,
         string headerSubtitle,
         int unreadCount = 0,
         bool hasSeparatorAfter = false)
     {
+        FolderId = folderId;
         DisplayName = displayName;
         HeaderSubtitle = headerSubtitle;
         UnreadCount = unreadCount;
         HasSeparatorAfter = hasSeparatorAfter;
     }
+
+    public string FolderId { get; }
 
     public string DisplayName { get; }
 
@@ -20,7 +24,8 @@ public sealed class MailFolderItemViewModel
 
     public int UnreadCount { get; }
 
-    public bool HasUnreadCount => UnreadCount > 0;
+    public bool HasUnreadCount =>
+        UnreadCount > 0;
 
     public bool HasSeparatorAfter { get; }
 }

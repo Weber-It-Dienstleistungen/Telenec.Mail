@@ -23,7 +23,7 @@ public partial class App : Application
             {
                 services.AddSingleton<
                     IMailDataSource,
-                    DemoMailDataSource>();
+                    ImapMailDataSource>();
 
                 services.AddSingleton<
                     IMailAuthenticationService,
@@ -43,14 +43,20 @@ public partial class App : Application
                 services.AddSingleton<
                     ApplicationStartupService>();
 
-                services.AddSingleton<MainViewModel>();
+                services.AddTransient<
+                    MainViewModel>();
 
-                services.AddTransient<LoginViewModel>();
+                services.AddTransient<
+                    LoginViewModel>();
 
-                services.AddSingleton<SplashWindow>();
+                services.AddSingleton<
+                    SplashWindow>();
 
-                services.AddTransient<LoginWindow>();
-                services.AddTransient<MainWindow>();
+                services.AddTransient<
+                    LoginWindow>();
+
+                services.AddTransient<
+                    MainWindow>();
             })
             .Build();
     }

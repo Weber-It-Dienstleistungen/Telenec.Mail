@@ -9,11 +9,13 @@ namespace Telenec.Mail.App;
 
 public partial class MainWindow : Window
 {
+    private readonly MainViewModel _viewModel;
     private readonly IMailAccountStore _mailAccountStore;
     private readonly ICredentialStore _credentialStore;
     private readonly IServiceProvider _serviceProvider;
 
     private bool _isLoggingOut;
+    private bool _isLoaded;
 
     public MainWindow(
         MainViewModel viewModel,
@@ -23,19 +25,37 @@ public partial class MainWindow : Window
     {
         InitializeComponent();
 
-        _mailAccountStore = mailAccountStore;
-        _credentialStore = credentialStore;
-        _serviceProvider = serviceProvider;
+        _viewModel =
+            viewModel;
 
-        DataContext = viewModel;
+        _mailAccountStore =
+            mailAccountStore;
 
-        Loaded += MainWindow_OnLoaded;
+        _credentialStore =
+            credentialStore;
+
+        _serviceProvider =
+            serviceProvider;
+
+        DataContext =
+            _viewModel;
+
+        Loaded +=
+            MainWindow_OnLoaded;
     }
 
     private async void MainWindow_OnLoaded(
         object sender,
         RoutedEventArgs e)
     {
+        if (_isLoaded)
+        {
+            return;
+        }
+
+        _isLoaded =
+            true;
+
         try
         {
             var account =
@@ -45,11 +65,18 @@ public partial class MainWindow : Window
             AccountEmailText.Text =
                 account?.EmailAddress
                 ?? "Telenec-Konto";
+
+            await _viewModel
+                .InitializeAsync();
         }
-        catch
+        catch (Exception)
         {
-            AccountEmailText.Text =
-                "Telenec-Konto";
+            MessageBox.Show(
+                "Die E-Mail-Daten konnten momentan nicht geladen werden.\n\n" +
+                "Bitte prüfen Sie Ihre Internetverbindung und versuchen Sie es erneut.",
+                "Telenec Mail",
+                MessageBoxButton.OK,
+                MessageBoxImage.Warning);
         }
     }
 
@@ -99,8 +126,11 @@ public partial class MainWindow : Window
             return;
         }
 
-        _isLoggingOut = true;
-        AccountMenuButton.IsEnabled = false;
+        _isLoggingOut =
+            true;
+
+        AccountMenuButton.IsEnabled =
+            false;
 
         try
         {
@@ -110,18 +140,13 @@ public partial class MainWindow : Window
 
             if (account is not null)
             {
-                /*
-                 * Zuerst das geschützte Credential löschen.
-                 *
-                 * Sollte danach das Löschen des Accountdatensatzes
-                 * fehlschlagen, bleibt wenigstens kein Passwort
-                 * unnötig im Windows Credential Store zurück.
-                 */
-                await _credentialStore.DeleteAsync(
-                    account.AccountId);
+                await _credentialStore
+                    .DeleteAsync(
+                        account.AccountId);
 
-                await _mailAccountStore.DeleteAsync(
-                    account.AccountId);
+                await _mailAccountStore
+                    .DeleteAsync(
+                        account.AccountId);
             }
 
             var loginWindow =
@@ -140,8 +165,11 @@ public partial class MainWindow : Window
         }
         catch
         {
-            _isLoggingOut = false;
-            AccountMenuButton.IsEnabled = true;
+            _isLoggingOut =
+                false;
+
+            AccountMenuButton.IsEnabled =
+                true;
 
             MessageBox.Show(
                 "Das Konto konnte nicht vollständig abgemeldet werden.\n\n" +

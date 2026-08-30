@@ -1,6 +1,7 @@
 ﻿namespace Telenec.Mail.App.Models;
 
 public sealed record MailFolderData(
+    string FolderId,
     string DisplayName,
     string HeaderSubtitle,
     int UnreadCount = 0,

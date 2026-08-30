@@ -4,41 +4,57 @@ namespace Telenec.Mail.App.Services.Mail;
 
 public sealed class DemoMailDataSource : IMailDataSource
 {
-    public IReadOnlyList<MailFolderData> GetFolders()
+    public Task<IReadOnlyList<MailFolderData>> GetFoldersAsync(
+        CancellationToken cancellationToken = default)
     {
-        return
+        cancellationToken.ThrowIfCancellationRequested();
+
+        IReadOnlyList<MailFolderData> folders =
         [
             new MailFolderData(
+                FolderId: "INBOX",
                 DisplayName: "Posteingang",
                 HeaderSubtitle: "12 ungelesene Nachrichten",
                 UnreadCount: 12),
 
             new MailFolderData(
+                FolderId: "Sent",
                 DisplayName: "Gesendet",
                 HeaderSubtitle: "Gesendete Nachrichten"),
 
             new MailFolderData(
+                FolderId: "Drafts",
                 DisplayName: "Entwürfe",
                 HeaderSubtitle: "Gespeicherte Entwürfe",
                 HasSeparatorAfter: true),
 
             new MailFolderData(
+                FolderId: "Archive",
                 DisplayName: "Archiv",
                 HeaderSubtitle: "Archivierte Nachrichten"),
 
             new MailFolderData(
+                FolderId: "Junk",
                 DisplayName: "Junk",
                 HeaderSubtitle: "Als Junk erkannte Nachrichten"),
 
             new MailFolderData(
+                FolderId: "Trash",
                 DisplayName: "Papierkorb",
                 HeaderSubtitle: "Gelöschte Nachrichten")
         ];
+
+        return Task.FromResult(folders);
     }
 
-    public IReadOnlyList<MailMessageData> GetMessages()
+    public Task<IReadOnlyList<MailMessageData>> GetMessagesAsync(
+        string folderId,
+        int maximumMessageCount = 20,
+        CancellationToken cancellationToken = default)
     {
-        return
+        cancellationToken.ThrowIfCancellationRequested();
+
+        IReadOnlyList<MailMessageData> messages =
         [
             new MailMessageData(
                 Sender: "Telenec Technik",
@@ -98,25 +114,9 @@ public sealed class DemoMailDataSource : IMailDataSource
                     "Von meiner Seite bleibt es bei der besprochenen Uhrzeit. " +
                     "Falls sich bei dir noch etwas ändert, gib mir bitte kurz Bescheid.",
                 Closing: "Viele Grüße",
-                Signature: "Anna"),
-
-            new MailMessageData(
-                Sender: "Telenec Kundenservice",
-                SenderAddress: "kundenservice@telenec.de",
-                RecipientAddress: "max.mustermann@necnet.de",
-                Subject: "Ihre Anfrage wurde bearbeitet",
-                Preview: "Vielen Dank für Ihre Nachricht. Wir haben Ihre Anfrage geprüft...",
-                DisplayTime: "Dienstag",
-                DisplayDateTime: "Dienstag, 14:05",
-                SenderInitial: "T",
-                Greeting: "Guten Tag,",
-                Body:
-                    "vielen Dank für Ihre Nachricht. Wir haben Ihre Anfrage geprüft " +
-                    "und die Bearbeitung abgeschlossen.\n\n" +
-                    "Sollten noch Fragen offen sein, antworten Sie einfach auf diese E-Mail. " +
-                    "Unser Kundenservice hilft Ihnen gerne weiter.",
-                Closing: "Viele Grüße",
-                Signature: "Ihr Telenec Kundenservice")
+                Signature: "Anna")
         ];
+
+        return Task.FromResult(messages);
     }
 }
