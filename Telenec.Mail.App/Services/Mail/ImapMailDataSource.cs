@@ -1,5 +1,6 @@
 ﻿using MailKit;
 using MailKit.Net.Imap;
+using MailKit.Search;
 using MailKit.Security;
 using MimeKit;
 using System.Net;
@@ -81,10 +82,12 @@ public sealed class ImapMailDataSource : IMailDataSource
                             !folder.Attributes.HasFlag(
                                 FolderAttributes.NoSelect))
                     .GroupBy(
-                        folder => folder.FullName,
+                        folder =>
+                            folder.FullName,
                         StringComparer.OrdinalIgnoreCase)
                     .Select(
-                        group => group.First())
+                        group =>
+                            group.First())
                     .OrderBy(
                         folder =>
                             GetFolderSortOrder(
@@ -98,47 +101,44 @@ public sealed class ImapMailDataSource : IMailDataSource
                         StringComparer.CurrentCultureIgnoreCase)
                     .ToList();
 
-            var result =
-                uniqueFolders
-                    .Select(
-                        folder =>
-                        {
-                            var unreadCount =
-                                Math.Max(
-                                    folder.Unread,
-                                    0);
+            return uniqueFolders
+                .Select(
+                    folder =>
+                    {
+                        var unreadCount =
+                            Math.Max(
+                                folder.Unread,
+                                0);
 
-                            var messageCount =
-                                Math.Max(
-                                    folder.Count,
-                                    0);
+                        var messageCount =
+                            Math.Max(
+                                folder.Count,
+                                0);
 
-                            var subtitle =
-                                unreadCount > 0
-                                    ? $"{unreadCount} ungelesene Nachrichten"
-                                    : $"{messageCount} Nachrichten";
+                        var subtitle =
+                            unreadCount > 0
+                                ? $"{unreadCount} ungelesene Nachrichten"
+                                : $"{messageCount} Nachrichten";
 
-                            return new MailFolderData(
-                                FolderId:
-                                    folder.FullName,
+                        return new MailFolderData(
+                            FolderId:
+                                folder.FullName,
 
-                                DisplayName:
-                                    GetDisplayName(
-                                        folder,
-                                        client.Inbox.FullName),
+                            DisplayName:
+                                GetDisplayName(
+                                    folder,
+                                    client.Inbox.FullName),
 
-                                HeaderSubtitle:
-                                    subtitle,
+                            HeaderSubtitle:
+                                subtitle,
 
-                                UnreadCount:
-                                    unreadCount,
+                            UnreadCount:
+                                unreadCount,
 
-                                MessageCount:
-                                    messageCount);
-                        })
-                    .ToList();
-
-            return result;
+                            MessageCount:
+                                messageCount);
+                    })
+                .ToList();
         }
         finally
         {
@@ -152,13 +152,9 @@ public sealed class ImapMailDataSource : IMailDataSource
         int maximumMessageCount = 20,
         CancellationToken cancellationToken = default)
     {
-        if (string.IsNullOrWhiteSpace(
-                folderId))
-        {
-            throw new ArgumentException(
-                "Der Ordner darf nicht leer sein.",
-                nameof(folderId));
-        }
+        ValidateFolderId(
+            folderId,
+            nameof(folderId));
 
         if (maximumMessageCount <= 0)
         {
@@ -187,31 +183,72 @@ public sealed class ImapMailDataSource : IMailDataSource
                     MailMessageData>();
             }
 
-            var minimumIndex =
-                Math.Max(
-                    0,
-                    folder.Count -
-                    maximumMessageCount);
+            /*
+             * Wichtig:
+             *
+             * Wir dürfen NICHT einfach die letzten 20
+             * IMAP-Sequenzpositionen verwenden.
+             *
+             * Ein IMAP-MOVE fügt eine wiederhergestellte
+             * Nachricht im Zielordner technisch neu ein.
+             * Dadurch erhält sie eine neue UID und eine neue
+             * Sequenzposition am Ende des Ordners.
+             *
+             * Würden wir nach Sequenzposition laden,
+             * würden alte wiederhergestellte Nachrichten
+             * fälschlich wie neue Nachrichten behandelt.
+             *
+             * Deshalb bestimmen wir zuerst die tatsächlich
+             * neuesten Nachrichten anhand ihres Mail-Datums.
+             */
+            var uniqueIds =
+                await GetNewestMessageUniqueIdsAsync(
+                    folder,
+                    maximumMessageCount,
+                    cancellationToken);
 
-            var maximumIndex =
-                folder.Count - 1;
+            if (uniqueIds.Count == 0)
+            {
+                return Array.Empty<
+                    MailMessageData>();
+            }
 
+            /*
+             * Erst nachdem die richtigen UIDs feststehen,
+             * laden wir die für Darstellung und Inhalt
+             * benötigten Metadaten.
+             */
             var summaries =
                 await folder.FetchAsync(
-                    minimumIndex,
-                    maximumIndex,
+                    uniqueIds,
                     MessageSummaryItems.UniqueId |
                     MessageSummaryItems.Envelope |
                     MessageSummaryItems.Flags |
                     MessageSummaryItems.BodyStructure,
                     cancellationToken);
 
+            /*
+             * FetchAsync garantiert uns nicht, dass die
+             * Rückgabereihenfolge exakt der UID-Liste entspricht.
+             *
+             * Daher wird die endgültige sichtbare Reihenfolge
+             * nochmals explizit anhand des Mail-Datums hergestellt.
+             *
+             * Index ist ausschließlich Tie-Breaker.
+             */
+            var orderedSummaries =
+                summaries
+                    .OrderByDescending(
+                        GetMessageSortDate)
+                    .ThenByDescending(
+                        summary =>
+                            summary.Index)
+                    .ToList();
+
             var messages =
                 new List<MailMessageData>();
 
-            foreach (var summary in
-                     summaries.OrderByDescending(
-                         item => item.Index))
+            foreach (var summary in orderedSummaries)
             {
                 cancellationToken
                     .ThrowIfCancellationRequested();
@@ -237,18 +274,91 @@ public sealed class ImapMailDataSource : IMailDataSource
         }
     }
 
+    private static async Task<IList<UniqueId>>
+        GetNewestMessageUniqueIdsAsync(
+            IMailFolder folder,
+            int maximumMessageCount,
+            CancellationToken cancellationToken)
+    {
+        /*
+         * Bevorzugter Weg:
+         *
+         * Der IMAP-Server sortiert selbst nach dem Date-Header.
+         * Dadurch müssen wir auch bei großen Postfächern nicht
+         * sämtliche Nachrichtenmetadaten herunterladen.
+         */
+        try
+        {
+            var sortedUniqueIds =
+                await folder.SortAsync(
+                    SearchQuery.All,
+                    new[]
+                    {
+                        OrderBy.ReverseDate
+                    },
+                    cancellationToken);
+
+            return sortedUniqueIds
+                .Take(
+                    maximumMessageCount)
+                .ToList();
+        }
+        catch (NotSupportedException)
+        {
+            /*
+             * Nicht jeder IMAP-Server unterstützt SORT.
+             *
+             * In diesem Fall laden wir ausschließlich leichte
+             * Metadaten aller Nachrichten und sortieren lokal.
+             *
+             * Die eigentlichen Bodies werden weiterhin nur
+             * für maximal maximumMessageCount Nachrichten geladen.
+             */
+            var lightweightSummaries =
+                await folder.FetchAsync(
+                    0,
+                    -1,
+                    MessageSummaryItems.UniqueId |
+                    MessageSummaryItems.Envelope,
+                    cancellationToken);
+
+            return lightweightSummaries
+                .OrderByDescending(
+                    GetMessageSortDate)
+                .ThenByDescending(
+                    summary =>
+                        summary.Index)
+                .Take(
+                    maximumMessageCount)
+                .Select(
+                    summary =>
+                        summary.UniqueId)
+                .ToList();
+        }
+    }
+
+    private static DateTimeOffset GetMessageSortDate(
+        IMessageSummary summary)
+    {
+        /*
+         * Envelope.Date entspricht dem Datum, das wir auch
+         * im Client anzeigen.
+         *
+         * Nachrichten ohne brauchbaren Date-Header landen
+         * bewusst am Ende der chronologischen Darstellung.
+         */
+        return summary.Envelope?.Date
+            ?? DateTimeOffset.MinValue;
+    }
+
     public async Task MarkAsReadAsync(
         string folderId,
         uint uniqueId,
         CancellationToken cancellationToken = default)
     {
-        if (string.IsNullOrWhiteSpace(
-                folderId))
-        {
-            throw new ArgumentException(
-                "Der Ordner darf nicht leer sein.",
-                nameof(folderId));
-        }
+        ValidateFolderId(
+            folderId,
+            nameof(folderId));
 
         if (uniqueId == 0)
         {
@@ -291,13 +401,9 @@ public sealed class ImapMailDataSource : IMailDataSource
         uint uniqueId,
         CancellationToken cancellationToken = default)
     {
-        if (string.IsNullOrWhiteSpace(
-                folderId))
-        {
-            throw new ArgumentException(
-                "Der Ordner darf nicht leer sein.",
-                nameof(folderId));
-        }
+        ValidateFolderId(
+            folderId,
+            nameof(folderId));
 
         if (uniqueId == 0)
         {
@@ -335,7 +441,7 @@ public sealed class ImapMailDataSource : IMailDataSource
         }
     }
 
-    public Task MoveToTrashAsync(
+    public Task<MailMoveResult> MoveToTrashAsync(
         string folderId,
         uint uniqueId,
         CancellationToken cancellationToken = default)
@@ -346,7 +452,7 @@ public sealed class ImapMailDataSource : IMailDataSource
             cancellationToken);
     }
 
-    public async Task MoveToTrashAsync(
+    public async Task<MailMoveResult> MoveToTrashAsync(
         string folderId,
         IReadOnlyList<uint> uniqueIds,
         CancellationToken cancellationToken = default)
@@ -370,7 +476,7 @@ public sealed class ImapMailDataSource : IMailDataSource
                     client,
                     cancellationToken);
 
-            await MoveMessagesCoreAsync(
+            return await MoveMessagesCoreAsync(
                 client,
                 folderId,
                 trashFolder,
@@ -384,7 +490,7 @@ public sealed class ImapMailDataSource : IMailDataSource
         }
     }
 
-    public async Task MoveMessagesAsync(
+    public async Task<MailMoveResult> MoveMessagesAsync(
         string sourceFolderId,
         string targetFolderId,
         IReadOnlyList<uint> uniqueIds,
@@ -420,7 +526,7 @@ public sealed class ImapMailDataSource : IMailDataSource
                     "Der Zielordner kann keine Nachrichten aufnehmen.");
             }
 
-            await MoveMessagesCoreAsync(
+            return await MoveMessagesCoreAsync(
                 client,
                 sourceFolderId,
                 targetFolder,
@@ -434,7 +540,7 @@ public sealed class ImapMailDataSource : IMailDataSource
         }
     }
 
-    private static async Task MoveMessagesCoreAsync(
+    private static async Task<MailMoveResult> MoveMessagesCoreAsync(
         ImapClient client,
         string sourceFolderId,
         IMailFolder targetFolder,
@@ -458,14 +564,22 @@ public sealed class ImapMailDataSource : IMailDataSource
                 targetFolder.FullName,
                 StringComparison.OrdinalIgnoreCase))
         {
-            return;
+            return new MailMoveResult(
+                SourceFolderId:
+                    sourceFolder.FullName,
+
+                TargetFolderId:
+                    targetFolder.FullName,
+
+                UidMappings:
+                    Array.Empty<MailMoveUidMapping>());
         }
 
         await sourceFolder.OpenAsync(
             FolderAccess.ReadWrite,
             cancellationToken);
 
-        var mailKitUniqueIds =
+        var sourceUniqueIds =
             uniqueIds
                 .Select(
                     uniqueId =>
@@ -474,15 +588,50 @@ public sealed class ImapMailDataSource : IMailDataSource
                 .ToList();
 
         /*
-         * Ein einziger Batch-MOVE für die gesamte Auswahl.
+         * MailKit liefert hier die Zuordnung:
          *
-         * Die UIDs beziehen sich ausschließlich auf den
-         * geöffneten Quellordner.
+         * UID im Quellordner -> UID im Zielordner.
+         *
+         * Genau diese Information benötigen wir für Undo,
+         * weil IMAP-UIDs ordnerbezogen sind.
          */
-        await sourceFolder.MoveToAsync(
-            mailKitUniqueIds,
-            targetFolder,
-            cancellationToken);
+        var uniqueIdMap =
+            await sourceFolder.MoveToAsync(
+                sourceUniqueIds,
+                targetFolder,
+                cancellationToken);
+
+        var mappings =
+            new List<MailMoveUidMapping>();
+
+        foreach (var sourceUniqueId in sourceUniqueIds)
+        {
+            if (!uniqueIdMap.TryGetValue(
+                    sourceUniqueId,
+                    out var targetUniqueId) ||
+                !targetUniqueId.IsValid)
+            {
+                continue;
+            }
+
+            mappings.Add(
+                new MailMoveUidMapping(
+                    SourceUniqueId:
+                        sourceUniqueId.Id,
+
+                    TargetUniqueId:
+                        targetUniqueId.Id));
+        }
+
+        return new MailMoveResult(
+            SourceFolderId:
+                sourceFolder.FullName,
+
+            TargetFolderId:
+                targetFolder.FullName,
+
+            UidMappings:
+                mappings);
     }
 
     private static void ValidateFolderId(

@@ -147,18 +147,6 @@ public partial class MainWindow : Window
         _messageDragSelectionSnapshot =
             Array.Empty<MailMessageItemViewModel>();
 
-        /*
-         * WPF reduziert eine Mehrfachauswahl normalerweise auf
-         * eine Mail, sobald man ohne Strg/Shift auf eine bereits
-         * markierte Mail klickt.
-         *
-         * Vorher merken wir uns deshalb die bestehende Auswahl.
-         * Nur wenn tatsächlich ein Drag beginnt, verwenden wir
-         * diesen Snapshot.
-         *
-         * Ein normaler Klick ohne Drag behält somit das normale
-         * Windows-Auswahlverhalten.
-         */
         if (_messageDragCandidate is not null &&
             Keyboard.Modifiers == ModifierKeys.None &&
             MessageListBox.SelectedItems.Contains(
@@ -206,11 +194,6 @@ public partial class MainWindow : Window
         IReadOnlyList<MailMessageItemViewModel>
             messagesToDrag;
 
-        /*
-         * Wenn die Mail bereits Bestandteil einer
-         * Mehrfachauswahl war, nehmen wir die Auswahl von
-         * vor dem MouseDown.
-         */
         if (_messageDragSelectionSnapshot.Count > 0 &&
             _messageDragSelectionSnapshot.Contains(
                 _messageDragCandidate))
@@ -453,6 +436,48 @@ public partial class MainWindow : Window
         object sender,
         KeyEventArgs e)
     {
+        /*
+         * Texteingaben behalten ihre eigene Undo-Funktion.
+         */
+        if (Keyboard.FocusedElement is TextBoxBase)
+        {
+            return;
+        }
+
+        /*
+         * STRG + Z
+         *
+         * Macht ausschließlich die letzte von Telenec Mail
+         * ausgeführte MOVE-/Löschaktion rückgängig.
+         */
+        if (e.Key == Key.Z &&
+            Keyboard.Modifiers.HasFlag(
+                ModifierKeys.Control))
+        {
+            if (e.IsRepeat)
+            {
+                e.Handled =
+                    true;
+
+                return;
+            }
+
+            if (!_viewModel.CanUndoLastMove)
+            {
+                return;
+            }
+
+            e.Handled =
+                true;
+
+            await UndoLastMoveFromUiAsync();
+
+            return;
+        }
+
+        /*
+         * ENTF
+         */
         if (e.Key != Key.Delete)
         {
             return;
@@ -463,11 +488,6 @@ public partial class MainWindow : Window
             e.Handled =
                 true;
 
-            return;
-        }
-
-        if (Keyboard.FocusedElement is TextBoxBase)
-        {
             return;
         }
 
@@ -489,6 +509,24 @@ public partial class MainWindow : Window
 
         await DeleteMessagesFromUiAsync(
             messages);
+    }
+
+    private async Task UndoLastMoveFromUiAsync()
+    {
+        try
+        {
+            await _viewModel
+                .UndoLastMoveAsync();
+        }
+        catch
+        {
+            MessageBox.Show(
+                "Die letzte Aktion konnte nicht rückgängig gemacht werden.\n\n" +
+                "Bitte prüfen Sie die Verbindung und versuchen Sie es erneut.",
+                "Telenec Mail",
+                MessageBoxButton.OK,
+                MessageBoxImage.Error);
+        }
     }
 
     private void MainViewModel_OnPropertyChanged(

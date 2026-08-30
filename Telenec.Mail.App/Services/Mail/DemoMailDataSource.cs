@@ -144,27 +144,52 @@ public sealed class DemoMailDataSource : IMailDataSource
         return Task.CompletedTask;
     }
 
-    public Task MoveToTrashAsync(
+    public Task<MailMoveResult> MoveToTrashAsync(
         string folderId,
         uint uniqueId,
         CancellationToken cancellationToken = default)
     {
-        cancellationToken.ThrowIfCancellationRequested();
-
-        return Task.CompletedTask;
+        return MoveToTrashAsync(
+            folderId,
+            new[] { uniqueId },
+            cancellationToken);
     }
 
-    public Task MoveToTrashAsync(
+    public Task<MailMoveResult> MoveToTrashAsync(
         string folderId,
         IReadOnlyList<uint> uniqueIds,
         CancellationToken cancellationToken = default)
     {
         cancellationToken.ThrowIfCancellationRequested();
 
-        return Task.CompletedTask;
+        var mappings =
+            uniqueIds
+                .Where(
+                    uniqueId =>
+                        uniqueId > 0)
+                .Distinct()
+                .Select(
+                    uniqueId =>
+                        new MailMoveUidMapping(
+                            SourceUniqueId:
+                                uniqueId,
+                            TargetUniqueId:
+                                uniqueId))
+                .ToList();
+
+        return Task.FromResult(
+            new MailMoveResult(
+                SourceFolderId:
+                    folderId,
+
+                TargetFolderId:
+                    "Trash",
+
+                UidMappings:
+                    mappings));
     }
 
-    public Task MoveMessagesAsync(
+    public Task<MailMoveResult> MoveMessagesAsync(
         string sourceFolderId,
         string targetFolderId,
         IReadOnlyList<uint> uniqueIds,
@@ -172,6 +197,30 @@ public sealed class DemoMailDataSource : IMailDataSource
     {
         cancellationToken.ThrowIfCancellationRequested();
 
-        return Task.CompletedTask;
+        var mappings =
+            uniqueIds
+                .Where(
+                    uniqueId =>
+                        uniqueId > 0)
+                .Distinct()
+                .Select(
+                    uniqueId =>
+                        new MailMoveUidMapping(
+                            SourceUniqueId:
+                                uniqueId,
+                            TargetUniqueId:
+                                uniqueId))
+                .ToList();
+
+        return Task.FromResult(
+            new MailMoveResult(
+                SourceFolderId:
+                    sourceFolderId,
+
+                TargetFolderId:
+                    targetFolderId,
+
+                UidMappings:
+                    mappings));
     }
 }

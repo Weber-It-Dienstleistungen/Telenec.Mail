@@ -2,6 +2,7 @@
 using System.Collections.ObjectModel;
 using System.IO;
 using System.Net.Sockets;
+using Telenec.Mail.App.Models;
 using Telenec.Mail.App.Services.Mail;
 
 namespace Telenec.Mail.App.ViewModels;
@@ -12,6 +13,8 @@ public sealed class MainViewModel : BaseViewModel
 
     private MailFolderItemViewModel? _selectedFolder;
     private MailMessageItemViewModel? _selectedMessage;
+
+    private MailMoveResult? _lastMoveOperation;
 
     private CancellationTokenSource?
         _folderLoadCancellationSource;
@@ -61,6 +64,10 @@ public sealed class MainViewModel : BaseViewModel
     public ObservableCollection<
         MailMessageItemViewModel> Messages
     { get; }
+
+    public bool CanUndoLastMove =>
+        _lastMoveOperation?.CanUndo == true &&
+        !IsLoading;
 
     public MailFolderItemViewModel? SelectedFolder
     {
@@ -139,6 +146,9 @@ public sealed class MainViewModel : BaseViewModel
                 value;
 
             OnPropertyChanged();
+
+            OnPropertyChanged(
+                nameof(CanUndoLastMove));
         }
     }
 
@@ -346,20 +356,8 @@ public sealed class MainViewModel : BaseViewModel
         }
 
         var messagesToDelete =
-            messages
-                .Where(
-                    message =>
-                        message is not null &&
-                        message.UniqueId > 0 &&
-                        Messages.Contains(
-                            message))
-                .GroupBy(
-                    message =>
-                        message.UniqueId)
-                .Select(
-                    group =>
-                        group.First())
-                .ToList();
+            NormalizeMessages(
+                messages);
 
         if (messagesToDelete.Count == 0)
         {
@@ -373,11 +371,15 @@ public sealed class MainViewModel : BaseViewModel
                         message.UniqueId)
                 .ToList();
 
-        await _mailDataSource
-            .MoveToTrashAsync(
-                folder.FolderId,
-                uniqueIds,
-                cancellationToken);
+        var moveResult =
+            await _mailDataSource
+                .MoveToTrashAsync(
+                    folder.FolderId,
+                    uniqueIds,
+                    cancellationToken);
+
+        SetLastMoveOperation(
+            moveResult);
 
         await ReloadAsync(
             cancellationToken);
@@ -417,20 +419,8 @@ public sealed class MainViewModel : BaseViewModel
         }
 
         var messagesToMove =
-            messages
-                .Where(
-                    message =>
-                        message is not null &&
-                        message.UniqueId > 0 &&
-                        Messages.Contains(
-                            message))
-                .GroupBy(
-                    message =>
-                        message.UniqueId)
-                .Select(
-                    group =>
-                        group.First())
-                .ToList();
+            NormalizeMessages(
+                messages);
 
         if (messagesToMove.Count == 0)
         {
@@ -444,25 +434,115 @@ public sealed class MainViewModel : BaseViewModel
                         message.UniqueId)
                 .ToList();
 
-        /*
-         * Der Server wird zuerst geändert.
-         * Vor erfolgreichem IMAP-MOVE wird lokal nichts entfernt.
-         */
-        await _mailDataSource
-            .MoveMessagesAsync(
-                sourceFolder.FolderId,
-                targetFolder.FolderId,
-                uniqueIds,
-                cancellationToken);
+        var moveResult =
+            await _mailDataSource
+                .MoveMessagesAsync(
+                    sourceFolder.FolderId,
+                    targetFolder.FolderId,
+                    uniqueIds,
+                    cancellationToken);
 
-        /*
-         * Danach einmal vollständige Synchronisation.
-         * Der Quellordner bleibt ausgewählt.
-         */
+        SetLastMoveOperation(
+            moveResult);
+
         await ReloadAsync(
             cancellationToken);
 
         return true;
+    }
+
+    public async Task<bool> UndoLastMoveAsync(
+        CancellationToken cancellationToken = default)
+    {
+        var operation =
+            _lastMoveOperation;
+
+        if (operation is null ||
+            !operation.CanUndo ||
+            IsLoading)
+        {
+            return false;
+        }
+
+        /*
+         * Wichtig:
+         *
+         * Für Undo sind jetzt die Ziel-UIDs relevant,
+         * weil die ursprünglichen UIDs nach einem IMAP-MOVE
+         * im Zielordner nicht mehr gültig sind.
+         */
+        var targetUniqueIds =
+            operation.TargetUniqueIds;
+
+        if (targetUniqueIds.Count == 0)
+        {
+            return false;
+        }
+
+        /*
+         * Aktion exakt rückwärts:
+         *
+         * vorher: Source -> Target
+         * Undo:    Target -> Source
+         */
+        await _mailDataSource
+            .MoveMessagesAsync(
+                operation.TargetFolderId,
+                operation.SourceFolderId,
+                targetUniqueIds,
+                cancellationToken);
+
+        /*
+         * Erst NACH erfolgreichem Server-MOVE entfernen.
+         *
+         * Schlägt Undo fehl, bleibt die Information erhalten
+         * und der Benutzer kann es erneut versuchen.
+         */
+        SetLastMoveOperation(
+            null);
+
+        await ReloadAsync(
+            cancellationToken);
+
+        return true;
+    }
+
+    private List<MailMessageItemViewModel> NormalizeMessages(
+        IReadOnlyList<MailMessageItemViewModel> messages)
+    {
+        return messages
+            .Where(
+                message =>
+                    message is not null &&
+                    message.UniqueId > 0 &&
+                    Messages.Contains(
+                        message))
+            .GroupBy(
+                message =>
+                    message.UniqueId)
+            .Select(
+                group =>
+                    group.First())
+            .ToList();
+    }
+
+    private void SetLastMoveOperation(
+        MailMoveResult? operation)
+    {
+        /*
+         * Eine neue MOVE-Aktion ersetzt immer die vorherige.
+         *
+         * Liefert der Server keine UID-Zuordnung,
+         * darf Strg+Z nicht versehentlich eine ältere
+         * Aktion rückgängig machen.
+         */
+        _lastMoveOperation =
+            operation?.CanUndo == true
+                ? operation
+                : null;
+
+        OnPropertyChanged(
+            nameof(CanUndoLastMove));
     }
 
     private async Task InitializeCoreAsync(

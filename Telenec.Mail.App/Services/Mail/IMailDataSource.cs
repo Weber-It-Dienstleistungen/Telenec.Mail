@@ -22,17 +22,17 @@ public interface IMailDataSource
         uint uniqueId,
         CancellationToken cancellationToken = default);
 
-    Task MoveToTrashAsync(
+    Task<MailMoveResult> MoveToTrashAsync(
         string folderId,
         uint uniqueId,
         CancellationToken cancellationToken = default);
 
-    Task MoveToTrashAsync(
+    Task<MailMoveResult> MoveToTrashAsync(
         string folderId,
         IReadOnlyList<uint> uniqueIds,
         CancellationToken cancellationToken = default);
 
-    Task MoveMessagesAsync(
+    Task<MailMoveResult> MoveMessagesAsync(
         string sourceFolderId,
         string targetFolderId,
         IReadOnlyList<uint> uniqueIds,
