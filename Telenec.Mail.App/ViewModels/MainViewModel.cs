@@ -69,6 +69,23 @@ public sealed class MainViewModel : BaseViewModel
         _lastMoveOperation?.CanUndo == true &&
         !IsLoading;
 
+    public bool IsTrashFolderSelected =>
+        _selectedFolder is not null &&
+        string.Equals(
+            _selectedFolder.DisplayName,
+            "Papierkorb",
+            StringComparison.OrdinalIgnoreCase);
+
+    public string MessageActionToolTip =>
+        IsTrashFolderSelected
+            ? "Nachricht wiederherstellen"
+            : "Nachricht löschen";
+
+    public string MessageActionGlyph =>
+        IsTrashFolderSelected
+            ? "\uE72B"
+            : "\uE74D";
+
     public MailFolderItemViewModel? SelectedFolder
     {
         get => _selectedFolder;
@@ -86,6 +103,8 @@ public sealed class MainViewModel : BaseViewModel
                 value;
 
             OnPropertyChanged();
+
+            NotifySelectedFolderActionStateChanged();
 
             if (_isInitialized &&
                 value is not null)
@@ -507,6 +526,202 @@ public sealed class MainViewModel : BaseViewModel
         return true;
     }
 
+    public async Task<bool> RestoreMessagesFromTrashAsync(
+        IReadOnlyList<MailMessageItemViewModel> messages,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(
+            messages);
+
+        var trashFolder =
+            _selectedFolder;
+
+        if (trashFolder is null ||
+            !IsTrashFolderSelected ||
+            IsLoading ||
+            messages.Count == 0)
+        {
+            return false;
+        }
+
+        var messagesToRestore =
+            NormalizeMessages(
+                messages);
+
+        if (messagesToRestore.Count == 0)
+        {
+            return false;
+        }
+
+        var uniqueIds =
+            messagesToRestore
+                .Select(
+                    message =>
+                        message.UniqueId)
+                .ToList();
+
+        var restoreTargetFolderId =
+            GetRestoreTargetFolderId(
+                trashFolder,
+                uniqueIds);
+
+        if (string.IsNullOrWhiteSpace(
+                restoreTargetFolderId))
+        {
+            return false;
+        }
+
+        /*
+         * Wiederherstellung ist technisch ebenfalls nur
+         * ein normaler serverseitiger IMAP-MOVE.
+         */
+        await _mailDataSource
+            .MoveMessagesAsync(
+                trashFolder.FolderId,
+                restoreTargetFolderId,
+                uniqueIds,
+                cancellationToken);
+
+        /*
+         * Wenn die wiederhergestellten Nachrichten zur
+         * letzten bekannten Löschaktion gehören, passen wir
+         * die verbleibende Undo-Information entsprechend an.
+         */
+        RemoveRestoredMessagesFromLastMove(
+            trashFolder.FolderId,
+            uniqueIds);
+
+        await ReloadAsync(
+            cancellationToken);
+
+        return true;
+    }
+
+    private string? GetRestoreTargetFolderId(
+        MailFolderItemViewModel trashFolder,
+        IReadOnlyList<uint> uniqueIds)
+    {
+        var operation =
+            _lastMoveOperation;
+
+        /*
+         * Gehören ALLE ausgewählten Nachrichten zur letzten
+         * bekannten Verschiebeaktion in diesen Papierkorb,
+         * kennen wir den tatsächlichen Ursprungsordner.
+         */
+        if (operation is not null &&
+            operation.CanUndo &&
+            string.Equals(
+                operation.TargetFolderId,
+                trashFolder.FolderId,
+                StringComparison.OrdinalIgnoreCase))
+        {
+            var knownTargetUniqueIds =
+                operation
+                    .UidMappings
+                    .Select(
+                        mapping =>
+                            mapping.TargetUniqueId)
+                    .ToHashSet();
+
+            var allMessagesHaveKnownOrigin =
+                uniqueIds.All(
+                    knownTargetUniqueIds.Contains);
+
+            var originalFolderStillExists =
+                MailFolders.Any(
+                    folder =>
+                        string.Equals(
+                            folder.FolderId,
+                            operation.SourceFolderId,
+                            StringComparison.OrdinalIgnoreCase));
+
+            if (allMessagesHaveKnownOrigin &&
+                originalFolderStillExists)
+            {
+                return operation.SourceFolderId;
+            }
+        }
+
+        /*
+         * IMAP speichert keinen standardisierten
+         * "ursprünglichen Ordner".
+         *
+         * Bei älteren oder durch andere Clients gelöschten
+         * Nachrichten ist der Posteingang deshalb unser
+         * sicherer Wiederherstellungs-Fallback.
+         */
+        return MailFolders
+            .FirstOrDefault(
+                folder =>
+                    string.Equals(
+                        folder.DisplayName,
+                        "Posteingang",
+                        StringComparison.OrdinalIgnoreCase))
+            ?.FolderId;
+    }
+
+    private void RemoveRestoredMessagesFromLastMove(
+        string trashFolderId,
+        IReadOnlyList<uint> restoredUniqueIds)
+    {
+        var operation =
+            _lastMoveOperation;
+
+        if (operation is null ||
+            !string.Equals(
+                operation.TargetFolderId,
+                trashFolderId,
+                StringComparison.OrdinalIgnoreCase))
+        {
+            return;
+        }
+
+        var restoredIds =
+            restoredUniqueIds
+                .ToHashSet();
+
+        var remainingMappings =
+            operation
+                .UidMappings
+                .Where(
+                    mapping =>
+                        !restoredIds.Contains(
+                            mapping.TargetUniqueId))
+                .ToList();
+
+        if (remainingMappings.Count == 0)
+        {
+            SetLastMoveOperation(
+                null);
+
+            return;
+        }
+
+        SetLastMoveOperation(
+            new MailMoveResult(
+                SourceFolderId:
+                    operation.SourceFolderId,
+
+                TargetFolderId:
+                    operation.TargetFolderId,
+
+                UidMappings:
+                    remainingMappings));
+    }
+
+    private void NotifySelectedFolderActionStateChanged()
+    {
+        OnPropertyChanged(
+            nameof(IsTrashFolderSelected));
+
+        OnPropertyChanged(
+            nameof(MessageActionToolTip));
+
+        OnPropertyChanged(
+            nameof(MessageActionGlyph));
+    }
+
     private List<MailMessageItemViewModel> NormalizeMessages(
         IReadOnlyList<MailMessageItemViewModel> messages)
     {
@@ -562,6 +777,8 @@ public sealed class MainViewModel : BaseViewModel
         OnPropertyChanged(
             nameof(SelectedFolder));
 
+        NotifySelectedFolderActionStateChanged();
+
         SelectedMessage =
             null;
 
@@ -611,6 +828,8 @@ public sealed class MainViewModel : BaseViewModel
 
             OnPropertyChanged(
                 nameof(SelectedFolder));
+
+            NotifySelectedFolderActionStateChanged();
 
             _isInitialized =
                 true;

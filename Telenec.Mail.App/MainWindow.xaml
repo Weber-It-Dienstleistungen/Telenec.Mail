@@ -423,7 +423,8 @@
 
                                     <ContextMenu
                                         DataContext="{Binding PlacementTarget.DataContext,
-                                            RelativeSource={RelativeSource Self}}">
+                                            RelativeSource={RelativeSource Self}}"
+                                        Opened="MessageContextMenu_OnOpened">
 
                                         <MenuItem
                                             Header="Als ungelesen markieren"
@@ -722,7 +723,7 @@
                         HorizontalAlignment="Right"
                         VerticalAlignment="Top"
                         Cursor="Hand"
-                        ToolTip="Nachricht löschen"
+                        ToolTip="{Binding MessageActionToolTip}"
                         Click="DeleteSelectedMessageButton_OnClick">
 
                         <Button.Style>
@@ -766,7 +767,7 @@
                         </Button.Style>
 
                         <TextBlock
-                            Text="&#xE74D;"
+                            Text="{Binding MessageActionGlyph}"
                             FontFamily="Segoe Fluent Icons"
                             FontSize="18"
                             Foreground="{StaticResource Text.Secondary}"

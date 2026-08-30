@@ -436,20 +436,11 @@ public partial class MainWindow : Window
         object sender,
         KeyEventArgs e)
     {
-        /*
-         * Texteingaben behalten ihre eigene Undo-Funktion.
-         */
         if (Keyboard.FocusedElement is TextBoxBase)
         {
             return;
         }
 
-        /*
-         * STRG + Z
-         *
-         * Macht ausschließlich die letzte von Telenec Mail
-         * ausgeführte MOVE-/Löschaktion rückgängig.
-         */
         if (e.Key == Key.Z &&
             Keyboard.Modifiers.HasFlag(
                 ModifierKeys.Control))
@@ -475,9 +466,6 @@ public partial class MainWindow : Window
             return;
         }
 
-        /*
-         * ENTF
-         */
         if (e.Key != Key.Delete)
         {
             return;
@@ -757,6 +745,34 @@ public partial class MainWindow : Window
         }
     }
 
+    private void MessageContextMenu_OnOpened(
+        object sender,
+        RoutedEventArgs e)
+    {
+        if (sender is not ContextMenu contextMenu)
+        {
+            return;
+        }
+
+        /*
+         * Das Menü besteht aktuell aus:
+         *
+         * 0 = Als ungelesen markieren
+         * 1 = Separator
+         * 2 = Löschen / Wiederherstellen
+         */
+        if (contextMenu.Items.Count < 3 ||
+            contextMenu.Items[2] is not MenuItem actionMenuItem)
+        {
+            return;
+        }
+
+        actionMenuItem.Header =
+            _viewModel.IsTrashFolderSelected
+                ? "Wiederherstellen"
+                : "Löschen";
+    }
+
     private async void DeleteMenuItem_OnClick(
         object sender,
         RoutedEventArgs e)
@@ -781,6 +797,14 @@ public partial class MainWindow : Window
                 new[] { clickedMessage };
         }
 
+        if (_viewModel.IsTrashFolderSelected)
+        {
+            await RestoreMessagesFromUiAsync(
+                messages);
+
+            return;
+        }
+
         await DeleteMessagesFromUiAsync(
             messages);
     }
@@ -799,6 +823,14 @@ public partial class MainWindow : Window
 
         if (messages.Count == 0)
         {
+            return;
+        }
+
+        if (_viewModel.IsTrashFolderSelected)
+        {
+            await RestoreMessagesFromUiAsync(
+                messages);
+
             return;
         }
 
@@ -823,6 +855,48 @@ public partial class MainWindow : Window
         }
 
         return selectedMessages;
+    }
+
+    private async Task RestoreMessagesFromUiAsync(
+        IReadOnlyList<MailMessageItemViewModel> messages)
+    {
+        if (messages.Count == 0)
+        {
+            return;
+        }
+
+        try
+        {
+            var restored =
+                await _viewModel
+                    .RestoreMessagesFromTrashAsync(
+                        messages);
+
+            if (!restored)
+            {
+                MessageBox.Show(
+                    messages.Count == 1
+                        ? "Die Nachricht konnte nicht wiederhergestellt werden."
+                        : "Die Nachrichten konnten nicht wiederhergestellt werden.",
+                    "Telenec Mail",
+                    MessageBoxButton.OK,
+                    MessageBoxImage.Information);
+            }
+        }
+        catch
+        {
+            var messageText =
+                messages.Count == 1
+                    ? "Die Nachricht konnte nicht wiederhergestellt werden."
+                    : "Die Nachrichten konnten nicht wiederhergestellt werden.";
+
+            MessageBox.Show(
+                messageText +
+                "\n\nBitte prüfen Sie die Verbindung und versuchen Sie es erneut.",
+                "Telenec Mail",
+                MessageBoxButton.OK,
+                MessageBoxImage.Error);
+        }
     }
 
     private async Task DeleteMessagesFromUiAsync(
