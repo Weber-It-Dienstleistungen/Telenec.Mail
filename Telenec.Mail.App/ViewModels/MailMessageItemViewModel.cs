@@ -18,7 +18,8 @@ public sealed class MailMessageItemViewModel
         bool isUnread = false,
         bool emphasizeSender = false,
         string? highlightTitle = null,
-        string? highlightText = null)
+        string? highlightText = null,
+        string? htmlBody = null)
     {
         Sender = sender;
         SenderAddress = senderAddress;
@@ -36,6 +37,7 @@ public sealed class MailMessageItemViewModel
         EmphasizeSender = emphasizeSender;
         HighlightTitle = highlightTitle;
         HighlightText = highlightText;
+        HtmlBody = htmlBody;
     }
 
     public string Sender { get; }
@@ -44,7 +46,8 @@ public sealed class MailMessageItemViewModel
 
     public string RecipientAddress { get; }
 
-    public string AddressLine => $"{SenderAddress} → {RecipientAddress}";
+    public string AddressLine =>
+        $"{SenderAddress} → {RecipientAddress}";
 
     public string Subject { get; }
 
@@ -71,6 +74,12 @@ public sealed class MailMessageItemViewModel
     public string? HighlightTitle { get; }
 
     public string? HighlightText { get; }
+
+    public string? HtmlBody { get; }
+
+    public bool HasHtmlBody =>
+        !string.IsNullOrWhiteSpace(
+            HtmlBody);
 
     public bool HasHighlight =>
         !string.IsNullOrWhiteSpace(HighlightTitle) &&

@@ -22,8 +22,11 @@ public sealed class ImapMailDataSource : IMailDataSource
         IMailAccountStore mailAccountStore,
         ICredentialStore credentialStore)
     {
-        _mailAccountStore = mailAccountStore;
-        _credentialStore = credentialStore;
+        _mailAccountStore =
+            mailAccountStore;
+
+        _credentialStore =
+            credentialStore;
     }
 
     public async Task<IReadOnlyList<MailFolderData>> GetFoldersAsync(
@@ -36,77 +39,122 @@ public sealed class ImapMailDataSource : IMailDataSource
         try
         {
             var folders =
-                new List<IMailFolder>
-                {
-                    client.Inbox
-                };
+                new List<IMailFolder>();
 
+            /*
+             * Zuerst die tatsächlichen Serverordner laden.
+             *
+             * Count und Unread werden dabei direkt per STATUS
+             * vom Server angefordert.
+             */
             if (client.PersonalNamespaces.Count > 0)
             {
                 var serverFolders =
                     await client.GetFoldersAsync(
                         client.PersonalNamespaces[0],
-                        StatusItems.Count | StatusItems.Unread,
+                        StatusItems.Count |
+                        StatusItems.Unread,
                         false,
                         cancellationToken);
 
-                folders.AddRange(serverFolders);
+                folders.AddRange(
+                    serverFolders);
+            }
+
+            /*
+             * Manche IMAP-Server liefern INBOX nicht über dieselbe
+             * Namespace-Abfrage zurück.
+             *
+             * Nur in diesem Fall ergänzen wir client.Inbox.
+             * Vorher wird dessen Status ausdrücklich aktualisiert,
+             * damit Count und Unread nicht auf 0 stehen.
+             */
+            var inboxAlreadyIncluded =
+                folders.Any(
+                    folder =>
+                        string.Equals(
+                            folder.FullName,
+                            client.Inbox.FullName,
+                            StringComparison.OrdinalIgnoreCase));
+
+            if (!inboxAlreadyIncluded)
+            {
+                await TryUpdateFolderStatusAsync(
+                    client.Inbox,
+                    cancellationToken);
+
+                folders.Insert(
+                    0,
+                    client.Inbox);
             }
 
             var uniqueFolders =
                 folders
-                    .Where(folder =>
-                        !folder.Attributes.HasFlag(
-                            FolderAttributes.NoSelect))
+                    .Where(
+                        folder =>
+                            !folder.Attributes.HasFlag(
+                                FolderAttributes.NoSelect))
                     .GroupBy(
                         folder => folder.FullName,
                         StringComparer.OrdinalIgnoreCase)
-                    .Select(group => group.First())
-                    .OrderBy(folder =>
-                        GetFolderSortOrder(
-                            folder,
-                            client.Inbox.FullName))
+                    .Select(
+                        group => group.First())
+                    .OrderBy(
+                        folder =>
+                            GetFolderSortOrder(
+                                folder,
+                                client.Inbox.FullName))
                     .ThenBy(
-                        folder => GetDisplayName(
-                            folder,
-                            client.Inbox.FullName),
+                        folder =>
+                            GetDisplayName(
+                                folder,
+                                client.Inbox.FullName),
                         StringComparer.CurrentCultureIgnoreCase)
                     .ToList();
 
             var result =
                 uniqueFolders
-                    .Select(folder =>
-                    {
-                        var unreadCount =
-                            Math.Max(
-                                folder.Unread,
-                                0);
+                    .Select(
+                        folder =>
+                        {
+                            var unreadCount =
+                                Math.Max(
+                                    folder.Unread,
+                                    0);
 
-                        var messageCount =
-                            Math.Max(
-                                folder.Count,
-                                0);
+                            var messageCount =
+                                Math.Max(
+                                    folder.Count,
+                                    0);
 
-                        var subtitle =
-                            unreadCount > 0
-                                ? $"{unreadCount} ungelesene Nachrichten"
-                                : $"{messageCount} Nachrichten";
+                            var subtitle =
+                                unreadCount > 0
+                                    ? $"{unreadCount} ungelesene Nachrichten"
+                                    : $"{messageCount} Nachrichten";
 
-                        return new MailFolderData(
-                            FolderId: folder.FullName,
-                            DisplayName: GetDisplayName(
-                                folder,
-                                client.Inbox.FullName),
-                            HeaderSubtitle: subtitle,
-                            UnreadCount: unreadCount);
-                    })
+                            return new MailFolderData(
+                                FolderId:
+                                    folder.FullName,
+
+                                DisplayName:
+                                    GetDisplayName(
+                                        folder,
+                                        client.Inbox.FullName),
+
+                                HeaderSubtitle:
+                                    subtitle,
+
+                                UnreadCount:
+                                    unreadCount);
+                        })
                     .ToList();
 
             return result;
         }
         finally
         {
-            await DisconnectSafelyAsync(client);
+            await DisconnectSafelyAsync(
+                client);
         }
     }
 
@@ -115,7 +163,8 @@ public sealed class ImapMailDataSource : IMailDataSource
         int maximumMessageCount = 20,
         CancellationToken cancellationToken = default)
     {
-        if (string.IsNullOrWhiteSpace(folderId))
+        if (string.IsNullOrWhiteSpace(
+                folderId))
         {
             throw new ArgumentException(
                 "Der Ordner darf nicht leer sein.",
@@ -124,7 +173,8 @@ public sealed class ImapMailDataSource : IMailDataSource
 
         if (maximumMessageCount <= 0)
         {
-            return Array.Empty<MailMessageData>();
+            return Array.Empty<
+                MailMessageData>();
         }
 
         using var client =
@@ -144,13 +194,15 @@ public sealed class ImapMailDataSource : IMailDataSource
 
             if (folder.Count == 0)
             {
-                return Array.Empty<MailMessageData>();
+                return Array.Empty<
+                    MailMessageData>();
             }
 
             var minimumIndex =
                 Math.Max(
                     0,
-                    folder.Count - maximumMessageCount);
+                    folder.Count -
+                    maximumMessageCount);
 
             var maximumIndex =
                 folder.Count - 1;
@@ -175,8 +227,8 @@ public sealed class ImapMailDataSource : IMailDataSource
                 cancellationToken
                     .ThrowIfCancellationRequested();
 
-                var body =
-                    await GetBodyTextAsync(
+                var bodyContent =
+                    await GetBodyContentAsync(
                         folder,
                         summary,
                         cancellationToken);
@@ -184,14 +236,15 @@ public sealed class ImapMailDataSource : IMailDataSource
                 messages.Add(
                     CreateMessageData(
                         summary,
-                        body));
+                        bodyContent));
             }
 
             return messages;
         }
         finally
         {
-            await DisconnectSafelyAsync(client);
+            await DisconnectSafelyAsync(
+                client);
         }
     }
 
@@ -245,62 +298,90 @@ public sealed class ImapMailDataSource : IMailDataSource
         catch
         {
             client.Dispose();
+
             throw;
         }
     }
 
-    private static async Task<string> GetBodyTextAsync(
-        IMailFolder folder,
-        IMessageSummary summary,
-        CancellationToken cancellationToken)
+    private static async Task<MessageBodyContent>
+        GetBodyContentAsync(
+            IMailFolder folder,
+            IMessageSummary summary,
+            CancellationToken cancellationToken)
     {
-        BodyPartText? bodyPart =
-            summary.TextBody;
+        string plainText =
+            string.Empty;
 
-        var isHtml =
-            false;
+        string? htmlBody =
+            null;
 
-        if (bodyPart is null)
+        /*
+         * Wenn eine echte text/plain-Version vorhanden ist,
+         * verwenden wir diese für Vorschau und Fallback.
+         */
+        if (summary.TextBody is not null)
         {
-            bodyPart =
-                summary.HtmlBody;
+            var textEntity =
+                await folder.GetBodyPartAsync(
+                    summary.UniqueId,
+                    summary.TextBody,
+                    cancellationToken);
 
-            isHtml =
-                bodyPart is not null;
+            if (textEntity is TextPart textPart)
+            {
+                plainText =
+                    NormalizeBodyText(
+                        textPart.Text
+                        ?? string.Empty);
+            }
         }
 
-        if (bodyPart is null)
+        /*
+         * Das originale HTML bleibt unverändert erhalten.
+         *
+         * Genau dieses HTML wird vom WebView2-Reader gerendert.
+         */
+        if (summary.HtmlBody is not null)
         {
-            return string.Empty;
+            var htmlEntity =
+                await folder.GetBodyPartAsync(
+                    summary.UniqueId,
+                    summary.HtmlBody,
+                    cancellationToken);
+
+            if (htmlEntity is TextPart htmlPart)
+            {
+                htmlBody =
+                    htmlPart.Text
+                    ?? string.Empty;
+            }
         }
 
-        var entity =
-            await folder.GetBodyPartAsync(
-                summary.UniqueId,
-                bodyPart,
-                cancellationToken);
-
-        if (entity is not TextPart textPart)
+        /*
+         * Falls keine text/plain-Alternative existiert,
+         * erzeugen wir aus HTML weiterhin einen Text-Fallback.
+         */
+        if (string.IsNullOrWhiteSpace(
+                plainText) &&
+            !string.IsNullOrWhiteSpace(
+                htmlBody))
         {
-            return string.Empty;
-        }
-
-        var text =
-            textPart.Text ?? string.Empty;
-
-        if (isHtml)
-        {
-            text =
+            plainText =
                 ConvertHtmlToPlainText(
-                    text);
+                    htmlBody);
         }
 
-        return NormalizeBodyText(text);
+        return new MessageBodyContent(
+            PlainText:
+                plainText,
+
+            HtmlBody:
+                htmlBody);
     }
 
     private static MailMessageData CreateMessageData(
         IMessageSummary summary,
-        string body)
+        MessageBodyContent bodyContent)
     {
         var senderMailbox =
             summary.Envelope?
@@ -355,7 +436,8 @@ public sealed class ImapMailDataSource : IMailDataSource
                 MessageFlags.Seen);
 
         var preview =
-            CreatePreview(body);
+            CreatePreview(
+                bodyContent.PlainText);
 
         var senderInitial =
             senderName
@@ -363,28 +445,59 @@ public sealed class ImapMailDataSource : IMailDataSource
                 .FirstOrDefault();
 
         return new MailMessageData(
-            Sender: senderName,
-            SenderAddress: senderAddress,
-            RecipientAddress: recipientAddress,
-            Subject: subject,
-            Preview: preview,
-            DisplayTime: FormatDisplayTime(date),
-            DisplayDateTime: FormatDisplayDateTime(date),
+            Sender:
+                senderName,
+
+            SenderAddress:
+                senderAddress,
+
+            RecipientAddress:
+                recipientAddress,
+
+            Subject:
+                subject,
+
+            Preview:
+                preview,
+
+            DisplayTime:
+                FormatDisplayTime(
+                    date),
+
+            DisplayDateTime:
+                FormatDisplayDateTime(
+                    date),
+
             SenderInitial:
                 senderInitial == default
                     ? "?"
                     : senderInitial
                         .ToString()
                         .ToUpperInvariant(),
-            Greeting: string.Empty,
+
+            Greeting:
+                string.Empty,
+
             Body:
-                string.IsNullOrWhiteSpace(body)
+                string.IsNullOrWhiteSpace(
+                    bodyContent.PlainText)
                     ? "(Für diese Nachricht ist kein darstellbarer Textinhalt verfügbar.)"
-                    : body,
-            Closing: string.Empty,
-            Signature: string.Empty,
-            IsUnread: isUnread,
-            EmphasizeSender: isUnread);
+                    : bodyContent.PlainText,
+
+            Closing:
+                string.Empty,
+
+            Signature:
+                string.Empty,
+
+            IsUnread:
+                isUnread,
+
+            EmphasizeSender:
+                isUnread,
+
+            HtmlBody:
+                bodyContent.HtmlBody);
     }
 
     private static string GetDisplayName(
@@ -404,26 +517,50 @@ public sealed class ImapMailDataSource : IMailDataSource
 
         return name.ToLowerInvariant() switch
         {
-            "sent" => "Gesendet",
-            "sent items" => "Gesendet",
-            "sent messages" => "Gesendet",
-            "gesendet" => "Gesendet",
+            "sent" =>
+                "Gesendet",
 
-            "drafts" => "Entwürfe",
-            "draft" => "Entwürfe",
-            "entwürfe" => "Entwürfe",
+            "sent items" =>
+                "Gesendet",
 
-            "trash" => "Papierkorb",
-            "deleted items" => "Papierkorb",
-            "papierkorb" => "Papierkorb",
+            "sent messages" =>
+                "Gesendet",
 
-            "junk" => "Junk",
-            "spam" => "Spam",
+            "gesendet" =>
+                "Gesendet",
 
-            "archive" => "Archiv",
-            "archives" => "Archiv",
+            "drafts" =>
+                "Entwürfe",
 
-            _ => name
+            "draft" =>
+                "Entwürfe",
+
+            "entwürfe" =>
+                "Entwürfe",
+
+            "trash" =>
+                "Papierkorb",
+
+            "deleted items" =>
+                "Papierkorb",
+
+            "papierkorb" =>
+                "Papierkorb",
+
+            "junk" =>
+                "Junk",
+
+            "spam" =>
+                "Spam",
+
+            "archive" =>
+                "Archiv",
+
+            "archives" =>
+                "Archiv",
+
+            _ =>
+                name
         };
     }
 
@@ -452,21 +589,25 @@ public sealed class ImapMailDataSource : IMailDataSource
     private static string CreatePreview(
         string body)
     {
-        if (string.IsNullOrWhiteSpace(body))
+        if (string.IsNullOrWhiteSpace(
+                body))
         {
-            return "Kein Nachrichtentext verfügbar.";
+            return
+                "Kein Nachrichtentext verfügbar.";
         }
 
         var preview =
             Regex.Replace(
-                body,
-                @"\s+",
-                " ")
-            .Trim();
+                    body,
+                    @"\s+",
+                    " ")
+                .Trim();
 
-        const int maximumLength = 140;
+        const int maximumLength =
+            140;
 
-        if (preview.Length <= maximumLength)
+        if (preview.Length <=
+            maximumLength)
         {
             return preview;
         }
@@ -479,7 +620,8 @@ public sealed class ImapMailDataSource : IMailDataSource
     private static string ConvertHtmlToPlainText(
         string html)
     {
-        if (string.IsNullOrWhiteSpace(html))
+        if (string.IsNullOrWhiteSpace(
+                html))
         {
             return string.Empty;
         }
@@ -521,15 +663,18 @@ public sealed class ImapMailDataSource : IMailDataSource
                 " ");
 
         text =
-            WebUtility.HtmlDecode(text);
+            WebUtility.HtmlDecode(
+                text);
 
-        return NormalizeBodyText(text);
+        return NormalizeBodyText(
+            text);
     }
 
     private static string NormalizeBodyText(
         string text)
     {
-        if (string.IsNullOrWhiteSpace(text))
+        if (string.IsNullOrWhiteSpace(
+                text))
         {
             return string.Empty;
         }
@@ -572,7 +717,8 @@ public sealed class ImapMailDataSource : IMailDataSource
         var today =
             DateTime.Today;
 
-        if (local.Date == today)
+        if (local.Date ==
+            today)
         {
             return local.ToString(
                 "HH:mm");
@@ -604,19 +750,42 @@ public sealed class ImapMailDataSource : IMailDataSource
         var today =
             DateTime.Today;
 
-        if (local.Date == today)
+        if (local.Date ==
+            today)
         {
-            return $"Heute, {local:HH:mm}";
+            return
+                $"Heute, {local:HH:mm}";
         }
 
         if (local.Date ==
             today.AddDays(-1))
         {
-            return $"Gestern, {local:HH:mm}";
+            return
+                $"Gestern, {local:HH:mm}";
         }
 
         return local.ToString(
             "dd.MM.yyyy, HH:mm");
+    }
+
+    private static async Task TryUpdateFolderStatusAsync(
+        IMailFolder folder,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            await folder.StatusAsync(
+                StatusItems.Count |
+                StatusItems.Unread,
+                cancellationToken);
+        }
+        catch (NotSupportedException)
+        {
+            /*
+             * Falls ein Server STATUS wider Erwarten nicht
+             * unterstützt, darf der Client trotzdem weiterlaufen.
+             */
+        }
     }
 
     private static async Task DisconnectSafelyAsync(
@@ -635,8 +804,14 @@ public sealed class ImapMailDataSource : IMailDataSource
         }
         catch
         {
-            // Ein Disconnect-Fehler darf das geladene
-            // Ergebnis nicht nachträglich zerstören.
+            /*
+             * Ein Disconnect-Fehler darf bereits geladene Daten
+             * nicht nachträglich ungültig machen.
+             */
         }
     }
+
+    private sealed record MessageBodyContent(
+        string PlainText,
+        string? HtmlBody);
 }

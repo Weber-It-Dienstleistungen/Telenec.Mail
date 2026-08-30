@@ -4,6 +4,7 @@
         xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
         xmlns:mail="clr-namespace:Telenec.Mail.App.Services.Mail"
+        xmlns:wv2="clr-namespace:Microsoft.Web.WebView2.Wpf;assembly=Microsoft.Web.WebView2.Wpf"
         mc:Ignorable="d"
         Title="{Binding ApplicationTitle}"
         Width="1400"
@@ -42,8 +43,6 @@
                     <RowDefinition Height="Auto" />
                 </Grid.RowDefinitions>
 
-                <!-- Branding -->
-
                 <StackPanel
                     Grid.Row="0"
                     Margin="22,22,22,18">
@@ -62,8 +61,6 @@
                         FontWeight="SemiBold" />
 
                 </StackPanel>
-
-                <!-- Connection Status -->
 
                 <Border
                     Grid.Row="1"
@@ -158,8 +155,6 @@
 
                 </Border>
 
-                <!-- Mail folders -->
-
                 <ListBox
                     Grid.Row="2"
                     ItemsSource="{Binding MailFolders}"
@@ -244,8 +239,6 @@
                     </ListBox.ItemTemplate>
 
                 </ListBox>
-
-                <!-- Account footer -->
 
                 <Border
                     Grid.Row="3"
@@ -341,8 +334,6 @@
                     <RowDefinition Height="*" />
                 </Grid.RowDefinitions>
 
-                <!-- Header -->
-
                 <Grid
                     Grid.Row="0"
                     Margin="22,22,22,14">
@@ -392,8 +383,6 @@
 
                 </Grid>
 
-                <!-- Search -->
-
                 <Border
                     Grid.Row="1"
                     Margin="18,0,18,14"
@@ -428,8 +417,6 @@
                     </Grid>
 
                 </Border>
-
-                <!-- Nachrichten -->
 
                 <ListBox
                     Grid.Row="2"
@@ -538,8 +525,6 @@
 
                 </ListBox>
 
-                <!-- Ladezustand -->
-
                 <Border
                     Grid.Row="2"
                     Background="{StaticResource Surface.Card}">
@@ -590,8 +575,6 @@
                     </StackPanel>
 
                 </Border>
-
-                <!-- Fehlerzustand -->
 
                 <Border
                     Grid.Row="2"
@@ -652,8 +635,6 @@
                     </StackPanel>
 
                 </Border>
-
-                <!-- Leerer Ordner -->
 
                 <Border
                     Grid.Row="2"
@@ -724,10 +705,9 @@
                 <Grid.RowDefinitions>
                     <RowDefinition Height="Auto" />
                     <RowDefinition Height="1" />
+                    <RowDefinition Height="Auto" />
                     <RowDefinition Height="*" />
                 </Grid.RowDefinitions>
-
-                <!-- Message header -->
 
                 <Grid
                     Grid.Row="0"
@@ -807,96 +787,169 @@
                     Grid.Row="1"
                     Background="{StaticResource Border.Subtle}" />
 
-                <!-- Mail content -->
+                <!-- Externe Bilder -->
 
-                <ScrollViewer
+                <Border
+                    x:Name="ExternalImagesNotice"
                     Grid.Row="2"
-                    VerticalScrollBarVisibility="Auto">
+                    Margin="20,12,20,0"
+                    Padding="14,10"
+                    CornerRadius="6"
+                    BorderBrush="{StaticResource Border.Default}"
+                    BorderThickness="1"
+                    Background="{StaticResource Brand.PrimaryLight}"
+                    Visibility="Collapsed">
 
-                    <StackPanel
-                        Margin="44,36,44,36"
-                        MaxWidth="760"
-                        HorizontalAlignment="Left">
+                    <Grid>
 
-                        <TextBlock
-                            Text="{Binding SelectedMessage.Greeting}"
-                            FontSize="14"
-                            Foreground="{StaticResource Text.Primary}" />
-
-                        <TextBlock
-                            Margin="0,20,0,0"
-                            Text="{Binding SelectedMessage.Body}"
-                            TextWrapping="Wrap"
-                            FontSize="14"
-                            LineHeight="22"
-                            Foreground="{StaticResource Text.Primary}" />
-
-                        <Border
-                            Margin="0,28,0,28"
-                            Padding="18"
-                            CornerRadius="8"
-                            Background="{StaticResource Brand.PrimaryLight}">
-
-                            <Border.Style>
-
-                                <Style TargetType="Border">
-
-                                    <Setter
-                                        Property="Visibility"
-                                        Value="Collapsed" />
-
-                                    <Style.Triggers>
-
-                                        <DataTrigger
-                                            Binding="{Binding SelectedMessage.HasHighlight}"
-                                            Value="True">
-
-                                            <Setter
-                                                Property="Visibility"
-                                                Value="Visible" />
-
-                                        </DataTrigger>
-
-                                    </Style.Triggers>
-
-                                </Style>
-
-                            </Border.Style>
-
-                            <StackPanel>
-
-                                <TextBlock
-                                    Text="{Binding SelectedMessage.HighlightTitle}"
-                                    FontSize="14"
-                                    FontWeight="SemiBold"
-                                    Foreground="{StaticResource Text.Primary}" />
-
-                                <TextBlock
-                                    Margin="0,6,0,0"
-                                    Text="{Binding SelectedMessage.HighlightText}"
-                                    FontSize="12"
-                                    Foreground="{StaticResource Text.Secondary}"
-                                    TextWrapping="Wrap" />
-
-                            </StackPanel>
-
-                        </Border>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto" />
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
 
                         <TextBlock
-                            Text="{Binding SelectedMessage.Closing}"
-                            FontSize="14"
-                            Foreground="{StaticResource Text.Primary}" />
+                            Grid.Column="0"
+                            Text="&#xE72E;"
+                            Margin="0,0,10,0"
+                            FontFamily="Segoe Fluent Icons"
+                            FontSize="16"
+                            Foreground="{StaticResource Brand.Primary}"
+                            VerticalAlignment="Center" />
 
-                        <TextBlock
-                            Margin="0,5,0,0"
-                            Text="{Binding SelectedMessage.Signature}"
-                            FontSize="14"
-                            FontWeight="SemiBold"
-                            Foreground="{StaticResource Text.Primary}" />
+                        <StackPanel
+                            Grid.Column="1"
+                            VerticalAlignment="Center">
 
-                    </StackPanel>
+                            <TextBlock
+                                Text="Externe Bilder wurden blockiert."
+                                FontSize="12"
+                                FontWeight="SemiBold"
+                                Foreground="{StaticResource Text.Primary}" />
 
-                </ScrollViewer>
+                            <TextBlock
+                                Text="Zum Schutz Ihrer Privatsphäre lädt Telenec Mail externe Bilder nicht automatisch."
+                                Margin="0,2,12,0"
+                                FontSize="11"
+                                Foreground="{StaticResource Text.Secondary}"
+                                TextWrapping="Wrap" />
+
+                        </StackPanel>
+
+                        <Button
+                            Grid.Column="2"
+                            Content="Trotzdem laden"
+                            Margin="12,0,0,0"
+                            Padding="12,6"
+                            VerticalAlignment="Center"
+                            Cursor="Hand"
+                            Style="{StaticResource Button.Primary}"
+                            Click="LoadExternalImagesButton_OnClick" />
+
+                    </Grid>
+
+                </Border>
+
+                <Grid Grid.Row="3">
+
+                    <!-- Plaintext / Fallback -->
+
+                    <ScrollViewer
+                        x:Name="PlainTextMailView"
+                        VerticalScrollBarVisibility="Auto">
+
+                        <StackPanel
+                            Margin="44,36,44,36"
+                            MaxWidth="760"
+                            HorizontalAlignment="Left">
+
+                            <TextBlock
+                                Text="{Binding SelectedMessage.Greeting}"
+                                FontSize="14"
+                                Foreground="{StaticResource Text.Primary}" />
+
+                            <TextBlock
+                                Margin="0,20,0,0"
+                                Text="{Binding SelectedMessage.Body}"
+                                TextWrapping="Wrap"
+                                FontSize="14"
+                                LineHeight="22"
+                                Foreground="{StaticResource Text.Primary}" />
+
+                            <Border
+                                Margin="0,28,0,28"
+                                Padding="18"
+                                CornerRadius="8"
+                                Background="{StaticResource Brand.PrimaryLight}">
+
+                                <Border.Style>
+
+                                    <Style TargetType="Border">
+
+                                        <Setter
+                                            Property="Visibility"
+                                            Value="Collapsed" />
+
+                                        <Style.Triggers>
+
+                                            <DataTrigger
+                                                Binding="{Binding SelectedMessage.HasHighlight}"
+                                                Value="True">
+
+                                                <Setter
+                                                    Property="Visibility"
+                                                    Value="Visible" />
+
+                                            </DataTrigger>
+
+                                        </Style.Triggers>
+
+                                    </Style>
+
+                                </Border.Style>
+
+                                <StackPanel>
+
+                                    <TextBlock
+                                        Text="{Binding SelectedMessage.HighlightTitle}"
+                                        FontSize="14"
+                                        FontWeight="SemiBold"
+                                        Foreground="{StaticResource Text.Primary}" />
+
+                                    <TextBlock
+                                        Margin="0,6,0,0"
+                                        Text="{Binding SelectedMessage.HighlightText}"
+                                        FontSize="12"
+                                        Foreground="{StaticResource Text.Secondary}"
+                                        TextWrapping="Wrap" />
+
+                                </StackPanel>
+
+                            </Border>
+
+                            <TextBlock
+                                Text="{Binding SelectedMessage.Closing}"
+                                FontSize="14"
+                                Foreground="{StaticResource Text.Primary}" />
+
+                            <TextBlock
+                                Margin="0,5,0,0"
+                                Text="{Binding SelectedMessage.Signature}"
+                                FontSize="14"
+                                FontWeight="SemiBold"
+                                Foreground="{StaticResource Text.Primary}" />
+
+                        </StackPanel>
+
+                    </ScrollViewer>
+
+                    <!-- HTML-Mail -->
+
+                    <wv2:WebView2
+                        x:Name="HtmlMailView"
+                        Visibility="Collapsed" />
+
+                </Grid>
 
             </Grid>
 

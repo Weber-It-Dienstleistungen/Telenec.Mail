@@ -16,4 +16,5 @@ public sealed record MailMessageData(
     bool IsUnread = false,
     bool EmphasizeSender = false,
     string? HighlightTitle = null,
-    string? HighlightText = null);
+    string? HighlightText = null,
+    string? HtmlBody = null);

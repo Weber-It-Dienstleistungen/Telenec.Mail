@@ -459,7 +459,10 @@ public sealed class MainViewModel : BaseViewModel
                             message.HighlightTitle,
 
                         highlightText:
-                            message.HighlightText));
+                            message.HighlightText,
+
+                        htmlBody:
+                            message.HtmlBody));
             }
 
             SelectedMessage =
