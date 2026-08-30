@@ -41,12 +41,6 @@ public sealed class ImapMailDataSource : IMailDataSource
             var folders =
                 new List<IMailFolder>();
 
-            /*
-             * Zuerst die tatsächlichen Serverordner laden.
-             *
-             * Count und Unread werden dabei direkt per STATUS
-             * vom Server angefordert.
-             */
             if (client.PersonalNamespaces.Count > 0)
             {
                 var serverFolders =
@@ -61,14 +55,6 @@ public sealed class ImapMailDataSource : IMailDataSource
                     serverFolders);
             }
 
-            /*
-             * Manche IMAP-Server liefern INBOX nicht über dieselbe
-             * Namespace-Abfrage zurück.
-             *
-             * Nur in diesem Fall ergänzen wir client.Inbox.
-             * Vorher wird dessen Status ausdrücklich aktualisiert,
-             * damit Count und Unread nicht auf 0 stehen.
-             */
             var inboxAlreadyIncluded =
                 folders.Any(
                     folder =>
@@ -191,12 +177,6 @@ public sealed class ImapMailDataSource : IMailDataSource
                     folderId,
                     cancellationToken);
 
-            /*
-             * Nachrichten werden weiterhin ausschließlich lesend geladen.
-             *
-             * Das Setzen von \Seen erfolgt bewusst separat über
-             * MarkAsReadAsync().
-             */
             await folder.OpenAsync(
                 FolderAccess.ReadOnly,
                 cancellationToken);
@@ -288,22 +268,10 @@ public sealed class ImapMailDataSource : IMailDataSource
                     folderId,
                     cancellationToken);
 
-            /*
-             * Schreibrechte werden nur für diese gezielte
-             * Statusänderung angefordert.
-             */
             await folder.OpenAsync(
                 FolderAccess.ReadWrite,
                 cancellationToken);
 
-            /*
-             * \Seen ist das standardisierte IMAP-Flag für
-             * eine gelesene Nachricht.
-             *
-             * silent=true verhindert unnötige lokale
-             * MessageFlagsChanged-Ereignisse auf dieser
-             * kurzlebigen IMAP-Verbindung.
-             */
             await folder.AddFlagsAsync(
                 new UniqueId(
                     uniqueId),
@@ -349,20 +317,10 @@ public sealed class ImapMailDataSource : IMailDataSource
                     folderId,
                     cancellationToken);
 
-            /*
-             * Auch hier werden Schreibrechte nur für die
-             * konkrete Flag-Änderung angefordert.
-             */
             await folder.OpenAsync(
                 FolderAccess.ReadWrite,
                 cancellationToken);
 
-            /*
-             * Eine Nachricht wird IMAP-seitig wieder ungelesen,
-             * indem ausschließlich das \Seen-Flag entfernt wird.
-             *
-             * Andere Flags der Nachricht bleiben unverändert.
-             */
             await folder.RemoveFlagsAsync(
                 new UniqueId(
                     uniqueId),
@@ -377,9 +335,20 @@ public sealed class ImapMailDataSource : IMailDataSource
         }
     }
 
-    public async Task MoveToTrashAsync(
+    public Task MoveToTrashAsync(
         string folderId,
         uint uniqueId,
+        CancellationToken cancellationToken = default)
+    {
+        return MoveToTrashAsync(
+            folderId,
+            new[] { uniqueId },
+            cancellationToken);
+    }
+
+    public async Task MoveToTrashAsync(
+        string folderId,
+        IReadOnlyList<uint> uniqueIds,
         CancellationToken cancellationToken = default)
     {
         if (string.IsNullOrWhiteSpace(
@@ -390,11 +359,22 @@ public sealed class ImapMailDataSource : IMailDataSource
                 nameof(folderId));
         }
 
-        if (uniqueId == 0)
+        ArgumentNullException.ThrowIfNull(
+            uniqueIds);
+
+        var normalizedUniqueIds =
+            uniqueIds
+                .Where(
+                    uniqueId =>
+                        uniqueId > 0)
+                .Distinct()
+                .ToList();
+
+        if (normalizedUniqueIds.Count == 0)
         {
-            throw new ArgumentOutOfRangeException(
-                nameof(uniqueId),
-                "Die Nachrichten-ID muss größer als 0 sein.");
+            throw new ArgumentException(
+                "Es wurde keine gültige Nachrichten-ID übergeben.",
+                nameof(uniqueIds));
         }
 
         using var client =
@@ -414,12 +394,8 @@ public sealed class ImapMailDataSource : IMailDataSource
                     cancellationToken);
 
             /*
-             * Befindet sich die Nachricht bereits im Papierkorb,
-             * führen wir für diesen ersten Entwicklungsstand
-             * keine endgültige Löschung durch.
-             *
-             * "Papierkorb leeren" und endgültiges Löschen werden
-             * später separat implementiert.
+             * Im Papierkorb bedeutet "Löschen" weiterhin
+             * keine endgültige Löschung.
              */
             if (string.Equals(
                     sourceFolder.FullName,
@@ -429,24 +405,24 @@ public sealed class ImapMailDataSource : IMailDataSource
                 return;
             }
 
-            /*
-             * Der Quellordner muss für MOVE mit Schreibrechten
-             * geöffnet sein.
-             */
             await sourceFolder.OpenAsync(
                 FolderAccess.ReadWrite,
                 cancellationToken);
 
             /*
-             * Die Nachricht wird ausschließlich anhand ihrer
-             * stabilen IMAP-UID verschoben.
-             *
-             * Es wird hier bewusst weder \Deleted manuell gesetzt
-             * noch EXPUNGE ausgeführt.
+             * Mehrere Nachrichten werden in einem einzigen
+             * MailKit-/IMAP-Aufruf anhand ihrer UIDs verschoben.
              */
+            var mailKitUniqueIds =
+                normalizedUniqueIds
+                    .Select(
+                        uniqueId =>
+                            new UniqueId(
+                                uniqueId))
+                    .ToList();
+
             await sourceFolder.MoveToAsync(
-                new UniqueId(
-                    uniqueId),
+                mailKitUniqueIds,
                 trashFolder,
                 cancellationToken);
         }
@@ -461,15 +437,6 @@ public sealed class ImapMailDataSource : IMailDataSource
         ImapClient client,
         CancellationToken cancellationToken)
     {
-        /*
-         * Erste Wahl:
-         *
-         * MailKit wertet hier die vom Server gemeldeten
-         * Special-Use-Informationen aus.
-         *
-         * Damit sind wir nicht von einem Ordnernamen wie
-         * "Trash" oder "Papierkorb" abhängig.
-         */
         var specialUseTrash =
             client.GetFolder(
                 SpecialFolder.Trash);
@@ -481,12 +448,6 @@ public sealed class ImapMailDataSource : IMailDataSource
             return specialUseTrash;
         }
 
-        /*
-         * Fallback nur für Server, die keinen Special-Use-
-         * Papierkorb melden.
-         *
-         * Die Namensprüfung ist ausdrücklich nur zweite Wahl.
-         */
         if (client.PersonalNamespaces.Count > 0)
         {
             var folders =
@@ -604,10 +565,6 @@ public sealed class ImapMailDataSource : IMailDataSource
         string? htmlBody =
             null;
 
-        /*
-         * Wenn eine echte text/plain-Version vorhanden ist,
-         * verwenden wir diese für Vorschau und Fallback.
-         */
         if (summary.TextBody is not null)
         {
             var textEntity =
@@ -625,11 +582,6 @@ public sealed class ImapMailDataSource : IMailDataSource
             }
         }
 
-        /*
-         * Das originale HTML bleibt unverändert erhalten.
-         *
-         * Genau dieses HTML wird vom WebView2-Reader gerendert.
-         */
         if (summary.HtmlBody is not null)
         {
             var htmlEntity =
@@ -646,10 +598,6 @@ public sealed class ImapMailDataSource : IMailDataSource
             }
         }
 
-        /*
-         * Falls keine text/plain-Alternative existiert,
-         * erzeugen wir aus HTML weiterhin einen Text-Fallback.
-         */
         if (string.IsNullOrWhiteSpace(
                 plainText) &&
             !string.IsNullOrWhiteSpace(

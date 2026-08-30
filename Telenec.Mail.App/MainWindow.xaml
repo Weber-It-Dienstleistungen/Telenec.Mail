@@ -419,9 +419,11 @@
                 </Border>
 
                 <ListBox
+                    x:Name="MessageListBox"
                     Grid.Row="2"
                     ItemsSource="{Binding Messages}"
                     SelectedItem="{Binding SelectedMessage, Mode=TwoWay}"
+                    SelectionMode="Extended"
                     Style="{StaticResource MailList.MessageList}"
                     ItemContainerStyle="{StaticResource MailList.MessageItem}">
 

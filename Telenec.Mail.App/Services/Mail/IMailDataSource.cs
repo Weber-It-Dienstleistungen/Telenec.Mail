@@ -26,4 +26,9 @@ public interface IMailDataSource
         string folderId,
         uint uniqueId,
         CancellationToken cancellationToken = default);
+
+    Task MoveToTrashAsync(
+        string folderId,
+        IReadOnlyList<uint> uniqueIds,
+        CancellationToken cancellationToken = default);
 }

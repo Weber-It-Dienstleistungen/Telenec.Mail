@@ -304,12 +304,6 @@ public sealed class MainViewModel : BaseViewModel
                 message.UniqueId,
                 cancellationToken);
 
-        /*
-         * RemoveFlagsAsync ist serverseitig idempotent.
-         *
-         * Lokal darf der Zähler trotzdem nur einmal erhöht
-         * werden, falls dieselbe Aktion mehrfach ausgelöst wird.
-         */
         if (message.IsUnread)
         {
             return true;
@@ -322,52 +316,82 @@ public sealed class MainViewModel : BaseViewModel
         return true;
     }
 
-    public async Task<bool> DeleteMessageAsync(
+    public Task<bool> DeleteMessageAsync(
         MailMessageItemViewModel message,
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(
             message);
 
+        return DeleteMessagesAsync(
+            new[] { message },
+            cancellationToken);
+    }
+
+    public async Task<bool> DeleteMessagesAsync(
+        IReadOnlyList<MailMessageItemViewModel> messages,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(
+            messages);
+
         var folder =
             _selectedFolder;
 
-        /*
-         * Wir arbeiten ausschließlich auf einer Nachricht,
-         * die tatsächlich noch zur momentan sichtbaren
-         * Ordnerliste gehört.
-         */
         if (folder is null ||
-            message.UniqueId == 0 ||
-            !Messages.Contains(
-                message) ||
-            IsLoading)
+            IsLoading ||
+            messages.Count == 0)
         {
             return false;
         }
 
         /*
-         * Zuerst ausschließlich serverseitig verschieben.
+         * Vor der Serveroperation wird ein stabiler Snapshot
+         * der gültigen Nachrichten erzeugt.
+         */
+        var messagesToDelete =
+            messages
+                .Where(
+                    message =>
+                        message is not null &&
+                        message.UniqueId > 0 &&
+                        Messages.Contains(
+                            message))
+                .GroupBy(
+                    message =>
+                        message.UniqueId)
+                .Select(
+                    group =>
+                        group.First())
+                .ToList();
+
+        if (messagesToDelete.Count == 0)
+        {
+            return false;
+        }
+
+        var uniqueIds =
+            messagesToDelete
+                .Select(
+                    message =>
+                        message.UniqueId)
+                .ToList();
+
+        /*
+         * Alle UIDs werden gemeinsam an die Datenquelle
+         * übergeben.
          *
-         * Vor erfolgreichem Abschluss dieser Operation wird
-         * die lokale UI bewusst nicht verändert.
+         * Die lokale Collection wird vorher nicht verändert.
          */
         await _mailDataSource
             .MoveToTrashAsync(
                 folder.FolderId,
-                message.UniqueId,
+                uniqueIds,
                 cancellationToken);
 
         /*
-         * Nach erfolgreichem MOVE wird der Server wieder zur
-         * maßgeblichen Quelle:
-         *
-         * - Ordnerzähler
-         * - Ungelesen-Zähler
-         * - Nachrichtenliste
-         * - aktuell sichtbare Nachricht
-         *
-         * werden vollständig neu synchronisiert.
+         * Nach erfolgreichem Batch-Move wird genau einmal
+         * vollständig vom Server synchronisiert.
          */
         await ReloadAsync(
             cancellationToken);
@@ -592,10 +616,6 @@ public sealed class MainViewModel : BaseViewModel
         catch (OperationCanceledException)
             when (token.IsCancellationRequested)
         {
-            /*
-             * Normal bei schnellem Ordnerwechsel.
-             * Der neue Ladevorgang setzt den sichtbaren Status.
-             */
         }
         catch (Exception ex)
         {
@@ -643,14 +663,6 @@ public sealed class MainViewModel : BaseViewModel
                     folder.FolderId,
                     message.UniqueId);
 
-            /*
-             * Es kann vorkommen, dass dieselbe Nachricht
-             * während einer noch laufenden IMAP-Operation
-             * erneut ausgewählt wird.
-             *
-             * Das Setzen von \Seen auf dem Server ist idempotent.
-             * Der lokale Zähler darf aber nur einmal sinken.
-             */
             if (!message.IsUnread)
             {
                 return;
@@ -662,13 +674,6 @@ public sealed class MainViewModel : BaseViewModel
         }
         catch
         {
-            /*
-             * Schlägt ausschließlich das Setzen von \Seen fehl,
-             * bleibt die Nachricht lokal weiterhin ungelesen.
-             *
-             * Der erfolgreiche Mailabruf und die bestehende
-             * Mailansicht werden dadurch nicht zerstört.
-             */
         }
     }
 

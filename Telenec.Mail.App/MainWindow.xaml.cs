@@ -25,12 +25,6 @@ public partial class MainWindow : Window
     private Task? _webViewInitializationTask;
     private int _renderVersion;
 
-    /*
-     * Sicherheitsstandard:
-     *
-     * Jede neu ausgewählte Mail startet wieder mit
-     * blockierten externen Bildern.
-     */
     private bool _allowExternalImagesForCurrentMessage;
 
     public MainWindow(
@@ -65,13 +59,6 @@ public partial class MainWindow : Window
         Closed +=
             MainWindow_OnClosed;
 
-        /*
-         * Zentrale Tastaturbehandlung für Mailaktionen.
-         *
-         * Die Entf-Taste bekommt keine eigene Löschlogik,
-         * sondern verwendet exakt denselben Pfad wie
-         * Kontextmenü und sichtbarer Papierkorb-Button.
-         */
         PreviewKeyDown +=
             MainWindow_OnPreviewKeyDown;
     }
@@ -128,7 +115,6 @@ public partial class MainWindow : Window
         }
         catch
         {
-            // Beim Schließen nicht relevant.
         }
     }
 
@@ -136,18 +122,11 @@ public partial class MainWindow : Window
         object sender,
         KeyEventArgs e)
     {
-        /*
-         * Ausschließlich die normale Entf-Taste behandeln.
-         */
         if (e.Key != Key.Delete)
         {
             return;
         }
 
-        /*
-         * Gedrückthalten von Entf darf nicht mehrere
-         * Nachrichten hintereinander löschen.
-         */
         if (e.IsRepeat)
         {
             e.Handled =
@@ -156,36 +135,29 @@ public partial class MainWindow : Window
             return;
         }
 
-        /*
-         * In einem Texteingabefeld darf Entf weiterhin
-         * seine normale Bedeutung behalten.
-         *
-         * Das ist momentan noch kaum relevant, verhindert
-         * aber später Probleme mit der echten Suchfunktion.
-         */
         if (Keyboard.FocusedElement is TextBoxBase)
         {
             return;
         }
 
-        var message =
-            _viewModel.SelectedMessage;
-
-        if (message is null ||
-            _viewModel.IsLoading)
+        if (_viewModel.IsLoading)
         {
             return;
         }
 
-        /*
-         * Die Taste wurde als Mailaktion erkannt.
-         * Damit soll WPF sie nicht zusätzlich weiterverarbeiten.
-         */
+        var messages =
+            GetSelectedMessages();
+
+        if (messages.Count == 0)
+        {
+            return;
+        }
+
         e.Handled =
             true;
 
-        await DeleteMessageFromUiAsync(
-            message);
+        await DeleteMessagesFromUiAsync(
+            messages);
     }
 
     private void MainViewModel_OnPropertyChanged(
@@ -198,9 +170,6 @@ public partial class MainWindow : Window
             return;
         }
 
-        /*
-         * Neue Mail = neue Sicherheitsentscheidung.
-         */
         _allowExternalImagesForCurrentMessage =
             false;
 
@@ -239,10 +208,6 @@ public partial class MainWindow : Window
                 Visibility.Visible;
         }
 
-        /*
-         * WebView vor Initialisierung sichtbar machen.
-         * Das ist der inzwischen bestätigte funktionierende Pfad.
-         */
         PlainTextMailView.Visibility =
             Visibility.Collapsed;
 
@@ -260,9 +225,6 @@ public partial class MainWindow : Window
                 return;
             }
 
-            /*
-             * Roher HTML-Inhalt bleibt komplett unverändert.
-             */
             HtmlMailView
                 .CoreWebView2
                 .NavigateToString(
@@ -290,9 +252,6 @@ public partial class MainWindow : Window
         var coreWebView =
             HtmlMailView.CoreWebView2;
 
-        /*
-         * JavaScript bleibt deaktiviert.
-         */
         coreWebView.Settings.IsScriptEnabled =
             false;
 
@@ -308,9 +267,6 @@ public partial class MainWindow : Window
         coreWebView.Settings.AreDefaultContextMenusEnabled =
             false;
 
-        /*
-         * Popups bleiben gesperrt.
-         */
         coreWebView.NewWindowRequested +=
             (_, args) =>
             {
@@ -318,12 +274,6 @@ public partial class MainWindow : Window
                     true;
             };
 
-        /*
-         * Ausschließlich Bildressourcen beobachten.
-         *
-         * Ganz bewusst KEIN Filter für HTML, CSS,
-         * Navigation oder andere Ressourcen.
-         */
         coreWebView.AddWebResourceRequestedFilter(
             "*",
             CoreWebView2WebResourceContext.Image);
@@ -336,10 +286,6 @@ public partial class MainWindow : Window
         object? sender,
         CoreWebView2WebResourceRequestedEventArgs e)
     {
-        /*
-         * Benutzer hat Bilder für diese Nachricht
-         * ausdrücklich freigegeben.
-         */
         if (_allowExternalImagesForCurrentMessage)
         {
             return;
@@ -354,10 +300,6 @@ public partial class MainWindow : Window
             return;
         }
 
-        /*
-         * data:-Bilder sind bereits Bestandteil der Mail
-         * und verlassen den Rechner nicht.
-         */
         if (uri.StartsWith(
                 "data:",
                 StringComparison.OrdinalIgnoreCase))
@@ -365,9 +307,6 @@ public partial class MainWindow : Window
             return;
         }
 
-        /*
-         * Nur echte externe HTTP-/HTTPS-Bilder blockieren.
-         */
         var isExternalHttpImage =
             uri.StartsWith(
                 "http://",
@@ -381,12 +320,6 @@ public partial class MainWindow : Window
             return;
         }
 
-        /*
-         * Leere Antwort statt Netzwerkabruf.
-         *
-         * Cache-Control: no-store ist wichtig, damit ein späteres
-         * "Trotzdem laden" dieselbe URL erneut anfordern kann.
-         */
         e.Response =
             HtmlMailView
                 .CoreWebView2
@@ -413,22 +346,12 @@ public partial class MainWindow : Window
             return;
         }
 
-        /*
-         * Bewusste Freigabe nur für diese eine Mail.
-         */
         _allowExternalImagesForCurrentMessage =
             true;
 
         ExternalImagesNotice.Visibility =
             Visibility.Collapsed;
 
-        /*
-         * Mail erneut rendern.
-         *
-         * Die Bildrequests laufen jetzt durch den gleichen
-         * WebResourceRequested-Handler, werden dort aber
-         * nicht mehr blockiert.
-         */
         HtmlMailView
             .CoreWebView2
             .NavigateToString(
@@ -470,53 +393,110 @@ public partial class MainWindow : Window
         RoutedEventArgs e)
     {
         if (sender is not FrameworkElement menuItem ||
-            menuItem.DataContext is not MailMessageItemViewModel message)
+            menuItem.DataContext is not MailMessageItemViewModel clickedMessage)
         {
             return;
         }
 
-        await DeleteMessageFromUiAsync(
-            message);
+        /*
+         * Ist die rechts angeklickte Mail Teil der aktuellen
+         * Mehrfachauswahl, gilt die Aktion für die gesamte Auswahl.
+         *
+         * Ist sie NICHT Teil der Auswahl, wird ausschließlich
+         * diese angeklickte Mail gelöscht.
+         */
+        IReadOnlyList<MailMessageItemViewModel> messages;
+
+        if (MessageListBox.SelectedItems.Contains(
+                clickedMessage))
+        {
+            messages =
+                GetSelectedMessages();
+        }
+        else
+        {
+            messages =
+                new[] { clickedMessage };
+        }
+
+        await DeleteMessagesFromUiAsync(
+            messages);
     }
 
     private async void DeleteSelectedMessageButton_OnClick(
         object sender,
         RoutedEventArgs e)
     {
-        var message =
-            _viewModel.SelectedMessage;
-
-        if (message is null ||
-            _viewModel.IsLoading)
+        if (_viewModel.IsLoading)
         {
             return;
         }
 
-        await DeleteMessageFromUiAsync(
-            message);
+        var messages =
+            GetSelectedMessages();
+
+        if (messages.Count == 0)
+        {
+            return;
+        }
+
+        await DeleteMessagesFromUiAsync(
+            messages);
     }
 
-    private async Task DeleteMessageFromUiAsync(
-        MailMessageItemViewModel message)
+    private IReadOnlyList<MailMessageItemViewModel>
+        GetSelectedMessages()
     {
+        /*
+         * SelectedItems gehört bewusst weiterhin zur UI.
+         *
+         * Für die Aktion erzeugen wir daraus lediglich
+         * einen stabilen Snapshot.
+         */
+        var selectedMessages =
+            MessageListBox
+                .SelectedItems
+                .OfType<MailMessageItemViewModel>()
+                .ToList();
+
+        /*
+         * Sicherheitsfallback für den normalen
+         * Einzel-Auswahlfall.
+         */
+        if (selectedMessages.Count == 0 &&
+            _viewModel.SelectedMessage is not null)
+        {
+            selectedMessages.Add(
+                _viewModel.SelectedMessage);
+        }
+
+        return selectedMessages;
+    }
+
+    private async Task DeleteMessagesFromUiAsync(
+        IReadOnlyList<MailMessageItemViewModel> messages)
+    {
+        if (messages.Count == 0)
+        {
+            return;
+        }
+
         try
         {
             await _viewModel
-                .DeleteMessageAsync(
-                    message);
+                .DeleteMessagesAsync(
+                    messages);
         }
         catch
         {
-            /*
-             * Die UI wird erst nach erfolgreichem serverseitigem
-             * Verschieben neu geladen.
-             *
-             * Bei einem IMAP-Fehler bleibt deshalb der vorherige
-             * sichtbare Zustand bestehen.
-             */
+            var messageText =
+                messages.Count == 1
+                    ? "Die Nachricht konnte nicht in den Papierkorb verschoben werden."
+                    : "Die Nachrichten konnten nicht in den Papierkorb verschoben werden.";
+
             MessageBox.Show(
-                "Die Nachricht konnte nicht in den Papierkorb verschoben werden.\n\n" +
-                "Bitte prüfen Sie die Verbindung und versuchen Sie es erneut.",
+                messageText +
+                "\n\nBitte prüfen Sie die Verbindung und versuchen Sie es erneut.",
                 "Telenec Mail",
                 MessageBoxButton.OK,
                 MessageBoxImage.Error);
@@ -532,9 +512,6 @@ public partial class MainWindow : Window
             return false;
         }
 
-        /*
-         * Klassische IMG/SOURCE-Tags.
-         */
         if (Regex.IsMatch(
                 html,
                 @"<(?:img|source)\b[^>]*(?:src|srcset)\s*=\s*[""'][^""']*(?:https?://|//)",
@@ -544,10 +521,6 @@ public partial class MainWindow : Window
             return true;
         }
 
-        /*
-         * Alte HTML-Mails nutzen gelegentlich
-         * background="https://..."
-         */
         if (Regex.IsMatch(
                 html,
                 @"\bbackground\s*=\s*[""'][^""']*(?:https?://|//)",
@@ -557,9 +530,6 @@ public partial class MainWindow : Window
             return true;
         }
 
-        /*
-         * CSS background-image / url(...).
-         */
         if (Regex.IsMatch(
                 html,
                 @"url\s*\(\s*[""']?(?:https?://|//)",
