@@ -1,4 +1,7 @@
-﻿using System.Collections.ObjectModel;
+﻿using MailKit.Security;
+using System.Collections.ObjectModel;
+using System.IO;
+using System.Net.Sockets;
 using Telenec.Mail.App.Services.Mail;
 
 namespace Telenec.Mail.App.ViewModels;
@@ -14,6 +17,21 @@ public sealed class MainViewModel : BaseViewModel
         _folderLoadCancellationSource;
 
     private bool _isInitialized;
+    private bool _isLoading;
+    private bool _hasLoadError;
+    private bool _isEmptyFolder;
+
+    private string _loadingMessage =
+        "Postfach wird geladen …";
+
+    private string _loadErrorMessage =
+        string.Empty;
+
+    private string _connectionStatusText =
+        "Verbindung wird hergestellt …";
+
+    private MailConnectionState _connectionState =
+        MailConnectionState.Connecting;
 
     public MainViewModel(
         IMailDataSource mailDataSource)
@@ -43,14 +61,6 @@ public sealed class MainViewModel : BaseViewModel
     public ObservableCollection<
         MailMessageItemViewModel> Messages
     { get; }
-
-    /*
-     * Übergangsalias für die bestehende XAML.
-     * Wird später sauber auf "Messages" umgestellt.
-     */
-    public ObservableCollection<
-        MailMessageItemViewModel> DemoMessages =>
-        Messages;
 
     public MailFolderItemViewModel? SelectedFolder
     {
@@ -100,6 +110,132 @@ public sealed class MainViewModel : BaseViewModel
         }
     }
 
+    public bool IsLoading
+    {
+        get => _isLoading;
+
+        private set
+        {
+            if (_isLoading == value)
+            {
+                return;
+            }
+
+            _isLoading =
+                value;
+
+            OnPropertyChanged();
+        }
+    }
+
+    public string LoadingMessage
+    {
+        get => _loadingMessage;
+
+        private set
+        {
+            if (_loadingMessage == value)
+            {
+                return;
+            }
+
+            _loadingMessage =
+                value;
+
+            OnPropertyChanged();
+        }
+    }
+
+    public bool HasLoadError
+    {
+        get => _hasLoadError;
+
+        private set
+        {
+            if (_hasLoadError == value)
+            {
+                return;
+            }
+
+            _hasLoadError =
+                value;
+
+            OnPropertyChanged();
+        }
+    }
+
+    public string LoadErrorMessage
+    {
+        get => _loadErrorMessage;
+
+        private set
+        {
+            if (_loadErrorMessage == value)
+            {
+                return;
+            }
+
+            _loadErrorMessage =
+                value;
+
+            OnPropertyChanged();
+        }
+    }
+
+    public bool IsEmptyFolder
+    {
+        get => _isEmptyFolder;
+
+        private set
+        {
+            if (_isEmptyFolder == value)
+            {
+                return;
+            }
+
+            _isEmptyFolder =
+                value;
+
+            OnPropertyChanged();
+        }
+    }
+
+    public MailConnectionState ConnectionState
+    {
+        get => _connectionState;
+
+        private set
+        {
+            if (_connectionState == value)
+            {
+                return;
+            }
+
+            _connectionState =
+                value;
+
+            OnPropertyChanged();
+        }
+    }
+
+    public string ConnectionStatusText
+    {
+        get => _connectionStatusText;
+
+        private set
+        {
+            if (_connectionStatusText == value)
+            {
+                return;
+            }
+
+            _connectionStatusText =
+                value;
+
+            OnPropertyChanged();
+        }
+    }
+
     public async Task InitializeAsync(
         CancellationToken cancellationToken = default)
     {
@@ -108,54 +244,126 @@ public sealed class MainViewModel : BaseViewModel
             return;
         }
 
-        var folders =
-            await _mailDataSource
-                .GetFoldersAsync(
-                    cancellationToken);
+        await InitializeCoreAsync(
+            preferredFolderId: null,
+            cancellationToken);
+    }
+
+    public async Task ReloadAsync(
+        CancellationToken cancellationToken = default)
+    {
+        var preferredFolderId =
+            SelectedFolder?.FolderId;
+
+        CancelCurrentFolderLoad();
+
+        _isInitialized =
+            false;
+
+        await InitializeCoreAsync(
+            preferredFolderId,
+            cancellationToken);
+    }
+
+    private async Task InitializeCoreAsync(
+        string? preferredFolderId,
+        CancellationToken cancellationToken)
+    {
+        BeginLoading(
+            "Postfach wird geladen …",
+            "Verbindung wird hergestellt …");
 
         MailFolders.Clear();
-
-        foreach (var folder in folders)
-        {
-            MailFolders.Add(
-                new MailFolderItemViewModel(
-                    folderId:
-                        folder.FolderId,
-
-                    displayName:
-                        folder.DisplayName,
-
-                    headerSubtitle:
-                        folder.HeaderSubtitle,
-
-                    unreadCount:
-                        folder.UnreadCount,
-
-                    hasSeparatorAfter:
-                        folder.HasSeparatorAfter));
-        }
+        Messages.Clear();
 
         _selectedFolder =
-            MailFolders.FirstOrDefault();
+            null;
 
         OnPropertyChanged(
             nameof(SelectedFolder));
 
-        _isInitialized =
-            true;
+        SelectedMessage =
+            null;
 
-        if (_selectedFolder is not null)
+        try
         {
+            var folders =
+                await _mailDataSource
+                    .GetFoldersAsync(
+                        cancellationToken);
+
+            foreach (var folder in folders)
+            {
+                MailFolders.Add(
+                    new MailFolderItemViewModel(
+                        folderId:
+                            folder.FolderId,
+
+                        displayName:
+                            folder.DisplayName,
+
+                        headerSubtitle:
+                            folder.HeaderSubtitle,
+
+                        unreadCount:
+                            folder.UnreadCount,
+
+                        hasSeparatorAfter:
+                            folder.HasSeparatorAfter));
+            }
+
+            _selectedFolder =
+                !string.IsNullOrWhiteSpace(
+                    preferredFolderId)
+                    ? MailFolders.FirstOrDefault(
+                        folder =>
+                            string.Equals(
+                                folder.FolderId,
+                                preferredFolderId,
+                                StringComparison.OrdinalIgnoreCase))
+                    : null;
+
+            _selectedFolder ??=
+                MailFolders.FirstOrDefault();
+
+            OnPropertyChanged(
+                nameof(SelectedFolder));
+
+            _isInitialized =
+                true;
+
+            if (_selectedFolder is null)
+            {
+                SetConnected();
+
+                IsLoading =
+                    false;
+
+                IsEmptyFolder =
+                    true;
+
+                return;
+            }
+
             await LoadFolderMessagesAsync(
                 _selectedFolder,
                 cancellationToken);
         }
-        else
+        catch (OperationCanceledException)
+            when (cancellationToken.IsCancellationRequested)
         {
-            Messages.Clear();
+            IsLoading =
+                false;
+        }
+        catch (Exception ex)
+        {
+            _isInitialized =
+                false;
 
-            SelectedMessage =
-                null;
+            IsLoading =
+                false;
+
+            SetErrorState(ex);
         }
     }
 
@@ -163,19 +371,32 @@ public sealed class MainViewModel : BaseViewModel
         MailFolderItemViewModel folder,
         CancellationToken cancellationToken = default)
     {
-        _folderLoadCancellationSource?
-            .Cancel();
+        var previousSource =
+            _folderLoadCancellationSource;
 
-        _folderLoadCancellationSource?
-            .Dispose();
+        previousSource?.Cancel();
 
-        _folderLoadCancellationSource =
+        var loadSource =
             CancellationTokenSource
                 .CreateLinkedTokenSource(
                     cancellationToken);
 
+        _folderLoadCancellationSource =
+            loadSource;
+
+        previousSource?.Dispose();
+
         var token =
-            _folderLoadCancellationSource.Token;
+            loadSource.Token;
+
+        BeginLoading(
+            $"E-Mails aus „{folder.DisplayName}“ werden geladen …",
+            "Synchronisieren …");
+
+        Messages.Clear();
+
+        SelectedMessage =
+            null;
 
         try
         {
@@ -187,8 +408,6 @@ public sealed class MainViewModel : BaseViewModel
                         cancellationToken: token);
 
             token.ThrowIfCancellationRequested();
-
-            Messages.Clear();
 
             foreach (var message in messages)
             {
@@ -245,11 +464,166 @@ public sealed class MainViewModel : BaseViewModel
 
             SelectedMessage =
                 Messages.FirstOrDefault();
+
+            IsEmptyFolder =
+                Messages.Count == 0;
+
+            SetConnected();
         }
         catch (OperationCanceledException)
             when (token.IsCancellationRequested)
         {
-            // Normaler Zustand bei schnellem Ordnerwechsel.
+            /*
+             * Normal bei schnellem Ordnerwechsel.
+             * Der neue Ladevorgang setzt den sichtbaren Status.
+             */
         }
+        catch (Exception ex)
+        {
+            if (ReferenceEquals(
+                    _folderLoadCancellationSource,
+                    loadSource))
+            {
+                SetErrorState(ex);
+            }
+        }
+        finally
+        {
+            var isCurrentLoad =
+                ReferenceEquals(
+                    _folderLoadCancellationSource,
+                    loadSource);
+
+            if (isCurrentLoad)
+            {
+                _folderLoadCancellationSource =
+                    null;
+
+                IsLoading =
+                    false;
+            }
+
+            loadSource.Dispose();
+        }
+    }
+
+    private void BeginLoading(
+        string loadingMessage,
+        string connectionStatus)
+    {
+        HasLoadError =
+            false;
+
+        LoadErrorMessage =
+            string.Empty;
+
+        IsEmptyFolder =
+            false;
+
+        LoadingMessage =
+            loadingMessage;
+
+        ConnectionState =
+            MailConnectionState.Connecting;
+
+        ConnectionStatusText =
+            connectionStatus;
+
+        IsLoading =
+            true;
+    }
+
+    private void SetConnected()
+    {
+        HasLoadError =
+            false;
+
+        LoadErrorMessage =
+            string.Empty;
+
+        ConnectionState =
+            MailConnectionState.Connected;
+
+        ConnectionStatusText =
+            "Verbunden";
+    }
+
+    private void SetErrorState(
+        Exception exception)
+    {
+        HasLoadError =
+            true;
+
+        IsEmptyFolder =
+            false;
+
+        switch (exception)
+        {
+            case MailKit.Security.AuthenticationException:
+                ConnectionState =
+                    MailConnectionState.AuthenticationRequired;
+
+                ConnectionStatusText =
+                    "Anmeldung erforderlich";
+
+                LoadErrorMessage =
+                    "Die gespeicherten Zugangsdaten wurden vom Mailserver nicht akzeptiert. " +
+                    "Bitte melden Sie das Konto ab und anschließend erneut an.";
+                break;
+
+            case SslHandshakeException:
+                ConnectionState =
+                    MailConnectionState.SecurityError;
+
+                ConnectionStatusText =
+                    "Sicherheitsfehler";
+
+                LoadErrorMessage =
+                    "Die sichere Verbindung zum Mailserver konnte nicht geprüft werden. " +
+                    "Aus Sicherheitsgründen wurde die Verbindung abgebrochen.";
+                break;
+
+            case SocketException:
+            case IOException:
+                ConnectionState =
+                    MailConnectionState.Offline;
+
+                ConnectionStatusText =
+                    "Offline";
+
+                LoadErrorMessage =
+                    "Der Mailserver ist momentan nicht erreichbar. " +
+                    "Bitte prüfen Sie Ihre Internetverbindung.";
+                break;
+
+            default:
+                ConnectionState =
+                    MailConnectionState.Error;
+
+                ConnectionStatusText =
+                    "Verbindungsfehler";
+
+                LoadErrorMessage =
+                    "Die E-Mail-Daten konnten momentan nicht geladen werden. " +
+                    "Bitte versuchen Sie es erneut.";
+                break;
+        }
+    }
+
+    private void CancelCurrentFolderLoad()
+    {
+        var source =
+            _folderLoadCancellationSource;
+
+        _folderLoadCancellationSource =
+            null;
+
+        if (source is null)
+        {
+            return;
+        }
+
+        source.Cancel();
+        source.Dispose();
     }
 }

@@ -65,19 +65,41 @@ public partial class MainWindow : Window
             AccountEmailText.Text =
                 account?.EmailAddress
                 ?? "Telenec-Konto";
-
-            await _viewModel
-                .InitializeAsync();
         }
-        catch (Exception)
+        catch
         {
-            MessageBox.Show(
-                "Die E-Mail-Daten konnten momentan nicht geladen werden.\n\n" +
-                "Bitte prüfen Sie Ihre Internetverbindung und versuchen Sie es erneut.",
-                "Telenec Mail",
-                MessageBoxButton.OK,
-                MessageBoxImage.Warning);
+            AccountEmailText.Text =
+                "Telenec-Konto";
         }
+
+        await _viewModel
+            .InitializeAsync();
+    }
+
+    private async void RefreshButton_OnClick(
+        object sender,
+        RoutedEventArgs e)
+    {
+        if (_viewModel.IsLoading)
+        {
+            return;
+        }
+
+        await _viewModel
+            .ReloadAsync();
+    }
+
+    private async void RetryButton_OnClick(
+        object sender,
+        RoutedEventArgs e)
+    {
+        if (_viewModel.IsLoading)
+        {
+            return;
+        }
+
+        await _viewModel
+            .ReloadAsync();
     }
 
     private void AccountMenuButton_OnClick(

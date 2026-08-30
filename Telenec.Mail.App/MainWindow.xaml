@@ -3,6 +3,7 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        xmlns:mail="clr-namespace:Telenec.Mail.App.Services.Mail"
         mc:Ignorable="d"
         Title="{Binding ApplicationTitle}"
         Width="1400"
@@ -77,11 +78,78 @@
                             Width="8"
                             Height="8"
                             Margin="0,0,8,0"
-                            Fill="{StaticResource Status.Success}"
-                            VerticalAlignment="Center" />
+                            VerticalAlignment="Center">
+
+                            <Ellipse.Style>
+
+                                <Style TargetType="Ellipse">
+
+                                    <Setter
+                                        Property="Fill"
+                                        Value="{StaticResource Status.Information}" />
+
+                                    <Style.Triggers>
+
+                                        <DataTrigger
+                                            Binding="{Binding ConnectionState}"
+                                            Value="{x:Static mail:MailConnectionState.Connected}">
+
+                                            <Setter
+                                                Property="Fill"
+                                                Value="{StaticResource Status.Success}" />
+
+                                        </DataTrigger>
+
+                                        <DataTrigger
+                                            Binding="{Binding ConnectionState}"
+                                            Value="{x:Static mail:MailConnectionState.Offline}">
+
+                                            <Setter
+                                                Property="Fill"
+                                                Value="{StaticResource Status.Warning}" />
+
+                                        </DataTrigger>
+
+                                        <DataTrigger
+                                            Binding="{Binding ConnectionState}"
+                                            Value="{x:Static mail:MailConnectionState.AuthenticationRequired}">
+
+                                            <Setter
+                                                Property="Fill"
+                                                Value="{StaticResource Status.Warning}" />
+
+                                        </DataTrigger>
+
+                                        <DataTrigger
+                                            Binding="{Binding ConnectionState}"
+                                            Value="{x:Static mail:MailConnectionState.SecurityError}">
+
+                                            <Setter
+                                                Property="Fill"
+                                                Value="{StaticResource Status.Error}" />
+
+                                        </DataTrigger>
+
+                                        <DataTrigger
+                                            Binding="{Binding ConnectionState}"
+                                            Value="{x:Static mail:MailConnectionState.Error}">
+
+                                            <Setter
+                                                Property="Fill"
+                                                Value="{StaticResource Status.Error}" />
+
+                                        </DataTrigger>
+
+                                    </Style.Triggers>
+
+                                </Style>
+
+                            </Ellipse.Style>
+
+                        </Ellipse>
 
                         <TextBlock
-                            Text="Verbunden"
+                            Text="{Binding ConnectionStatusText}"
                             Foreground="{StaticResource Navigation.TextSecondary}"
                             FontSize="12"
                             VerticalAlignment="Center" />
@@ -300,13 +368,27 @@
 
                     </StackPanel>
 
-                    <TextBlock
+                    <Button
+                        x:Name="RefreshButton"
                         Grid.Column="1"
-                        Text="&#xE72C;"
-                        FontFamily="Segoe Fluent Icons"
-                        FontSize="18"
-                        Foreground="{StaticResource Text.Secondary}"
-                        VerticalAlignment="Center" />
+                        Width="36"
+                        Height="36"
+                        Padding="0"
+                        Background="Transparent"
+                        BorderThickness="0"
+                        Cursor="Hand"
+                        ToolTip="Postfach aktualisieren"
+                        Click="RefreshButton_OnClick">
+
+                        <TextBlock
+                            Text="&#xE72C;"
+                            FontFamily="Segoe Fluent Icons"
+                            FontSize="18"
+                            Foreground="{StaticResource Text.Secondary}"
+                            HorizontalAlignment="Center"
+                            VerticalAlignment="Center" />
+
+                    </Button>
 
                 </Grid>
 
@@ -347,11 +429,11 @@
 
                 </Border>
 
-                <!-- Interactive demo mails -->
+                <!-- Nachrichten -->
 
                 <ListBox
                     Grid.Row="2"
-                    ItemsSource="{Binding DemoMessages}"
+                    ItemsSource="{Binding Messages}"
                     SelectedItem="{Binding SelectedMessage, Mode=TwoWay}"
                     Style="{StaticResource MailList.MessageList}"
                     ItemContainerStyle="{StaticResource MailList.MessageItem}">
@@ -455,6 +537,175 @@
                     </ListBox.ItemTemplate>
 
                 </ListBox>
+
+                <!-- Ladezustand -->
+
+                <Border
+                    Grid.Row="2"
+                    Background="{StaticResource Surface.Card}">
+
+                    <Border.Style>
+
+                        <Style TargetType="Border">
+
+                            <Setter
+                                Property="Visibility"
+                                Value="Collapsed" />
+
+                            <Style.Triggers>
+
+                                <DataTrigger
+                                    Binding="{Binding IsLoading}"
+                                    Value="True">
+
+                                    <Setter
+                                        Property="Visibility"
+                                        Value="Visible" />
+
+                                </DataTrigger>
+
+                            </Style.Triggers>
+
+                        </Style>
+
+                    </Border.Style>
+
+                    <StackPanel
+                        Width="260"
+                        HorizontalAlignment="Center"
+                        VerticalAlignment="Center">
+
+                        <TextBlock
+                            Text="{Binding LoadingMessage}"
+                            Margin="0,0,0,14"
+                            FontSize="13"
+                            Foreground="{StaticResource Text.Secondary}"
+                            TextAlignment="Center"
+                            TextWrapping="Wrap" />
+
+                        <ProgressBar
+                            Height="4"
+                            IsIndeterminate="True" />
+
+                    </StackPanel>
+
+                </Border>
+
+                <!-- Fehlerzustand -->
+
+                <Border
+                    Grid.Row="2"
+                    Background="{StaticResource Surface.Card}">
+
+                    <Border.Style>
+
+                        <Style TargetType="Border">
+
+                            <Setter
+                                Property="Visibility"
+                                Value="Collapsed" />
+
+                            <Style.Triggers>
+
+                                <DataTrigger
+                                    Binding="{Binding HasLoadError}"
+                                    Value="True">
+
+                                    <Setter
+                                        Property="Visibility"
+                                        Value="Visible" />
+
+                                </DataTrigger>
+
+                            </Style.Triggers>
+
+                        </Style>
+
+                    </Border.Style>
+
+                    <StackPanel
+                        Width="285"
+                        HorizontalAlignment="Center"
+                        VerticalAlignment="Center">
+
+                        <TextBlock
+                            Text="E-Mails konnten nicht geladen werden"
+                            FontSize="15"
+                            FontWeight="SemiBold"
+                            Foreground="{StaticResource Text.Primary}"
+                            TextAlignment="Center" />
+
+                        <TextBlock
+                            Text="{Binding LoadErrorMessage}"
+                            Margin="0,9,0,18"
+                            FontSize="12"
+                            Foreground="{StaticResource Text.Secondary}"
+                            TextAlignment="Center"
+                            TextWrapping="Wrap" />
+
+                        <Button
+                            Content="Erneut versuchen"
+                            HorizontalAlignment="Center"
+                            Style="{StaticResource Button.Primary}"
+                            Click="RetryButton_OnClick" />
+
+                    </StackPanel>
+
+                </Border>
+
+                <!-- Leerer Ordner -->
+
+                <Border
+                    Grid.Row="2"
+                    Background="{StaticResource Surface.Card}">
+
+                    <Border.Style>
+
+                        <Style TargetType="Border">
+
+                            <Setter
+                                Property="Visibility"
+                                Value="Collapsed" />
+
+                            <Style.Triggers>
+
+                                <DataTrigger
+                                    Binding="{Binding IsEmptyFolder}"
+                                    Value="True">
+
+                                    <Setter
+                                        Property="Visibility"
+                                        Value="Visible" />
+
+                                </DataTrigger>
+
+                            </Style.Triggers>
+
+                        </Style>
+
+                    </Border.Style>
+
+                    <StackPanel
+                        HorizontalAlignment="Center"
+                        VerticalAlignment="Center">
+
+                        <TextBlock
+                            Text="Dieser Ordner ist leer."
+                            FontSize="14"
+                            FontWeight="SemiBold"
+                            Foreground="{StaticResource Text.Primary}"
+                            HorizontalAlignment="Center" />
+
+                        <TextBlock
+                            Text="Hier befinden sich momentan keine Nachrichten."
+                            Margin="0,6,0,0"
+                            FontSize="12"
+                            Foreground="{StaticResource Text.Secondary}"
+                            HorizontalAlignment="Center" />
+
+                    </StackPanel>
+
+                </Border>
 
             </Grid>
 
