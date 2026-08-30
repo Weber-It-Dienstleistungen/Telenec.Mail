@@ -377,6 +377,166 @@ public sealed class ImapMailDataSource : IMailDataSource
         }
     }
 
+    public async Task MoveToTrashAsync(
+        string folderId,
+        uint uniqueId,
+        CancellationToken cancellationToken = default)
+    {
+        if (string.IsNullOrWhiteSpace(
+                folderId))
+        {
+            throw new ArgumentException(
+                "Der Ordner darf nicht leer sein.",
+                nameof(folderId));
+        }
+
+        if (uniqueId == 0)
+        {
+            throw new ArgumentOutOfRangeException(
+                nameof(uniqueId),
+                "Die Nachrichten-ID muss größer als 0 sein.");
+        }
+
+        using var client =
+            await CreateAuthenticatedClientAsync(
+                cancellationToken);
+
+        try
+        {
+            var sourceFolder =
+                await client.GetFolderAsync(
+                    folderId,
+                    cancellationToken);
+
+            var trashFolder =
+                await GetTrashFolderAsync(
+                    client,
+                    cancellationToken);
+
+            /*
+             * Befindet sich die Nachricht bereits im Papierkorb,
+             * führen wir für diesen ersten Entwicklungsstand
+             * keine endgültige Löschung durch.
+             *
+             * "Papierkorb leeren" und endgültiges Löschen werden
+             * später separat implementiert.
+             */
+            if (string.Equals(
+                    sourceFolder.FullName,
+                    trashFolder.FullName,
+                    StringComparison.OrdinalIgnoreCase))
+            {
+                return;
+            }
+
+            /*
+             * Der Quellordner muss für MOVE mit Schreibrechten
+             * geöffnet sein.
+             */
+            await sourceFolder.OpenAsync(
+                FolderAccess.ReadWrite,
+                cancellationToken);
+
+            /*
+             * Die Nachricht wird ausschließlich anhand ihrer
+             * stabilen IMAP-UID verschoben.
+             *
+             * Es wird hier bewusst weder \Deleted manuell gesetzt
+             * noch EXPUNGE ausgeführt.
+             */
+            await sourceFolder.MoveToAsync(
+                new UniqueId(
+                    uniqueId),
+                trashFolder,
+                cancellationToken);
+        }
+        finally
+        {
+            await DisconnectSafelyAsync(
+                client);
+        }
+    }
+
+    private static async Task<IMailFolder> GetTrashFolderAsync(
+        ImapClient client,
+        CancellationToken cancellationToken)
+    {
+        /*
+         * Erste Wahl:
+         *
+         * MailKit wertet hier die vom Server gemeldeten
+         * Special-Use-Informationen aus.
+         *
+         * Damit sind wir nicht von einem Ordnernamen wie
+         * "Trash" oder "Papierkorb" abhängig.
+         */
+        var specialUseTrash =
+            client.GetFolder(
+                SpecialFolder.Trash);
+
+        if (specialUseTrash is not null &&
+            !specialUseTrash.Attributes.HasFlag(
+                FolderAttributes.NoSelect))
+        {
+            return specialUseTrash;
+        }
+
+        /*
+         * Fallback nur für Server, die keinen Special-Use-
+         * Papierkorb melden.
+         *
+         * Die Namensprüfung ist ausdrücklich nur zweite Wahl.
+         */
+        if (client.PersonalNamespaces.Count > 0)
+        {
+            var folders =
+                await client.GetFoldersAsync(
+                    client.PersonalNamespaces[0],
+                    StatusItems.None,
+                    false,
+                    cancellationToken);
+
+            var fallbackTrash =
+                folders.FirstOrDefault(
+                    folder =>
+                        !folder.Attributes.HasFlag(
+                            FolderAttributes.NoSelect) &&
+                        IsTrashFolderName(
+                            folder.Name));
+
+            if (fallbackTrash is not null)
+            {
+                return fallbackTrash;
+            }
+        }
+
+        throw new InvalidOperationException(
+            "Auf dem Mailserver konnte kein Papierkorb ermittelt werden.");
+    }
+
+    private static bool IsTrashFolderName(
+        string folderName)
+    {
+        if (string.IsNullOrWhiteSpace(
+                folderName))
+        {
+            return false;
+        }
+
+        return folderName
+            .Trim()
+            .ToLowerInvariant() switch
+        {
+            "trash" => true,
+            "deleted items" => true,
+            "deleted messages" => true,
+            "papierkorb" => true,
+            "gelöschte elemente" => true,
+            "geloeschte elemente" => true,
+            _ => false
+        };
+    }
+
     private async Task<ImapClient>
         CreateAuthenticatedClientAsync(
             CancellationToken cancellationToken)

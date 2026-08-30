@@ -322,6 +322,59 @@ public sealed class MainViewModel : BaseViewModel
         return true;
     }
 
+    public async Task<bool> DeleteMessageAsync(
+        MailMessageItemViewModel message,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(
+            message);
+
+        var folder =
+            _selectedFolder;
+
+        /*
+         * Wir arbeiten ausschließlich auf einer Nachricht,
+         * die tatsächlich noch zur momentan sichtbaren
+         * Ordnerliste gehört.
+         */
+        if (folder is null ||
+            message.UniqueId == 0 ||
+            !Messages.Contains(
+                message) ||
+            IsLoading)
+        {
+            return false;
+        }
+
+        /*
+         * Zuerst ausschließlich serverseitig verschieben.
+         *
+         * Vor erfolgreichem Abschluss dieser Operation wird
+         * die lokale UI bewusst nicht verändert.
+         */
+        await _mailDataSource
+            .MoveToTrashAsync(
+                folder.FolderId,
+                message.UniqueId,
+                cancellationToken);
+
+        /*
+         * Nach erfolgreichem MOVE wird der Server wieder zur
+         * maßgeblichen Quelle:
+         *
+         * - Ordnerzähler
+         * - Ungelesen-Zähler
+         * - Nachrichtenliste
+         * - aktuell sichtbare Nachricht
+         *
+         * werden vollständig neu synchronisiert.
+         */
+        await ReloadAsync(
+            cancellationToken);
+
+        return true;
+    }
+
     private async Task InitializeCoreAsync(
         string? preferredFolderId,
         CancellationToken cancellationToken)

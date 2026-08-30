@@ -442,6 +442,12 @@
                                             IsEnabled="{Binding CanMarkAsUnread}"
                                             Click="MarkAsUnreadMenuItem_OnClick" />
 
+                                        <Separator />
+
+                                        <MenuItem
+                                            Header="Löschen"
+                                            Click="DeleteMenuItem_OnClick" />
+
                                     </ContextMenu>
 
                                 </StackPanel.ContextMenu>

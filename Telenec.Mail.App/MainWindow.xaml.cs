@@ -395,6 +395,42 @@ public partial class MainWindow : Window
         }
     }
 
+    private async void DeleteMenuItem_OnClick(
+        object sender,
+        RoutedEventArgs e)
+    {
+        if (sender is not FrameworkElement menuItem ||
+            menuItem.DataContext is not MailMessageItemViewModel message)
+        {
+            return;
+        }
+
+        try
+        {
+            await _viewModel
+                .DeleteMessageAsync(
+                    message);
+        }
+        catch
+        {
+            /*
+             * Wichtig:
+             *
+             * Dieser Dialog erscheint nur, wenn die eigentliche
+             * serverseitige Lösch-/Move-Operation fehlschlägt.
+             *
+             * Die lokale Nachrichtenliste wurde in diesem Fall
+             * noch nicht verändert.
+             */
+            MessageBox.Show(
+                "Die Nachricht konnte nicht in den Papierkorb verschoben werden.\n\n" +
+                "Bitte prüfen Sie die Verbindung und versuchen Sie es erneut.",
+                "Telenec Mail",
+                MessageBoxButton.OK,
+                MessageBoxImage.Error);
+        }
+    }
+
     private static bool ContainsExternalImages(
         string html)
     {
