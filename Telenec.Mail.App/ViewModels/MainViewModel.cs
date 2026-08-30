@@ -279,6 +279,49 @@ public sealed class MainViewModel : BaseViewModel
             cancellationToken);
     }
 
+    public async Task<bool> MarkMessageAsUnreadAsync(
+        MailMessageItemViewModel message,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(
+            message);
+
+        var folder =
+            _selectedFolder;
+
+        if (folder is null ||
+            message.IsUnread ||
+            message.UniqueId == 0 ||
+            !Messages.Contains(
+                message))
+        {
+            return false;
+        }
+
+        await _mailDataSource
+            .MarkAsUnreadAsync(
+                folder.FolderId,
+                message.UniqueId,
+                cancellationToken);
+
+        /*
+         * RemoveFlagsAsync ist serverseitig idempotent.
+         *
+         * Lokal darf der Zähler trotzdem nur einmal erhöht
+         * werden, falls dieselbe Aktion mehrfach ausgelöst wird.
+         */
+        if (message.IsUnread)
+        {
+            return true;
+        }
+
+        message.MarkAsUnread();
+
+        folder.IncrementUnreadCount();
+
+        return true;
+    }
+
     private async Task InitializeCoreAsync(
         string? preferredFolderId,
         CancellationToken cancellationToken)

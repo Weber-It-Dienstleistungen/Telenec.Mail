@@ -95,4 +95,18 @@ public sealed class MailFolderItemViewModel : BaseViewModel
                 ? $"{UnreadCount} ungelesene Nachrichten"
                 : $"{MessageCount} Nachrichten";
     }
+
+    public void IncrementUnreadCount()
+    {
+        if (MessageCount > 0 &&
+            UnreadCount >= MessageCount)
+        {
+            return;
+        }
+
+        UnreadCount++;
+
+        HeaderSubtitle =
+            $"{UnreadCount} ungelesene Nachrichten";
+    }
 }

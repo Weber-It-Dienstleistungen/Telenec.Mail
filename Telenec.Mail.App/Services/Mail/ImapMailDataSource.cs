@@ -318,6 +318,65 @@ public sealed class ImapMailDataSource : IMailDataSource
         }
     }
 
+    public async Task MarkAsUnreadAsync(
+        string folderId,
+        uint uniqueId,
+        CancellationToken cancellationToken = default)
+    {
+        if (string.IsNullOrWhiteSpace(
+                folderId))
+        {
+            throw new ArgumentException(
+                "Der Ordner darf nicht leer sein.",
+                nameof(folderId));
+        }
+
+        if (uniqueId == 0)
+        {
+            throw new ArgumentOutOfRangeException(
+                nameof(uniqueId),
+                "Die Nachrichten-ID muss größer als 0 sein.");
+        }
+
+        using var client =
+            await CreateAuthenticatedClientAsync(
+                cancellationToken);
+
+        try
+        {
+            var folder =
+                await client.GetFolderAsync(
+                    folderId,
+                    cancellationToken);
+
+            /*
+             * Auch hier werden Schreibrechte nur für die
+             * konkrete Flag-Änderung angefordert.
+             */
+            await folder.OpenAsync(
+                FolderAccess.ReadWrite,
+                cancellationToken);
+
+            /*
+             * Eine Nachricht wird IMAP-seitig wieder ungelesen,
+             * indem ausschließlich das \Seen-Flag entfernt wird.
+             *
+             * Andere Flags der Nachricht bleiben unverändert.
+             */
+            await folder.RemoveFlagsAsync(
+                new UniqueId(
+                    uniqueId),
+                MessageFlags.Seen,
+                silent: true,
+                cancellationToken);
+        }
+        finally
+        {
+            await DisconnectSafelyAsync(
+                client);
+        }
+    }
+
     private async Task<ImapClient>
         CreateAuthenticatedClientAsync(
             CancellationToken cancellationToken)

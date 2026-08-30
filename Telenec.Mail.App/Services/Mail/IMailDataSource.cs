@@ -16,4 +16,9 @@ public interface IMailDataSource
         string folderId,
         uint uniqueId,
         CancellationToken cancellationToken = default);
+
+    Task MarkAsUnreadAsync(
+        string folderId,
+        uint uniqueId,
+        CancellationToken cancellationToken = default);
 }

@@ -133,4 +133,14 @@ public sealed class DemoMailDataSource : IMailDataSource
 
         return Task.CompletedTask;
     }
+
+    public Task MarkAsUnreadAsync(
+        string folderId,
+        uint uniqueId,
+        CancellationToken cancellationToken = default)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+
+        return Task.CompletedTask;
+    }
 }

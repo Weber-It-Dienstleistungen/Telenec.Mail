@@ -93,6 +93,9 @@ public sealed class MailMessageItemViewModel : BaseViewModel
                 value;
 
             OnPropertyChanged();
+
+            OnPropertyChanged(
+                nameof(CanMarkAsUnread));
         }
     }
 
@@ -131,6 +134,9 @@ public sealed class MailMessageItemViewModel : BaseViewModel
         !string.IsNullOrWhiteSpace(HighlightTitle) &&
         !string.IsNullOrWhiteSpace(HighlightText);
 
+    public bool CanMarkAsUnread =>
+        !IsUnread;
+
     public void MarkAsRead()
     {
         IsUnread =
@@ -138,5 +144,14 @@ public sealed class MailMessageItemViewModel : BaseViewModel
 
         EmphasizeSender =
             false;
+    }
+
+    public void MarkAsUnread()
+    {
+        IsUnread =
+            true;
+
+        EmphasizeSender =
+            true;
     }
 }

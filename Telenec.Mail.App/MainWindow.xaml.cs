@@ -367,6 +367,34 @@ public partial class MainWindow : Window
         await Task.CompletedTask;
     }
 
+    private async void MarkAsUnreadMenuItem_OnClick(
+        object sender,
+        RoutedEventArgs e)
+    {
+        if (sender is not FrameworkElement menuItem ||
+            menuItem.DataContext is not MailMessageItemViewModel message ||
+            !message.CanMarkAsUnread)
+        {
+            return;
+        }
+
+        try
+        {
+            await _viewModel
+                .MarkMessageAsUnreadAsync(
+                    message);
+        }
+        catch
+        {
+            MessageBox.Show(
+                "Die Nachricht konnte auf dem Mailserver nicht als ungelesen markiert werden.\n\n" +
+                "Bitte prüfen Sie die Verbindung und versuchen Sie es erneut.",
+                "Telenec Mail",
+                MessageBoxButton.OK,
+                MessageBoxImage.Error);
+        }
+    }
+
     private static bool ContainsExternalImages(
         string html)
     {
