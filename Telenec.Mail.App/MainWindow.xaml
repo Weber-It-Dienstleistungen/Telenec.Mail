@@ -37,6 +37,7 @@
                 <Grid.RowDefinitions>
                     <RowDefinition Height="Auto" />
                     <RowDefinition Height="Auto" />
+                    <RowDefinition Height="Auto" />
                     <RowDefinition Height="*" />
                     <RowDefinition Height="Auto" />
                 </Grid.RowDefinitions>
@@ -143,9 +144,38 @@
 
                 </Border>
 
+                <Button
+                    Grid.Row="2"
+                    Height="42"
+                    Margin="16,0,16,18"
+                    Cursor="Hand"
+                    ToolTip="Neue E-Mail verfassen"
+                    Style="{StaticResource Button.Primary}"
+                    Click="ComposeMailButton_OnClick">
+
+                    <StackPanel
+                        Orientation="Horizontal"
+                        HorizontalAlignment="Center">
+
+                        <TextBlock
+                            Text="&#xE70F;"
+                            Margin="0,0,9,0"
+                            FontFamily="Segoe Fluent Icons"
+                            FontSize="16"
+                            VerticalAlignment="Center" />
+
+                        <TextBlock
+                            Text="Neue E-Mail"
+                            FontWeight="SemiBold"
+                            VerticalAlignment="Center" />
+
+                    </StackPanel>
+
+                </Button>
+
                 <ListBox
                     x:Name="FolderListBox"
-                    Grid.Row="2"
+                    Grid.Row="3"
                     ItemsSource="{Binding MailFolders}"
                     SelectedItem="{Binding SelectedFolder, Mode=TwoWay}"
                     Style="{StaticResource Navigation.FolderList}"
@@ -231,7 +261,7 @@
                 </ListBox>
 
                 <Border
-                    Grid.Row="3"
+                    Grid.Row="4"
                     Padding="20,18"
                     BorderBrush="{StaticResource Navigation.Selected}"
                     BorderThickness="0,1,0,0">

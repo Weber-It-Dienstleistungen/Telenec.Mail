@@ -754,13 +754,6 @@ public partial class MainWindow : Window
             return;
         }
 
-        /*
-         * Das Menü besteht aktuell aus:
-         *
-         * 0 = Als ungelesen markieren
-         * 1 = Separator
-         * 2 = Löschen / Wiederherstellen
-         */
         if (contextMenu.Items.Count < 3 ||
             contextMenu.Items[2] is not MenuItem actionMenuItem)
         {
@@ -990,6 +983,42 @@ public partial class MainWindow : Window
 
         PlainTextMailView.Visibility =
             Visibility.Visible;
+    }
+
+    private async void ComposeMailButton_OnClick(
+        object sender,
+        RoutedEventArgs e)
+    {
+        var composeWindow =
+            _serviceProvider
+                .GetRequiredService<ComposeWindow>();
+
+        composeWindow.Owner =
+            this;
+
+        var result =
+            composeWindow.ShowDialog();
+
+        if (result != true)
+        {
+            return;
+        }
+
+        /*
+         * Wenn der Benutzer gerade den Gesendet-Ordner
+         * betrachtet, aktualisieren wir ihn direkt.
+         *
+         * In anderen Ordnern vermeiden wir einen unnötigen
+         * Komplett-Reload der aktuellen Ansicht.
+         */
+        if (string.Equals(
+                _viewModel.SelectedFolder?.DisplayName,
+                "Gesendet",
+                StringComparison.OrdinalIgnoreCase))
+        {
+            await _viewModel
+                .ReloadAsync();
+        }
     }
 
     private async void RefreshButton_OnClick(

@@ -1,0 +1,361 @@
+﻿<Window x:Class="Telenec.Mail.App.ComposeWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Neue E-Mail"
+        Width="800"
+        Height="650"
+        MinWidth="650"
+        MinHeight="500"
+        WindowStartupLocation="CenterOwner"
+        Background="{StaticResource Surface.Background}"
+        Foreground="{StaticResource Text.Primary}"
+        FontFamily="{StaticResource Typography.FontFamily}"
+        UseLayoutRounding="True"
+        SnapsToDevicePixels="True"
+        PreviewKeyDown="ComposeWindow_OnPreviewKeyDown"
+        Closing="ComposeWindow_OnClosing">
+
+    <Grid>
+
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="1" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" />
+            <RowDefinition Height="1" />
+            <RowDefinition Height="Auto" />
+        </Grid.RowDefinitions>
+
+        <!-- KOPF -->
+
+        <Border
+            Grid.Row="0"
+            Padding="28,22"
+            Background="{StaticResource Surface.Card}">
+
+            <Grid>
+
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="Auto" />
+                </Grid.ColumnDefinitions>
+
+                <StackPanel>
+
+                    <TextBlock
+                        Text="Neue E-Mail"
+                        FontSize="24"
+                        FontWeight="SemiBold"
+                        Foreground="{StaticResource Text.Primary}" />
+
+                    <StackPanel
+                        Margin="0,7,0,0"
+                        Orientation="Horizontal">
+
+                        <TextBlock
+                            Text="Von:"
+                            FontSize="12"
+                            Foreground="{StaticResource Text.Secondary}" />
+
+                        <TextBlock
+                            Margin="6,0,0,0"
+                            Text="{Binding FromAddress}"
+                            FontSize="12"
+                            FontWeight="SemiBold"
+                            Foreground="{StaticResource Text.Secondary}" />
+
+                    </StackPanel>
+
+                </StackPanel>
+
+                <TextBlock
+                    Grid.Column="1"
+                    Text="&#xE715;"
+                    FontFamily="Segoe Fluent Icons"
+                    FontSize="28"
+                    Foreground="{StaticResource Brand.Primary}"
+                    VerticalAlignment="Center" />
+
+            </Grid>
+
+        </Border>
+
+        <Border
+            Grid.Row="1"
+            Background="{StaticResource Border.Subtle}" />
+
+        <!-- EMPFÄNGER / BETREFF -->
+
+        <Border
+            Grid.Row="2"
+            Padding="28,22,28,18"
+            Background="{StaticResource Surface.Card}">
+
+            <Grid>
+
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="Auto" />
+                </Grid.RowDefinitions>
+
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="80" />
+                    <ColumnDefinition Width="*" />
+                </Grid.ColumnDefinitions>
+
+                <TextBlock
+                    Grid.Row="0"
+                    Grid.Column="0"
+                    Text="An"
+                    Margin="0,0,14,16"
+                    FontSize="13"
+                    FontWeight="SemiBold"
+                    Foreground="{StaticResource Text.Secondary}"
+                    VerticalAlignment="Center" />
+
+                <TextBox
+                    x:Name="RecipientTextBox"
+                    Grid.Row="0"
+                    Grid.Column="1"
+                    Height="38"
+                    Margin="0,0,0,16"
+                    Padding="10,7"
+                    Text="{Binding RecipientAddress,
+                        UpdateSourceTrigger=PropertyChanged}"
+                    IsReadOnly="{Binding IsSending}"
+                    FontSize="13"
+                    VerticalContentAlignment="Center"
+                    Background="{StaticResource Surface.Background}"
+                    Foreground="{StaticResource Text.Primary}"
+                    BorderBrush="{StaticResource Border.Default}"
+                    BorderThickness="1" />
+
+                <TextBlock
+                    Grid.Row="1"
+                    Grid.Column="0"
+                    Text="Betreff"
+                    Margin="0,0,14,0"
+                    FontSize="13"
+                    FontWeight="SemiBold"
+                    Foreground="{StaticResource Text.Secondary}"
+                    VerticalAlignment="Center" />
+
+                <TextBox
+                    Grid.Row="1"
+                    Grid.Column="1"
+                    Height="38"
+                    Padding="10,7"
+                    Text="{Binding Subject,
+                        UpdateSourceTrigger=PropertyChanged}"
+                    IsReadOnly="{Binding IsSending}"
+                    FontSize="13"
+                    VerticalContentAlignment="Center"
+                    Background="{StaticResource Surface.Background}"
+                    Foreground="{StaticResource Text.Primary}"
+                    BorderBrush="{StaticResource Border.Default}"
+                    BorderThickness="1" />
+
+            </Grid>
+
+        </Border>
+
+        <!-- NACHRICHT -->
+
+        <Border
+            Grid.Row="3"
+            Margin="28,0,28,22"
+            Background="{StaticResource Surface.Card}"
+            BorderBrush="{StaticResource Border.Default}"
+            BorderThickness="1"
+            CornerRadius="6">
+
+            <Grid>
+
+                <TextBox
+                    Text="{Binding Body,
+                        UpdateSourceTrigger=PropertyChanged}"
+                    IsReadOnly="{Binding IsSending}"
+                    Padding="16"
+                    AcceptsReturn="True"
+                    AcceptsTab="True"
+                    TextWrapping="Wrap"
+                    VerticalScrollBarVisibility="Auto"
+                    HorizontalScrollBarVisibility="Disabled"
+                    FontSize="14"
+                    Background="Transparent"
+                    Foreground="{StaticResource Text.Primary}"
+                    BorderThickness="0" />
+
+                <Border
+                    Background="{StaticResource Surface.Card}"
+                    Opacity="0.88">
+
+                    <Border.Style>
+                        <Style TargetType="Border">
+
+                            <Setter
+                                Property="Visibility"
+                                Value="Collapsed" />
+
+                            <Style.Triggers>
+
+                                <DataTrigger
+                                    Binding="{Binding IsSending}"
+                                    Value="True">
+
+                                    <Setter
+                                        Property="Visibility"
+                                        Value="Visible" />
+
+                                </DataTrigger>
+
+                            </Style.Triggers>
+
+                        </Style>
+                    </Border.Style>
+
+                    <StackPanel
+                        Width="260"
+                        HorizontalAlignment="Center"
+                        VerticalAlignment="Center">
+
+                        <TextBlock
+                            Text="E-Mail wird gesendet …"
+                            Margin="0,0,0,14"
+                            FontSize="14"
+                            FontWeight="SemiBold"
+                            Foreground="{StaticResource Text.Primary}"
+                            HorizontalAlignment="Center" />
+
+                        <TextBlock
+                            Text="Bitte schließen Sie das Fenster während des Versands nicht."
+                            Margin="0,0,0,16"
+                            FontSize="11"
+                            Foreground="{StaticResource Text.Secondary}"
+                            TextAlignment="Center"
+                            TextWrapping="Wrap" />
+
+                        <ProgressBar
+                            Height="4"
+                            IsIndeterminate="True" />
+
+                    </StackPanel>
+
+                </Border>
+
+            </Grid>
+
+        </Border>
+
+        <Border
+            Grid.Row="4"
+            Background="{StaticResource Border.Subtle}" />
+
+        <!-- FUSS -->
+
+        <Border
+            Grid.Row="5"
+            Padding="28,18"
+            Background="{StaticResource Surface.Card}">
+
+            <Grid>
+
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="Auto" />
+                </Grid.ColumnDefinitions>
+
+                <TextBlock
+                    Text="Strg + Enter zum Senden"
+                    FontSize="11"
+                    Foreground="{StaticResource Text.Muted}"
+                    VerticalAlignment="Center" />
+
+                <StackPanel
+                    Grid.Column="1"
+                    Orientation="Horizontal">
+
+                    <Button
+                        Width="110"
+                        Height="38"
+                        Margin="0,0,10,0"
+                        Content="Abbrechen"
+                        Cursor="Hand"
+                        Click="CancelButton_OnClick">
+
+                        <Button.Style>
+
+                            <Style TargetType="Button">
+
+                                <Setter
+                                    Property="Background"
+                                    Value="{StaticResource Surface.Background}" />
+
+                                <Setter
+                                    Property="Foreground"
+                                    Value="{StaticResource Text.Primary}" />
+
+                                <Setter
+                                    Property="BorderBrush"
+                                    Value="{StaticResource Border.Default}" />
+
+                                <Setter
+                                    Property="BorderThickness"
+                                    Value="1" />
+
+                                <Style.Triggers>
+
+                                    <DataTrigger
+                                        Binding="{Binding IsSending}"
+                                        Value="True">
+
+                                        <Setter
+                                            Property="IsEnabled"
+                                            Value="False" />
+
+                                    </DataTrigger>
+
+                                </Style.Triggers>
+
+                            </Style>
+
+                        </Button.Style>
+
+                    </Button>
+
+                    <Button
+                        Width="120"
+                        Height="38"
+                        Cursor="Hand"
+                        IsEnabled="{Binding CanSend}"
+                        Style="{StaticResource Button.Primary}"
+                        Click="SendButton_OnClick">
+
+                        <StackPanel
+                            Orientation="Horizontal"
+                            HorizontalAlignment="Center">
+
+                            <TextBlock
+                                Text="&#xE724;"
+                                Margin="0,0,8,0"
+                                FontFamily="Segoe Fluent Icons"
+                                FontSize="15"
+                                VerticalAlignment="Center" />
+
+                            <TextBlock
+                                Text="Senden"
+                                VerticalAlignment="Center" />
+
+                        </StackPanel>
+
+                    </Button>
+
+                </StackPanel>
+
+            </Grid>
+
+        </Border>
+
+    </Grid>
+
+</Window>

@@ -26,6 +26,10 @@ public partial class App : Application
                     ImapMailDataSource>();
 
                 services.AddSingleton<
+                    IMailSendService,
+                    MailKitSendService>();
+
+                services.AddSingleton<
                     IMailAuthenticationService,
                     MailKitAuthenticationService>();
 
@@ -49,6 +53,9 @@ public partial class App : Application
                 services.AddTransient<
                     LoginViewModel>();
 
+                services.AddTransient<
+                    ComposeMailViewModel>();
+
                 services.AddSingleton<
                     SplashWindow>();
 
@@ -57,6 +64,9 @@ public partial class App : Application
 
                 services.AddTransient<
                     MainWindow>();
+
+                services.AddTransient<
+                    ComposeWindow>();
             })
             .Build();
     }
