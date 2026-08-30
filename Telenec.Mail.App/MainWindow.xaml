@@ -195,7 +195,8 @@
                         <StackPanel>
 
                             <TextBlock
-                                Text="max.mustermann@necnet.de"
+                                x:Name="AccountEmailText"
+                                Text="Telenec-Konto"
                                 Foreground="{StaticResource Navigation.Text}"
                                 FontSize="12"
                                 FontWeight="SemiBold"
@@ -209,14 +210,42 @@
 
                         </StackPanel>
 
-                        <TextBlock
+                        <Button
+                            x:Name="AccountMenuButton"
                             Grid.Column="1"
-                            Text="&#xE713;"
-                            FontFamily="Segoe Fluent Icons"
-                            Foreground="{StaticResource Navigation.TextSecondary}"
-                            FontSize="18"
+                            Width="34"
+                            Height="34"
+                            Margin="10,0,0,0"
+                            Padding="0"
+                            HorizontalAlignment="Center"
                             VerticalAlignment="Center"
-                            Margin="10,0,0,0" />
+                            Background="Transparent"
+                            BorderThickness="0"
+                            Cursor="Hand"
+                            ToolTip="Kontoeinstellungen"
+                            Click="AccountMenuButton_OnClick">
+
+                            <Button.ContextMenu>
+
+                                <ContextMenu>
+
+                                    <MenuItem
+                                        Header="Konto abmelden"
+                                        Click="LogoutMenuItem_OnClick" />
+
+                                </ContextMenu>
+
+                            </Button.ContextMenu>
+
+                            <TextBlock
+                                Text="&#xE713;"
+                                FontFamily="Segoe Fluent Icons"
+                                Foreground="{StaticResource Navigation.TextSecondary}"
+                                FontSize="18"
+                                HorizontalAlignment="Center"
+                                VerticalAlignment="Center" />
+
+                        </Button>
 
                     </Grid>
 
