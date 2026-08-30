@@ -26,9 +26,7 @@
             <ColumnDefinition Width="*" />
         </Grid.ColumnDefinitions>
 
-        <!-- =====================================================
-             LINKE NAVIGATION
-             ===================================================== -->
+        <!-- LINKE NAVIGATION -->
 
         <Border
             Grid.Column="0"
@@ -90,51 +88,41 @@
                                         <DataTrigger
                                             Binding="{Binding ConnectionState}"
                                             Value="{x:Static mail:MailConnectionState.Connected}">
-
                                             <Setter
                                                 Property="Fill"
                                                 Value="{StaticResource Status.Success}" />
-
                                         </DataTrigger>
 
                                         <DataTrigger
                                             Binding="{Binding ConnectionState}"
                                             Value="{x:Static mail:MailConnectionState.Offline}">
-
                                             <Setter
                                                 Property="Fill"
                                                 Value="{StaticResource Status.Warning}" />
-
                                         </DataTrigger>
 
                                         <DataTrigger
                                             Binding="{Binding ConnectionState}"
                                             Value="{x:Static mail:MailConnectionState.AuthenticationRequired}">
-
                                             <Setter
                                                 Property="Fill"
                                                 Value="{StaticResource Status.Warning}" />
-
                                         </DataTrigger>
 
                                         <DataTrigger
                                             Binding="{Binding ConnectionState}"
                                             Value="{x:Static mail:MailConnectionState.SecurityError}">
-
                                             <Setter
                                                 Property="Fill"
                                                 Value="{StaticResource Status.Error}" />
-
                                         </DataTrigger>
 
                                         <DataTrigger
                                             Binding="{Binding ConnectionState}"
                                             Value="{x:Static mail:MailConnectionState.Error}">
-
                                             <Setter
                                                 Property="Fill"
                                                 Value="{StaticResource Status.Error}" />
-
                                         </DataTrigger>
 
                                     </Style.Triggers>
@@ -156,11 +144,15 @@
                 </Border>
 
                 <ListBox
+                    x:Name="FolderListBox"
                     Grid.Row="2"
                     ItemsSource="{Binding MailFolders}"
                     SelectedItem="{Binding SelectedFolder, Mode=TwoWay}"
                     Style="{StaticResource Navigation.FolderList}"
-                    ItemContainerStyle="{StaticResource Navigation.FolderItem}">
+                    ItemContainerStyle="{StaticResource Navigation.FolderItem}"
+                    AllowDrop="True"
+                    DragOver="FolderListBox_OnDragOver"
+                    Drop="FolderListBox_OnDrop">
 
                     <ListBox.ItemTemplate>
 
@@ -207,12 +199,10 @@
                                 <DataTrigger
                                     Binding="{Binding HasUnreadCount}"
                                     Value="True">
-
                                     <Setter
                                         TargetName="UnreadBadge"
                                         Property="Visibility"
                                         Value="Visible" />
-
                                 </DataTrigger>
 
                                 <DataTrigger
@@ -287,15 +277,11 @@
                             Click="AccountMenuButton_OnClick">
 
                             <Button.ContextMenu>
-
                                 <ContextMenu>
-
                                     <MenuItem
                                         Header="Konto abmelden"
                                         Click="LogoutMenuItem_OnClick" />
-
                                 </ContextMenu>
-
                             </Button.ContextMenu>
 
                             <TextBlock
@@ -316,9 +302,7 @@
 
         </Border>
 
-        <!-- =====================================================
-             NACHRICHTENLISTE
-             ===================================================== -->
+        <!-- NACHRICHTENLISTE -->
 
         <Border
             Grid.Column="1"
@@ -425,7 +409,9 @@
                     SelectedItem="{Binding SelectedMessage, Mode=TwoWay}"
                     SelectionMode="Extended"
                     Style="{StaticResource MailList.MessageList}"
-                    ItemContainerStyle="{StaticResource MailList.MessageItem}">
+                    ItemContainerStyle="{StaticResource MailList.MessageItem}"
+                    PreviewMouseLeftButtonDown="MessageListBox_OnPreviewMouseLeftButtonDown"
+                    PreviewMouseMove="MessageListBox_OnPreviewMouseMove">
 
                     <ListBox.ItemTemplate>
 
@@ -532,12 +518,10 @@
                                 <DataTrigger
                                     Binding="{Binding EmphasizeSender}"
                                     Value="True">
-
                                     <Setter
                                         TargetName="SenderText"
                                         Property="FontWeight"
                                         Value="SemiBold" />
-
                                 </DataTrigger>
 
                             </DataTemplate.Triggers>
@@ -553,29 +537,20 @@
                     Background="{StaticResource Surface.Card}">
 
                     <Border.Style>
-
                         <Style TargetType="Border">
-
                             <Setter
                                 Property="Visibility"
                                 Value="Collapsed" />
-
                             <Style.Triggers>
-
                                 <DataTrigger
                                     Binding="{Binding IsLoading}"
                                     Value="True">
-
                                     <Setter
                                         Property="Visibility"
                                         Value="Visible" />
-
                                 </DataTrigger>
-
                             </Style.Triggers>
-
                         </Style>
-
                     </Border.Style>
 
                     <StackPanel
@@ -604,29 +579,20 @@
                     Background="{StaticResource Surface.Card}">
 
                     <Border.Style>
-
                         <Style TargetType="Border">
-
                             <Setter
                                 Property="Visibility"
                                 Value="Collapsed" />
-
                             <Style.Triggers>
-
                                 <DataTrigger
                                     Binding="{Binding HasLoadError}"
                                     Value="True">
-
                                     <Setter
                                         Property="Visibility"
                                         Value="Visible" />
-
                                 </DataTrigger>
-
                             </Style.Triggers>
-
                         </Style>
-
                     </Border.Style>
 
                     <StackPanel
@@ -664,29 +630,20 @@
                     Background="{StaticResource Surface.Card}">
 
                     <Border.Style>
-
                         <Style TargetType="Border">
-
                             <Setter
                                 Property="Visibility"
                                 Value="Collapsed" />
-
                             <Style.Triggers>
-
                                 <DataTrigger
                                     Binding="{Binding IsEmptyFolder}"
                                     Value="True">
-
                                     <Setter
                                         Property="Visibility"
                                         Value="Visible" />
-
                                 </DataTrigger>
-
                             </Style.Triggers>
-
                         </Style>
-
                     </Border.Style>
 
                     <StackPanel
@@ -715,9 +672,7 @@
 
         </Border>
 
-        <!-- =====================================================
-             LESEBEREICH
-             ===================================================== -->
+        <!-- LESEBEREICH -->
 
         <Border
             Grid.Column="2"
@@ -791,21 +746,17 @@
                                     <DataTrigger
                                         Binding="{Binding SelectedMessage}"
                                         Value="{x:Null}">
-
                                         <Setter
                                             Property="IsEnabled"
                                             Value="False" />
-
                                     </DataTrigger>
 
                                     <DataTrigger
                                         Binding="{Binding IsLoading}"
                                         Value="True">
-
                                         <Setter
                                             Property="IsEnabled"
                                             Value="False" />
-
                                     </DataTrigger>
 
                                 </Style.Triggers>
@@ -888,8 +839,6 @@
                     Grid.Row="1"
                     Background="{StaticResource Border.Subtle}" />
 
-                <!-- Externe Bilder -->
-
                 <Border
                     x:Name="ExternalImagesNotice"
                     Grid.Row="2"
@@ -953,8 +902,6 @@
 
                 <Grid Grid.Row="3">
 
-                    <!-- Plaintext / Fallback -->
-
                     <ScrollViewer
                         x:Name="PlainTextMailView"
                         VerticalScrollBarVisibility="Auto">
@@ -984,29 +931,20 @@
                                 Background="{StaticResource Brand.PrimaryLight}">
 
                                 <Border.Style>
-
                                     <Style TargetType="Border">
-
                                         <Setter
                                             Property="Visibility"
                                             Value="Collapsed" />
-
                                         <Style.Triggers>
-
                                             <DataTrigger
                                                 Binding="{Binding SelectedMessage.HasHighlight}"
                                                 Value="True">
-
                                                 <Setter
                                                     Property="Visibility"
                                                     Value="Visible" />
-
                                             </DataTrigger>
-
                                         </Style.Triggers>
-
                                     </Style>
-
                                 </Border.Style>
 
                                 <StackPanel>
@@ -1043,8 +981,6 @@
                         </StackPanel>
 
                     </ScrollViewer>
-
-                    <!-- HTML-Mail -->
 
                     <wv2:WebView2
                         x:Name="HtmlMailView"

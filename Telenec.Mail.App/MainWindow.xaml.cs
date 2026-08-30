@@ -4,6 +4,7 @@ using System.ComponentModel;
 using System.IO;
 using System.Text.RegularExpressions;
 using System.Windows;
+using System.Windows.Controls;
 using System.Windows.Controls.Primitives;
 using System.Windows.Input;
 using Telenec.Mail.App.Services.Security;
@@ -14,6 +15,9 @@ namespace Telenec.Mail.App;
 
 public partial class MainWindow : Window
 {
+    private const string MailDragDataFormat =
+        "Telenec.Mail.MessageSelection";
+
     private readonly MainViewModel _viewModel;
     private readonly IMailAccountStore _mailAccountStore;
     private readonly ICredentialStore _credentialStore;
@@ -21,11 +25,21 @@ public partial class MainWindow : Window
 
     private bool _isLoggingOut;
     private bool _isLoaded;
+    private bool _isMessageDragInProgress;
 
     private Task? _webViewInitializationTask;
     private int _renderVersion;
 
     private bool _allowExternalImagesForCurrentMessage;
+
+    private Point _messageDragStartPoint;
+
+    private MailMessageItemViewModel?
+        _messageDragCandidate;
+
+    private IReadOnlyList<MailMessageItemViewModel>
+        _messageDragSelectionSnapshot =
+            Array.Empty<MailMessageItemViewModel>();
 
     public MainWindow(
         MainViewModel viewModel,
@@ -116,6 +130,323 @@ public partial class MainWindow : Window
         catch
         {
         }
+    }
+
+    private void MessageListBox_OnPreviewMouseLeftButtonDown(
+        object sender,
+        MouseButtonEventArgs e)
+    {
+        _messageDragStartPoint =
+            e.GetPosition(
+                MessageListBox);
+
+        _messageDragCandidate =
+            GetMessageFromElement(
+                e.OriginalSource as DependencyObject);
+
+        _messageDragSelectionSnapshot =
+            Array.Empty<MailMessageItemViewModel>();
+
+        /*
+         * WPF reduziert eine Mehrfachauswahl normalerweise auf
+         * eine Mail, sobald man ohne Strg/Shift auf eine bereits
+         * markierte Mail klickt.
+         *
+         * Vorher merken wir uns deshalb die bestehende Auswahl.
+         * Nur wenn tatsächlich ein Drag beginnt, verwenden wir
+         * diesen Snapshot.
+         *
+         * Ein normaler Klick ohne Drag behält somit das normale
+         * Windows-Auswahlverhalten.
+         */
+        if (_messageDragCandidate is not null &&
+            Keyboard.Modifiers == ModifierKeys.None &&
+            MessageListBox.SelectedItems.Contains(
+                _messageDragCandidate))
+        {
+            _messageDragSelectionSnapshot =
+                GetSelectedMessages();
+        }
+    }
+
+    private void MessageListBox_OnPreviewMouseMove(
+        object sender,
+        MouseEventArgs e)
+    {
+        if (_isMessageDragInProgress ||
+            e.LeftButton != MouseButtonState.Pressed ||
+            _messageDragCandidate is null ||
+            _viewModel.IsLoading)
+        {
+            return;
+        }
+
+        var currentPosition =
+            e.GetPosition(
+                MessageListBox);
+
+        var horizontalDistance =
+            Math.Abs(
+                currentPosition.X -
+                _messageDragStartPoint.X);
+
+        var verticalDistance =
+            Math.Abs(
+                currentPosition.Y -
+                _messageDragStartPoint.Y);
+
+        if (horizontalDistance <
+                SystemParameters.MinimumHorizontalDragDistance &&
+            verticalDistance <
+                SystemParameters.MinimumVerticalDragDistance)
+        {
+            return;
+        }
+
+        IReadOnlyList<MailMessageItemViewModel>
+            messagesToDrag;
+
+        /*
+         * Wenn die Mail bereits Bestandteil einer
+         * Mehrfachauswahl war, nehmen wir die Auswahl von
+         * vor dem MouseDown.
+         */
+        if (_messageDragSelectionSnapshot.Count > 0 &&
+            _messageDragSelectionSnapshot.Contains(
+                _messageDragCandidate))
+        {
+            messagesToDrag =
+                _messageDragSelectionSnapshot;
+        }
+        else
+        {
+            var currentSelection =
+                GetSelectedMessages();
+
+            messagesToDrag =
+                currentSelection.Contains(
+                    _messageDragCandidate)
+                    ? currentSelection
+                    : new[] { _messageDragCandidate };
+        }
+
+        if (messagesToDrag.Count == 0)
+        {
+            return;
+        }
+
+        var dataObject =
+            new DataObject();
+
+        dataObject.SetData(
+            MailDragDataFormat,
+            messagesToDrag.ToList());
+
+        _isMessageDragInProgress =
+            true;
+
+        try
+        {
+            DragDrop.DoDragDrop(
+                MessageListBox,
+                dataObject,
+                DragDropEffects.Move);
+        }
+        finally
+        {
+            _isMessageDragInProgress =
+                false;
+
+            _messageDragCandidate =
+                null;
+
+            _messageDragSelectionSnapshot =
+                Array.Empty<MailMessageItemViewModel>();
+        }
+    }
+
+    private void FolderListBox_OnDragOver(
+        object sender,
+        DragEventArgs e)
+    {
+        if (_viewModel.IsLoading ||
+            !TryGetDraggedMessages(
+                e.Data,
+                out var messages) ||
+            messages.Count == 0)
+        {
+            e.Effects =
+                DragDropEffects.None;
+
+            e.Handled =
+                true;
+
+            return;
+        }
+
+        var targetFolder =
+            GetFolderFromElement(
+                e.OriginalSource as DependencyObject);
+
+        var sourceFolder =
+            _viewModel.SelectedFolder;
+
+        if (targetFolder is null ||
+            sourceFolder is null ||
+            string.Equals(
+                targetFolder.FolderId,
+                sourceFolder.FolderId,
+                StringComparison.OrdinalIgnoreCase))
+        {
+            e.Effects =
+                DragDropEffects.None;
+        }
+        else
+        {
+            e.Effects =
+                DragDropEffects.Move;
+        }
+
+        e.Handled =
+            true;
+    }
+
+    private async void FolderListBox_OnDrop(
+        object sender,
+        DragEventArgs e)
+    {
+        e.Handled =
+            true;
+
+        if (_viewModel.IsLoading ||
+            !TryGetDraggedMessages(
+                e.Data,
+                out var messages) ||
+            messages.Count == 0)
+        {
+            return;
+        }
+
+        var targetFolder =
+            GetFolderFromElement(
+                e.OriginalSource as DependencyObject);
+
+        var sourceFolder =
+            _viewModel.SelectedFolder;
+
+        if (targetFolder is null ||
+            sourceFolder is null ||
+            string.Equals(
+                targetFolder.FolderId,
+                sourceFolder.FolderId,
+                StringComparison.OrdinalIgnoreCase))
+        {
+            return;
+        }
+
+        try
+        {
+            await _viewModel
+                .MoveMessagesAsync(
+                    messages,
+                    targetFolder);
+
+            e.Effects =
+                DragDropEffects.Move;
+        }
+        catch
+        {
+            var messageText =
+                messages.Count == 1
+                    ? "Die Nachricht konnte nicht verschoben werden."
+                    : "Die Nachrichten konnten nicht verschoben werden.";
+
+            MessageBox.Show(
+                messageText +
+                "\n\nBitte prüfen Sie die Verbindung und versuchen Sie es erneut.",
+                "Telenec Mail",
+                MessageBoxButton.OK,
+                MessageBoxImage.Error);
+        }
+    }
+
+    private MailMessageItemViewModel?
+        GetMessageFromElement(
+            DependencyObject? element)
+    {
+        if (element is null)
+        {
+            return null;
+        }
+
+        var container =
+            ItemsControl.ContainerFromElement(
+                MessageListBox,
+                element)
+            as ListBoxItem;
+
+        return container?
+            .DataContext
+            as MailMessageItemViewModel;
+    }
+
+    private MailFolderItemViewModel?
+        GetFolderFromElement(
+            DependencyObject? element)
+    {
+        if (element is null)
+        {
+            return null;
+        }
+
+        var container =
+            ItemsControl.ContainerFromElement(
+                FolderListBox,
+                element)
+            as ListBoxItem;
+
+        return container?
+            .DataContext
+            as MailFolderItemViewModel;
+    }
+
+    private static bool TryGetDraggedMessages(
+        IDataObject data,
+        out IReadOnlyList<MailMessageItemViewModel> messages)
+    {
+        messages =
+            Array.Empty<MailMessageItemViewModel>();
+
+        if (!data.GetDataPresent(
+                MailDragDataFormat))
+        {
+            return false;
+        }
+
+        if (data.GetData(
+                MailDragDataFormat)
+            is not IEnumerable<MailMessageItemViewModel>
+                draggedMessages)
+        {
+            return false;
+        }
+
+        var snapshot =
+            draggedMessages
+                .Where(
+                    message =>
+                        message is not null)
+                .ToList();
+
+        if (snapshot.Count == 0)
+        {
+            return false;
+        }
+
+        messages =
+            snapshot;
+
+        return true;
     }
 
     private async void MainWindow_OnPreviewKeyDown(
@@ -398,13 +729,6 @@ public partial class MainWindow : Window
             return;
         }
 
-        /*
-         * Ist die rechts angeklickte Mail Teil der aktuellen
-         * Mehrfachauswahl, gilt die Aktion für die gesamte Auswahl.
-         *
-         * Ist sie NICHT Teil der Auswahl, wird ausschließlich
-         * diese angeklickte Mail gelöscht.
-         */
         IReadOnlyList<MailMessageItemViewModel> messages;
 
         if (MessageListBox.SelectedItems.Contains(
@@ -447,22 +771,12 @@ public partial class MainWindow : Window
     private IReadOnlyList<MailMessageItemViewModel>
         GetSelectedMessages()
     {
-        /*
-         * SelectedItems gehört bewusst weiterhin zur UI.
-         *
-         * Für die Aktion erzeugen wir daraus lediglich
-         * einen stabilen Snapshot.
-         */
         var selectedMessages =
             MessageListBox
                 .SelectedItems
                 .OfType<MailMessageItemViewModel>()
                 .ToList();
 
-        /*
-         * Sicherheitsfallback für den normalen
-         * Einzel-Auswahlfall.
-         */
         if (selectedMessages.Count == 0 &&
             _viewModel.SelectedMessage is not null)
         {

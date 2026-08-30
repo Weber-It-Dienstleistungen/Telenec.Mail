@@ -345,10 +345,6 @@ public sealed class MainViewModel : BaseViewModel
             return false;
         }
 
-        /*
-         * Vor der Serveroperation wird ein stabiler Snapshot
-         * der gültigen Nachrichten erzeugt.
-         */
         var messagesToDelete =
             messages
                 .Where(
@@ -377,21 +373,91 @@ public sealed class MainViewModel : BaseViewModel
                         message.UniqueId)
                 .ToList();
 
-        /*
-         * Alle UIDs werden gemeinsam an die Datenquelle
-         * übergeben.
-         *
-         * Die lokale Collection wird vorher nicht verändert.
-         */
         await _mailDataSource
             .MoveToTrashAsync(
                 folder.FolderId,
                 uniqueIds,
                 cancellationToken);
 
+        await ReloadAsync(
+            cancellationToken);
+
+        return true;
+    }
+
+    public async Task<bool> MoveMessagesAsync(
+        IReadOnlyList<MailMessageItemViewModel> messages,
+        MailFolderItemViewModel targetFolder,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(
+            messages);
+
+        ArgumentNullException.ThrowIfNull(
+            targetFolder);
+
+        var sourceFolder =
+            _selectedFolder;
+
+        if (sourceFolder is null ||
+            IsLoading ||
+            messages.Count == 0 ||
+            !MailFolders.Contains(
+                targetFolder))
+        {
+            return false;
+        }
+
+        if (string.Equals(
+                sourceFolder.FolderId,
+                targetFolder.FolderId,
+                StringComparison.OrdinalIgnoreCase))
+        {
+            return false;
+        }
+
+        var messagesToMove =
+            messages
+                .Where(
+                    message =>
+                        message is not null &&
+                        message.UniqueId > 0 &&
+                        Messages.Contains(
+                            message))
+                .GroupBy(
+                    message =>
+                        message.UniqueId)
+                .Select(
+                    group =>
+                        group.First())
+                .ToList();
+
+        if (messagesToMove.Count == 0)
+        {
+            return false;
+        }
+
+        var uniqueIds =
+            messagesToMove
+                .Select(
+                    message =>
+                        message.UniqueId)
+                .ToList();
+
         /*
-         * Nach erfolgreichem Batch-Move wird genau einmal
-         * vollständig vom Server synchronisiert.
+         * Der Server wird zuerst geändert.
+         * Vor erfolgreichem IMAP-MOVE wird lokal nichts entfernt.
+         */
+        await _mailDataSource
+            .MoveMessagesAsync(
+                sourceFolder.FolderId,
+                targetFolder.FolderId,
+                uniqueIds,
+                cancellationToken);
+
+        /*
+         * Danach einmal vollständige Synchronisation.
+         * Der Quellordner bleibt ausgewählt.
          */
         await ReloadAsync(
             cancellationToken);

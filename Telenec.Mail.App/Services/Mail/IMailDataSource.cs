@@ -31,4 +31,10 @@ public interface IMailDataSource
         string folderId,
         IReadOnlyList<uint> uniqueIds,
         CancellationToken cancellationToken = default);
+
+    Task MoveMessagesAsync(
+        string sourceFolderId,
+        string targetFolderId,
+        IReadOnlyList<uint> uniqueIds,
+        CancellationToken cancellationToken = default);
 }

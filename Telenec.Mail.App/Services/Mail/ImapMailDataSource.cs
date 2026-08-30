@@ -351,31 +351,13 @@ public sealed class ImapMailDataSource : IMailDataSource
         IReadOnlyList<uint> uniqueIds,
         CancellationToken cancellationToken = default)
     {
-        if (string.IsNullOrWhiteSpace(
-                folderId))
-        {
-            throw new ArgumentException(
-                "Der Ordner darf nicht leer sein.",
-                nameof(folderId));
-        }
-
-        ArgumentNullException.ThrowIfNull(
-            uniqueIds);
+        ValidateFolderId(
+            folderId,
+            nameof(folderId));
 
         var normalizedUniqueIds =
-            uniqueIds
-                .Where(
-                    uniqueId =>
-                        uniqueId > 0)
-                .Distinct()
-                .ToList();
-
-        if (normalizedUniqueIds.Count == 0)
-        {
-            throw new ArgumentException(
-                "Es wurde keine gültige Nachrichten-ID übergeben.",
-                nameof(uniqueIds));
-        }
+            NormalizeUniqueIds(
+                uniqueIds);
 
         using var client =
             await CreateAuthenticatedClientAsync(
@@ -383,47 +365,16 @@ public sealed class ImapMailDataSource : IMailDataSource
 
         try
         {
-            var sourceFolder =
-                await client.GetFolderAsync(
-                    folderId,
-                    cancellationToken);
-
             var trashFolder =
                 await GetTrashFolderAsync(
                     client,
                     cancellationToken);
 
-            /*
-             * Im Papierkorb bedeutet "Löschen" weiterhin
-             * keine endgültige Löschung.
-             */
-            if (string.Equals(
-                    sourceFolder.FullName,
-                    trashFolder.FullName,
-                    StringComparison.OrdinalIgnoreCase))
-            {
-                return;
-            }
-
-            await sourceFolder.OpenAsync(
-                FolderAccess.ReadWrite,
-                cancellationToken);
-
-            /*
-             * Mehrere Nachrichten werden in einem einzigen
-             * MailKit-/IMAP-Aufruf anhand ihrer UIDs verschoben.
-             */
-            var mailKitUniqueIds =
-                normalizedUniqueIds
-                    .Select(
-                        uniqueId =>
-                            new UniqueId(
-                                uniqueId))
-                    .ToList();
-
-            await sourceFolder.MoveToAsync(
-                mailKitUniqueIds,
+            await MoveMessagesCoreAsync(
+                client,
+                folderId,
                 trashFolder,
+                normalizedUniqueIds,
                 cancellationToken);
         }
         finally
@@ -431,6 +382,144 @@ public sealed class ImapMailDataSource : IMailDataSource
             await DisconnectSafelyAsync(
                 client);
         }
+    }
+
+    public async Task MoveMessagesAsync(
+        string sourceFolderId,
+        string targetFolderId,
+        IReadOnlyList<uint> uniqueIds,
+        CancellationToken cancellationToken = default)
+    {
+        ValidateFolderId(
+            sourceFolderId,
+            nameof(sourceFolderId));
+
+        ValidateFolderId(
+            targetFolderId,
+            nameof(targetFolderId));
+
+        var normalizedUniqueIds =
+            NormalizeUniqueIds(
+                uniqueIds);
+
+        using var client =
+            await CreateAuthenticatedClientAsync(
+                cancellationToken);
+
+        try
+        {
+            var targetFolder =
+                await client.GetFolderAsync(
+                    targetFolderId,
+                    cancellationToken);
+
+            if (targetFolder.Attributes.HasFlag(
+                    FolderAttributes.NoSelect))
+            {
+                throw new InvalidOperationException(
+                    "Der Zielordner kann keine Nachrichten aufnehmen.");
+            }
+
+            await MoveMessagesCoreAsync(
+                client,
+                sourceFolderId,
+                targetFolder,
+                normalizedUniqueIds,
+                cancellationToken);
+        }
+        finally
+        {
+            await DisconnectSafelyAsync(
+                client);
+        }
+    }
+
+    private static async Task MoveMessagesCoreAsync(
+        ImapClient client,
+        string sourceFolderId,
+        IMailFolder targetFolder,
+        IReadOnlyList<uint> uniqueIds,
+        CancellationToken cancellationToken)
+    {
+        var sourceFolder =
+            await client.GetFolderAsync(
+                sourceFolderId,
+                cancellationToken);
+
+        if (sourceFolder.Attributes.HasFlag(
+                FolderAttributes.NoSelect))
+        {
+            throw new InvalidOperationException(
+                "Der Quellordner kann nicht geöffnet werden.");
+        }
+
+        if (string.Equals(
+                sourceFolder.FullName,
+                targetFolder.FullName,
+                StringComparison.OrdinalIgnoreCase))
+        {
+            return;
+        }
+
+        await sourceFolder.OpenAsync(
+            FolderAccess.ReadWrite,
+            cancellationToken);
+
+        var mailKitUniqueIds =
+            uniqueIds
+                .Select(
+                    uniqueId =>
+                        new UniqueId(
+                            uniqueId))
+                .ToList();
+
+        /*
+         * Ein einziger Batch-MOVE für die gesamte Auswahl.
+         *
+         * Die UIDs beziehen sich ausschließlich auf den
+         * geöffneten Quellordner.
+         */
+        await sourceFolder.MoveToAsync(
+            mailKitUniqueIds,
+            targetFolder,
+            cancellationToken);
+    }
+
+    private static void ValidateFolderId(
+        string folderId,
+        string parameterName)
+    {
+        if (string.IsNullOrWhiteSpace(
+                folderId))
+        {
+            throw new ArgumentException(
+                "Der Ordner darf nicht leer sein.",
+                parameterName);
+        }
+    }
+
+    private static IReadOnlyList<uint> NormalizeUniqueIds(
+        IReadOnlyList<uint> uniqueIds)
+    {
+        ArgumentNullException.ThrowIfNull(
+            uniqueIds);
+
+        var normalized =
+            uniqueIds
+                .Where(
+                    uniqueId =>
+                        uniqueId > 0)
+                .Distinct()
+                .ToList();
+
+        if (normalized.Count == 0)
+        {
+            throw new ArgumentException(
+                "Es wurde keine gültige Nachrichten-ID übergeben.",
+                nameof(uniqueIds));
+        }
+
+        return normalized;
     }
 
     private static async Task<IMailFolder> GetTrashFolderAsync(
@@ -757,50 +846,21 @@ public sealed class ImapMailDataSource : IMailDataSource
 
         return name.ToLowerInvariant() switch
         {
-            "sent" =>
-                "Gesendet",
-
-            "sent items" =>
-                "Gesendet",
-
-            "sent messages" =>
-                "Gesendet",
-
-            "gesendet" =>
-                "Gesendet",
-
-            "drafts" =>
-                "Entwürfe",
-
-            "draft" =>
-                "Entwürfe",
-
-            "entwürfe" =>
-                "Entwürfe",
-
-            "trash" =>
-                "Papierkorb",
-
-            "deleted items" =>
-                "Papierkorb",
-
-            "papierkorb" =>
-                "Papierkorb",
-
-            "junk" =>
-                "Junk",
-
-            "spam" =>
-                "Spam",
-
-            "archive" =>
-                "Archiv",
-
-            "archives" =>
-                "Archiv",
-
-            _ =>
-                name
+            "sent" => "Gesendet",
+            "sent items" => "Gesendet",
+            "sent messages" => "Gesendet",
+            "gesendet" => "Gesendet",
+            "drafts" => "Entwürfe",
+            "draft" => "Entwürfe",
+            "entwürfe" => "Entwürfe",
+            "trash" => "Papierkorb",
+            "deleted items" => "Papierkorb",
+            "papierkorb" => "Papierkorb",
+            "junk" => "Junk",
+            "spam" => "Spam",
+            "archive" => "Archiv",
+            "archives" => "Archiv",
+            _ => name
         };
     }
 
@@ -1021,10 +1081,6 @@ public sealed class ImapMailDataSource : IMailDataSource
         }
         catch (NotSupportedException)
         {
-            /*
-             * Falls ein Server STATUS wider Erwarten nicht
-             * unterstützt, darf der Client trotzdem weiterlaufen.
-             */
         }
     }
 
@@ -1044,10 +1100,6 @@ public sealed class ImapMailDataSource : IMailDataSource
         }
         catch
         {
-            /*
-             * Ein Disconnect-Fehler darf bereits geladene Daten
-             * nicht nachträglich ungültig machen.
-             */
         }
     }
 

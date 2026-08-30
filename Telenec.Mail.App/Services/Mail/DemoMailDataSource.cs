@@ -163,4 +163,15 @@ public sealed class DemoMailDataSource : IMailDataSource
 
         return Task.CompletedTask;
     }
+
+    public Task MoveMessagesAsync(
+        string sourceFolderId,
+        string targetFolderId,
+        IReadOnlyList<uint> uniqueIds,
+        CancellationToken cancellationToken = default)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+
+        return Task.CompletedTask;
+    }
 }
