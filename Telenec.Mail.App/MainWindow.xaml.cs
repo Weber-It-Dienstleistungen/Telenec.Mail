@@ -5,6 +5,7 @@ using System.IO;
 using System.Text.RegularExpressions;
 using System.Windows;
 using System.Windows.Controls.Primitives;
+using System.Windows.Input;
 using Telenec.Mail.App.Services.Security;
 using Telenec.Mail.App.Services.Storage;
 using Telenec.Mail.App.ViewModels;
@@ -63,6 +64,16 @@ public partial class MainWindow : Window
 
         Closed +=
             MainWindow_OnClosed;
+
+        /*
+         * Zentrale Tastaturbehandlung für Mailaktionen.
+         *
+         * Die Entf-Taste bekommt keine eigene Löschlogik,
+         * sondern verwendet exakt denselben Pfad wie
+         * Kontextmenü und sichtbarer Papierkorb-Button.
+         */
+        PreviewKeyDown +=
+            MainWindow_OnPreviewKeyDown;
     }
 
     private async void MainWindow_OnLoaded(
@@ -108,6 +119,9 @@ public partial class MainWindow : Window
         _viewModel.PropertyChanged -=
             MainViewModel_OnPropertyChanged;
 
+        PreviewKeyDown -=
+            MainWindow_OnPreviewKeyDown;
+
         try
         {
             HtmlMailView.Dispose();
@@ -116,6 +130,62 @@ public partial class MainWindow : Window
         {
             // Beim Schließen nicht relevant.
         }
+    }
+
+    private async void MainWindow_OnPreviewKeyDown(
+        object sender,
+        KeyEventArgs e)
+    {
+        /*
+         * Ausschließlich die normale Entf-Taste behandeln.
+         */
+        if (e.Key != Key.Delete)
+        {
+            return;
+        }
+
+        /*
+         * Gedrückthalten von Entf darf nicht mehrere
+         * Nachrichten hintereinander löschen.
+         */
+        if (e.IsRepeat)
+        {
+            e.Handled =
+                true;
+
+            return;
+        }
+
+        /*
+         * In einem Texteingabefeld darf Entf weiterhin
+         * seine normale Bedeutung behalten.
+         *
+         * Das ist momentan noch kaum relevant, verhindert
+         * aber später Probleme mit der echten Suchfunktion.
+         */
+        if (Keyboard.FocusedElement is TextBoxBase)
+        {
+            return;
+        }
+
+        var message =
+            _viewModel.SelectedMessage;
+
+        if (message is null ||
+            _viewModel.IsLoading)
+        {
+            return;
+        }
+
+        /*
+         * Die Taste wurde als Mailaktion erkannt.
+         * Damit soll WPF sie nicht zusätzlich weiterverarbeiten.
+         */
+        e.Handled =
+            true;
+
+        await DeleteMessageFromUiAsync(
+            message);
     }
 
     private void MainViewModel_OnPropertyChanged(
