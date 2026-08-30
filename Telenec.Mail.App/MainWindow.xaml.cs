@@ -405,6 +405,30 @@ public partial class MainWindow : Window
             return;
         }
 
+        await DeleteMessageFromUiAsync(
+            message);
+    }
+
+    private async void DeleteSelectedMessageButton_OnClick(
+        object sender,
+        RoutedEventArgs e)
+    {
+        var message =
+            _viewModel.SelectedMessage;
+
+        if (message is null ||
+            _viewModel.IsLoading)
+        {
+            return;
+        }
+
+        await DeleteMessageFromUiAsync(
+            message);
+    }
+
+    private async Task DeleteMessageFromUiAsync(
+        MailMessageItemViewModel message)
+    {
         try
         {
             await _viewModel
@@ -414,13 +438,11 @@ public partial class MainWindow : Window
         catch
         {
             /*
-             * Wichtig:
+             * Die UI wird erst nach erfolgreichem serverseitigem
+             * Verschieben neu geladen.
              *
-             * Dieser Dialog erscheint nur, wenn die eigentliche
-             * serverseitige Lösch-/Move-Operation fehlschlägt.
-             *
-             * Die lokale Nachrichtenliste wurde in diesem Fall
-             * noch nicht verändert.
+             * Bei einem IMAP-Fehler bleibt deshalb der vorherige
+             * sichtbare Zustand bestehen.
              */
             MessageBox.Show(
                 "Die Nachricht konnte nicht in den Papierkorb verschoben werden.\n\n" +

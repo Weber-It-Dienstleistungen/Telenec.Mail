@@ -739,15 +739,93 @@
                         <RowDefinition Height="Auto" />
                     </Grid.RowDefinitions>
 
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="Auto" />
+                    </Grid.ColumnDefinitions>
+
                     <TextBlock
+                        Grid.Row="0"
+                        Grid.Column="0"
+                        Margin="0,0,12,0"
                         Text="{Binding SelectedMessage.Subject}"
                         FontSize="25"
                         FontWeight="SemiBold"
                         Foreground="{StaticResource Text.Primary}"
                         TextWrapping="Wrap" />
 
+                    <Button
+                        x:Name="DeleteSelectedMessageButton"
+                        Grid.Row="0"
+                        Grid.Column="1"
+                        Width="36"
+                        Height="36"
+                        Margin="12,0,0,0"
+                        Padding="0"
+                        HorizontalAlignment="Right"
+                        VerticalAlignment="Top"
+                        Cursor="Hand"
+                        ToolTip="Nachricht löschen"
+                        Click="DeleteSelectedMessageButton_OnClick">
+
+                        <Button.Style>
+
+                            <Style TargetType="Button">
+
+                                <Setter
+                                    Property="Background"
+                                    Value="Transparent" />
+
+                                <Setter
+                                    Property="BorderThickness"
+                                    Value="0" />
+
+                                <Setter
+                                    Property="IsEnabled"
+                                    Value="True" />
+
+                                <Style.Triggers>
+
+                                    <DataTrigger
+                                        Binding="{Binding SelectedMessage}"
+                                        Value="{x:Null}">
+
+                                        <Setter
+                                            Property="IsEnabled"
+                                            Value="False" />
+
+                                    </DataTrigger>
+
+                                    <DataTrigger
+                                        Binding="{Binding IsLoading}"
+                                        Value="True">
+
+                                        <Setter
+                                            Property="IsEnabled"
+                                            Value="False" />
+
+                                    </DataTrigger>
+
+                                </Style.Triggers>
+
+                            </Style>
+
+                        </Button.Style>
+
+                        <TextBlock
+                            Text="&#xE74D;"
+                            FontFamily="Segoe Fluent Icons"
+                            FontSize="18"
+                            Foreground="{StaticResource Text.Secondary}"
+                            HorizontalAlignment="Center"
+                            VerticalAlignment="Center" />
+
+                    </Button>
+
                     <Grid
                         Grid.Row="1"
+                        Grid.Column="0"
+                        Grid.ColumnSpan="2"
                         Margin="0,20,0,0">
 
                         <Grid.ColumnDefinitions>
