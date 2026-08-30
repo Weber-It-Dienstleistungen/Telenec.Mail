@@ -145,7 +145,10 @@ public sealed class ImapMailDataSource : IMailDataSource
                                     subtitle,
 
                                 UnreadCount:
-                                    unreadCount);
+                                    unreadCount,
+
+                                MessageCount:
+                                    messageCount);
                         })
                     .ToList();
 
@@ -188,6 +191,12 @@ public sealed class ImapMailDataSource : IMailDataSource
                     folderId,
                     cancellationToken);
 
+            /*
+             * Nachrichten werden weiterhin ausschließlich lesend geladen.
+             *
+             * Das Setzen von \Seen erfolgt bewusst separat über
+             * MarkAsReadAsync().
+             */
             await folder.OpenAsync(
                 FolderAccess.ReadOnly,
                 cancellationToken);
@@ -240,6 +249,67 @@ public sealed class ImapMailDataSource : IMailDataSource
             }
 
             return messages;
+        }
+        finally
+        {
+            await DisconnectSafelyAsync(
+                client);
+        }
+    }
+
+    public async Task MarkAsReadAsync(
+        string folderId,
+        uint uniqueId,
+        CancellationToken cancellationToken = default)
+    {
+        if (string.IsNullOrWhiteSpace(
+                folderId))
+        {
+            throw new ArgumentException(
+                "Der Ordner darf nicht leer sein.",
+                nameof(folderId));
+        }
+
+        if (uniqueId == 0)
+        {
+            throw new ArgumentOutOfRangeException(
+                nameof(uniqueId),
+                "Die Nachrichten-ID muss größer als 0 sein.");
+        }
+
+        using var client =
+            await CreateAuthenticatedClientAsync(
+                cancellationToken);
+
+        try
+        {
+            var folder =
+                await client.GetFolderAsync(
+                    folderId,
+                    cancellationToken);
+
+            /*
+             * Schreibrechte werden nur für diese gezielte
+             * Statusänderung angefordert.
+             */
+            await folder.OpenAsync(
+                FolderAccess.ReadWrite,
+                cancellationToken);
+
+            /*
+             * \Seen ist das standardisierte IMAP-Flag für
+             * eine gelesene Nachricht.
+             *
+             * silent=true verhindert unnötige lokale
+             * MessageFlagsChanged-Ereignisse auf dieser
+             * kurzlebigen IMAP-Verbindung.
+             */
+            await folder.AddFlagsAsync(
+                new UniqueId(
+                    uniqueId),
+                MessageFlags.Seen,
+                silent: true,
+                cancellationToken);
         }
         finally
         {
@@ -497,7 +567,10 @@ public sealed class ImapMailDataSource : IMailDataSource
                 isUnread,
 
             HtmlBody:
-                bodyContent.HtmlBody);
+                bodyContent.HtmlBody,
+
+            UniqueId:
+                summary.UniqueId.Id);
     }
 
     private static string GetDisplayName(

@@ -5,4 +5,5 @@ public sealed record MailFolderData(
     string DisplayName,
     string HeaderSubtitle,
     int UnreadCount = 0,
-    bool HasSeparatorAfter = false);
+    bool HasSeparatorAfter = false,
+    int MessageCount = 0);

@@ -15,7 +15,8 @@ public sealed class DemoMailDataSource : IMailDataSource
                 FolderId: "INBOX",
                 DisplayName: "Posteingang",
                 HeaderSubtitle: "12 ungelesene Nachrichten",
-                UnreadCount: 12),
+                UnreadCount: 12,
+                MessageCount: 20),
 
             new MailFolderData(
                 FolderId: "Sent",
@@ -78,7 +79,8 @@ public sealed class DemoMailDataSource : IMailDataSource
                 IsUnread: true,
                 EmphasizeSender: true,
                 HighlightTitle: "Einfach. Sicher. Telenec.",
-                HighlightText: "Technische Komplexität bleibt im Hintergrund."),
+                HighlightText: "Technische Komplexität bleibt im Hintergrund.",
+                UniqueId: 1),
 
             new MailMessageData(
                 Sender: "Stadtwerke Neustadt",
@@ -96,7 +98,8 @@ public sealed class DemoMailDataSource : IMailDataSource
                     "Bei Rückfragen können Sie sich jederzeit an unseren Kundenservice wenden.",
                 Closing: "Freundliche Grüße",
                 Signature: "Ihre Stadtwerke Neustadt",
-                EmphasizeSender: true),
+                EmphasizeSender: true,
+                UniqueId: 2),
 
             new MailMessageData(
                 Sender: "Anna Müller",
@@ -114,9 +117,20 @@ public sealed class DemoMailDataSource : IMailDataSource
                     "Von meiner Seite bleibt es bei der besprochenen Uhrzeit. " +
                     "Falls sich bei dir noch etwas ändert, gib mir bitte kurz Bescheid.",
                 Closing: "Viele Grüße",
-                Signature: "Anna")
+                Signature: "Anna",
+                UniqueId: 3)
         ];
 
         return Task.FromResult(messages);
+    }
+
+    public Task MarkAsReadAsync(
+        string folderId,
+        uint uniqueId,
+        CancellationToken cancellationToken = default)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+
+        return Task.CompletedTask;
     }
 }

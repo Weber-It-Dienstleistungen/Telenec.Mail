@@ -11,4 +11,9 @@ public interface IMailDataSource
         string folderId,
         int maximumMessageCount = 20,
         CancellationToken cancellationToken = default);
+
+    Task MarkAsReadAsync(
+        string folderId,
+        uint uniqueId,
+        CancellationToken cancellationToken = default);
 }

@@ -107,6 +107,20 @@ public sealed class MainViewModel : BaseViewModel
                 value;
 
             OnPropertyChanged();
+
+            var selectedFolder =
+                _selectedFolder;
+
+            if (_isInitialized &&
+                selectedFolder is not null &&
+                value is not null &&
+                value.IsUnread)
+            {
+                _ =
+                    MarkMessageAsReadAsync(
+                        selectedFolder,
+                        value);
+            }
         }
     }
 
@@ -309,7 +323,10 @@ public sealed class MainViewModel : BaseViewModel
                             folder.UnreadCount,
 
                         hasSeparatorAfter:
-                            folder.HasSeparatorAfter));
+                            folder.HasSeparatorAfter,
+
+                        messageCount:
+                            folder.MessageCount));
             }
 
             _selectedFolder =
@@ -462,7 +479,10 @@ public sealed class MainViewModel : BaseViewModel
                             message.HighlightText,
 
                         htmlBody:
-                            message.HtmlBody));
+                            message.HtmlBody,
+
+                        uniqueId:
+                            message.UniqueId));
             }
 
             SelectedMessage =
@@ -507,6 +527,52 @@ public sealed class MainViewModel : BaseViewModel
             }
 
             loadSource.Dispose();
+        }
+    }
+
+    private async Task MarkMessageAsReadAsync(
+        MailFolderItemViewModel folder,
+        MailMessageItemViewModel message)
+    {
+        if (!message.IsUnread ||
+            message.UniqueId == 0)
+        {
+            return;
+        }
+
+        try
+        {
+            await _mailDataSource
+                .MarkAsReadAsync(
+                    folder.FolderId,
+                    message.UniqueId);
+
+            /*
+             * Es kann vorkommen, dass dieselbe Nachricht
+             * während einer noch laufenden IMAP-Operation
+             * erneut ausgewählt wird.
+             *
+             * Das Setzen von \Seen auf dem Server ist idempotent.
+             * Der lokale Zähler darf aber nur einmal sinken.
+             */
+            if (!message.IsUnread)
+            {
+                return;
+            }
+
+            message.MarkAsRead();
+
+            folder.DecrementUnreadCount();
+        }
+        catch
+        {
+            /*
+             * Schlägt ausschließlich das Setzen von \Seen fehl,
+             * bleibt die Nachricht lokal weiterhin ungelesen.
+             *
+             * Der erfolgreiche Mailabruf und die bestehende
+             * Mailansicht werden dadurch nicht zerstört.
+             */
         }
     }
 

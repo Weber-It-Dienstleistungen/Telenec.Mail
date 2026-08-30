@@ -1,7 +1,10 @@
 ﻿namespace Telenec.Mail.App.ViewModels;
 
-public sealed class MailMessageItemViewModel
+public sealed class MailMessageItemViewModel : BaseViewModel
 {
+    private bool _isUnread;
+    private bool _emphasizeSender;
+
     public MailMessageItemViewModel(
         string sender,
         string senderAddress,
@@ -19,7 +22,8 @@ public sealed class MailMessageItemViewModel
         bool emphasizeSender = false,
         string? highlightTitle = null,
         string? highlightText = null,
-        string? htmlBody = null)
+        string? htmlBody = null,
+        uint uniqueId = 0)
     {
         Sender = sender;
         SenderAddress = senderAddress;
@@ -33,11 +37,17 @@ public sealed class MailMessageItemViewModel
         Body = body;
         Closing = closing;
         Signature = signature;
-        IsUnread = isUnread;
-        EmphasizeSender = emphasizeSender;
+
+        _isUnread =
+            isUnread;
+
+        _emphasizeSender =
+            emphasizeSender;
+
         HighlightTitle = highlightTitle;
         HighlightText = highlightText;
         HtmlBody = htmlBody;
+        UniqueId = uniqueId;
     }
 
     public string Sender { get; }
@@ -67,15 +77,51 @@ public sealed class MailMessageItemViewModel
 
     public string Signature { get; }
 
-    public bool IsUnread { get; }
+    public bool IsUnread
+    {
+        get =>
+            _isUnread;
 
-    public bool EmphasizeSender { get; }
+        private set
+        {
+            if (_isUnread == value)
+            {
+                return;
+            }
+
+            _isUnread =
+                value;
+
+            OnPropertyChanged();
+        }
+    }
+
+    public bool EmphasizeSender
+    {
+        get =>
+            _emphasizeSender;
+
+        private set
+        {
+            if (_emphasizeSender == value)
+            {
+                return;
+            }
+
+            _emphasizeSender =
+                value;
+
+            OnPropertyChanged();
+        }
+    }
 
     public string? HighlightTitle { get; }
 
     public string? HighlightText { get; }
 
     public string? HtmlBody { get; }
+
+    public uint UniqueId { get; }
 
     public bool HasHtmlBody =>
         !string.IsNullOrWhiteSpace(
@@ -84,4 +130,13 @@ public sealed class MailMessageItemViewModel
     public bool HasHighlight =>
         !string.IsNullOrWhiteSpace(HighlightTitle) &&
         !string.IsNullOrWhiteSpace(HighlightText);
+
+    public void MarkAsRead()
+    {
+        IsUnread =
+            false;
+
+        EmphasizeSender =
+            false;
+    }
 }
