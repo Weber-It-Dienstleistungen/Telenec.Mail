@@ -27,6 +27,8 @@ public sealed class MainViewModel : BaseViewModel
     private bool _hasLoadError;
     private bool _isEmptyFolder;
 
+    private bool _suppressAutomaticReadMarking;
+
     private string _loadingMessage =
         "Postfach wird geladen …";
 
@@ -146,6 +148,7 @@ public sealed class MainViewModel : BaseViewModel
                 _selectedFolder;
 
             if (_isInitialized &&
+                !_suppressAutomaticReadMarking &&
                 selectedFolder is not null &&
                 value is not null &&
                 value.IsUnread)
@@ -297,6 +300,7 @@ public sealed class MainViewModel : BaseViewModel
 
         await InitializeCoreAsync(
             preferredFolderId: null,
+            preferredMessageUniqueId: null,
             cancellationToken);
     }
 
@@ -306,6 +310,9 @@ public sealed class MainViewModel : BaseViewModel
         var preferredFolderId =
             SelectedFolder?.FolderId;
 
+        uint? preferredMessageUniqueId =
+            SelectedMessage?.UniqueId;
+
         CancelCurrentFolderLoad();
 
         _isInitialized =
@@ -313,6 +320,7 @@ public sealed class MainViewModel : BaseViewModel
 
         await InitializeCoreAsync(
             preferredFolderId,
+            preferredMessageUniqueId,
             cancellationToken);
     }
 
@@ -852,6 +860,7 @@ public sealed class MainViewModel : BaseViewModel
 
     private async Task InitializeCoreAsync(
         string? preferredFolderId,
+        uint? preferredMessageUniqueId,
         CancellationToken cancellationToken)
     {
         BeginLoading(
@@ -869,8 +878,8 @@ public sealed class MainViewModel : BaseViewModel
 
         NotifySelectedFolderActionStateChanged();
 
-        SelectedMessage =
-            null;
+        SetSelectedMessageWithoutReadMarking(
+            null);
 
         try
         {
@@ -939,6 +948,7 @@ public sealed class MainViewModel : BaseViewModel
 
             await LoadFolderMessagesAsync(
                 _selectedFolder,
+                preferredMessageUniqueId,
                 cancellationToken);
         }
         catch (OperationCanceledException)
@@ -961,6 +971,7 @@ public sealed class MainViewModel : BaseViewModel
 
     private async Task LoadFolderMessagesAsync(
         MailFolderItemViewModel folder,
+        uint? preferredMessageUniqueId = null,
         CancellationToken cancellationToken = default)
     {
         var previousSource =
@@ -987,8 +998,8 @@ public sealed class MainViewModel : BaseViewModel
 
         Messages.Clear();
 
-        SelectedMessage =
-            null;
+        SetSelectedMessageWithoutReadMarking(
+            null);
 
         try
         {
@@ -1081,8 +1092,20 @@ public sealed class MainViewModel : BaseViewModel
                             message.ReplyToAddresses));
             }
 
-            SelectedMessage =
-                Messages.FirstOrDefault();
+            MailMessageItemViewModel?
+                preferredMessage = null;
+
+            if (preferredMessageUniqueId.HasValue)
+            {
+                preferredMessage =
+                    Messages.FirstOrDefault(
+                        message =>
+                            message.UniqueId ==
+                            preferredMessageUniqueId.Value);
+            }
+
+            SetSelectedMessageWithoutReadMarking(
+                preferredMessage);
 
             IsEmptyFolder =
                 Messages.Count == 0;
@@ -1119,6 +1142,24 @@ public sealed class MainViewModel : BaseViewModel
             }
 
             loadSource.Dispose();
+        }
+    }
+
+    private void SetSelectedMessageWithoutReadMarking(
+        MailMessageItemViewModel? message)
+    {
+        _suppressAutomaticReadMarking =
+            true;
+
+        try
+        {
+            SelectedMessage =
+                message;
+        }
+        finally
+        {
+            _suppressAutomaticReadMarking =
+                false;
         }
     }
 
