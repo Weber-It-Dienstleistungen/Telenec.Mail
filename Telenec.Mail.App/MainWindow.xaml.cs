@@ -1170,6 +1170,40 @@ public partial class MainWindow : Window
             message);
     }
 
+    private async void ReplySelectedMessageButton_OnClick(
+        object sender,
+        RoutedEventArgs e)
+    {
+        var message =
+            _viewModel.SelectedMessage;
+
+        if (_viewModel.IsLoading ||
+            message is null)
+        {
+            return;
+        }
+
+        await ReplyToMessageFromUiAsync(
+            message);
+    }
+
+    private async void ReplyAllSelectedMessageButton_OnClick(
+        object sender,
+        RoutedEventArgs e)
+    {
+        var message =
+            _viewModel.SelectedMessage;
+
+        if (_viewModel.IsLoading ||
+            message is null)
+        {
+            return;
+        }
+
+        await ReplyAllToMessageFromUiAsync(
+            message);
+    }
+
     private async void DeleteMenuItem_OnClick(
         object sender,
         RoutedEventArgs e)
