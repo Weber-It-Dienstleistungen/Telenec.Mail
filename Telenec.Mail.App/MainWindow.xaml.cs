@@ -444,13 +444,6 @@ public partial class MainWindow : Window
             return;
         }
 
-        /*
-         * Strg + Shift + R muss vor Strg + R geprüft werden.
-         *
-         * Ansonsten würde HasFlag(Control) auch beim
-         * Reply-All-Shortcut bereits den normalen Reply
-         * auslösen.
-         */
         if (e.Key == Key.R &&
             Keyboard.Modifiers ==
             (ModifierKeys.Control |
@@ -507,6 +500,36 @@ public partial class MainWindow : Window
                 true;
 
             await ReplyToMessageFromUiAsync(
+                message);
+
+            return;
+        }
+
+        if (e.Key == Key.F &&
+            Keyboard.Modifiers ==
+            ModifierKeys.Control)
+        {
+            if (e.IsRepeat)
+            {
+                e.Handled =
+                    true;
+
+                return;
+            }
+
+            var message =
+                _viewModel.SelectedMessage;
+
+            if (_viewModel.IsLoading ||
+                message is null)
+            {
+                return;
+            }
+
+            e.Handled =
+                true;
+
+            await ForwardMessageFromUiAsync(
                 message);
 
             return;
@@ -1170,6 +1193,21 @@ public partial class MainWindow : Window
             message);
     }
 
+    private async void ForwardMenuItem_OnClick(
+        object sender,
+        RoutedEventArgs e)
+    {
+        if (_viewModel.IsLoading ||
+            sender is not FrameworkElement menuItem ||
+            menuItem.DataContext is not MailMessageItemViewModel message)
+        {
+            return;
+        }
+
+        await ForwardMessageFromUiAsync(
+            message);
+    }
+
     private async void ReplySelectedMessageButton_OnClick(
         object sender,
         RoutedEventArgs e)
@@ -1201,6 +1239,23 @@ public partial class MainWindow : Window
         }
 
         await ReplyAllToMessageFromUiAsync(
+            message);
+    }
+
+    private async void ForwardSelectedMessageButton_OnClick(
+        object sender,
+        RoutedEventArgs e)
+    {
+        var message =
+            _viewModel.SelectedMessage;
+
+        if (_viewModel.IsLoading ||
+            message is null)
+        {
+            return;
+        }
+
+        await ForwardMessageFromUiAsync(
             message);
     }
 
@@ -1459,6 +1514,27 @@ public partial class MainWindow : Window
                 .GetRequiredService<ComposeWindow>();
 
         composeWindow.PrepareReplyAll(
+            message);
+
+        await ShowComposeWindowAsync(
+            composeWindow);
+    }
+
+    private async Task ForwardMessageFromUiAsync(
+        MailMessageItemViewModel message)
+    {
+        if (_viewModel.IsLoading ||
+            !_viewModel.Messages.Contains(
+                message))
+        {
+            return;
+        }
+
+        var composeWindow =
+            _serviceProvider
+                .GetRequiredService<ComposeWindow>();
+
+        composeWindow.PrepareForward(
             message);
 
         await ShowComposeWindowAsync(

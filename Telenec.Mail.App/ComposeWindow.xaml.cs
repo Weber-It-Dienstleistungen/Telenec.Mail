@@ -47,6 +47,17 @@ public partial class ComposeWindow : Window
                 message);
     }
 
+    public void PrepareForward(
+        MailMessageItemViewModel message)
+    {
+        ArgumentNullException.ThrowIfNull(
+            message);
+
+        _viewModel
+            .PrepareForward(
+                message);
+    }
+
     private async void ComposeWindow_OnLoaded(
         object sender,
         RoutedEventArgs e)

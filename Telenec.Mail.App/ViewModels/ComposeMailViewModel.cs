@@ -267,6 +267,56 @@ public sealed class ComposeMailViewModel : BaseViewModel
             replyAll: true);
     }
 
+    public void PrepareForward(
+        MailMessageItemViewModel message)
+    {
+        ArgumentNullException.ThrowIfNull(
+            message);
+
+        /*
+         * Weiterleiten ist ausdrücklich KEIN Reply.
+         *
+         * Deshalb darf beim späteren Versand weder
+         * In-Reply-To noch References aus der
+         * Ursprungsnachricht übernommen werden.
+         */
+        _replySourceMessage =
+            null;
+
+        _isReplyAll =
+            false;
+
+        WindowTitle =
+            "Weiterleiten";
+
+        HeaderTitle =
+            "Weiterleiten";
+
+        RecipientAddress =
+            string.Empty;
+
+        CcAddress =
+            string.Empty;
+
+        ShowCcField =
+            false;
+
+        Subject =
+            CreateForwardSubject(
+                message.Subject);
+
+        Body =
+            CreateForwardBody(
+                message);
+
+        /*
+         * Beim Weiterleiten muss der Benutzer zuerst einen
+         * neuen Empfänger bestimmen.
+         */
+        FocusBodyOnLoad =
+            false;
+    }
+
     private void PrepareReplyCore(
         MailMessageItemViewModel message,
         bool replyAll)
@@ -452,14 +502,6 @@ public sealed class ComposeMailViewModel : BaseViewModel
                 replySource.SenderAddress,
                 activeAccountAddress);
 
-        /*
-         * Bei einer empfangenen Nachricht kommt zuerst das
-         * Reply-To-Ziel bzw. der Absender in das An-Feld.
-         *
-         * Bei einer selbst gesendeten Nachricht überspringen
-         * wir diesen Schritt, weil wir sonst uns selbst als
-         * Empfänger aufnehmen würden.
-         */
         if (!senderIsOwnAccount)
         {
             var replyTargets =
@@ -480,11 +522,6 @@ public sealed class ComposeMailViewModel : BaseViewModel
             }
         }
 
-        /*
-         * Alle ursprünglichen To-Empfänger bleiben To,
-         * außer dem eigenen Konto und bereits vorhandenen
-         * Empfängern.
-         */
         foreach (var address in
                  replySource.ToAddresses)
         {
@@ -495,10 +532,6 @@ public sealed class ComposeMailViewModel : BaseViewModel
                 activeAccountAddress);
         }
 
-        /*
-         * Fallback für ältere oder ungewöhnliche Nachrichten,
-         * bei denen nur RecipientAddress vorhanden ist.
-         */
         if (toAddresses.Count == 0)
         {
             AddReplyAddress(
@@ -508,12 +541,6 @@ public sealed class ComposeMailViewModel : BaseViewModel
                 activeAccountAddress);
         }
 
-        /*
-         * Ursprüngliche Cc-Empfänger bleiben Cc.
-         *
-         * Adressen, die bereits in To gelandet sind, werden
-         * nicht noch einmal aufgenommen.
-         */
         foreach (var address in
                  replySource.CcAddresses)
         {
@@ -524,11 +551,6 @@ public sealed class ComposeMailViewModel : BaseViewModel
                 activeAccountAddress);
         }
 
-        /*
-         * Sollte nach allen Filtern noch kein To-Empfänger
-         * vorhanden sein, versuchen wir als letzten sicheren
-         * Fallback den Absender.
-         */
         if (toAddresses.Count == 0)
         {
             AddReplyAddress(
@@ -653,11 +675,45 @@ public sealed class ComposeMailViewModel : BaseViewModel
             : $"Re: {subject}";
     }
 
+    private static string CreateForwardSubject(
+        string? originalSubject)
+    {
+        var subject =
+            originalSubject?
+                .Trim()
+            ?? string.Empty;
+
+        /*
+         * Verschiedene Clients verwenden unterschiedliche
+         * Präfixe für Weiterleitungen.
+         *
+         * Wir erzeugen deshalb kein Fwd: Fwd: ...,
+         * wenn bereits ein übliches Präfix vorhanden ist.
+         */
+        if (subject.StartsWith(
+                "Fwd:",
+                StringComparison.OrdinalIgnoreCase) ||
+            subject.StartsWith(
+                "Fw:",
+                StringComparison.OrdinalIgnoreCase) ||
+            subject.StartsWith(
+                "WG:",
+                StringComparison.OrdinalIgnoreCase))
+        {
+            return subject;
+        }
+
+        return string.IsNullOrWhiteSpace(
+                subject)
+            ? "Fwd:"
+            : $"Fwd: {subject}";
+    }
+
     private static string CreateReplyBody(
         MailMessageItemViewModel message)
     {
         var senderDescription =
-            CreateReplySenderDescription(
+            CreateSenderDescription(
                 message);
 
         var originalBody =
@@ -678,7 +734,60 @@ public sealed class ComposeMailViewModel : BaseViewModel
             quotedBody;
     }
 
-    private static string CreateReplySenderDescription(
+    private static string CreateForwardBody(
+        MailMessageItemViewModel message)
+    {
+        var senderDescription =
+            CreateSenderDescription(
+                message);
+
+        var toAddresses =
+            message.ToAddresses.Count > 0
+                ? JoinAddresses(
+                    message.ToAddresses)
+                : message.RecipientAddress;
+
+        var ccAddresses =
+            JoinAddresses(
+                message.CcAddresses);
+
+        var originalBody =
+            string.IsNullOrWhiteSpace(
+                message.Body)
+                ? "(Kein darstellbarer Nachrichtentext.)"
+                : message.Body.TrimEnd();
+
+        var lines =
+            new List<string>
+            {
+                string.Empty,
+                string.Empty,
+                "-------- Weitergeleitete Nachricht --------",
+                $"Von: {senderDescription}",
+                $"Datum: {message.DisplayDateTime}",
+                $"Betreff: {message.Subject}",
+                $"An: {toAddresses}"
+            };
+
+        if (!string.IsNullOrWhiteSpace(
+                ccAddresses))
+        {
+            lines.Add(
+                $"Cc: {ccAddresses}");
+        }
+
+        lines.Add(
+            string.Empty);
+
+        lines.Add(
+            originalBody);
+
+        return string.Join(
+            Environment.NewLine,
+            lines);
+    }
+
+    private static string CreateSenderDescription(
         MailMessageItemViewModel message)
     {
         var senderName =
