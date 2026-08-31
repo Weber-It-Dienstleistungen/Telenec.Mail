@@ -1,6 +1,7 @@
 ﻿using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Web.WebView2.Core;
 using System.ComponentModel;
+using System.Diagnostics;
 using System.IO;
 using System.Text.RegularExpressions;
 using System.Windows;
@@ -495,18 +496,6 @@ public partial class MainWindow : Window
         e.Handled =
             true;
 
-        /*
-         * Die Entf-Taste bedeutet semantisch "löschen".
-         *
-         * Im Papierkorb wäre ein erneuter Aufruf des normalen
-         * Löschpfads jedoch falsch. Ein dauerhaftes Löschen ist
-         * aktuell noch nicht als eigener, abgesicherter Workflow
-         * implementiert.
-         *
-         * Deshalb wird Entf hier bewusst abgefangen.
-         * Wiederherstellen bleibt weiterhin über Toolbar und
-         * Kontextmenü verfügbar.
-         */
         if (_viewModel.IsTrashFolderSelected)
         {
             MessageBox.Show(
@@ -609,10 +598,14 @@ public partial class MainWindow : Window
                 return;
             }
 
+            var html =
+                PrepareHtmlForMailView(
+                    message.HtmlBody!);
+
             HtmlMailView
                 .CoreWebView2
                 .NavigateToString(
-                    message.HtmlBody!);
+                    html);
         }
         catch
         {
@@ -652,11 +645,10 @@ public partial class MainWindow : Window
             false;
 
         coreWebView.NewWindowRequested +=
-            (_, args) =>
-            {
-                args.Handled =
-                    true;
-            };
+            CoreWebView2_OnNewWindowRequested;
+
+        coreWebView.NavigationStarting +=
+            CoreWebView2_OnNavigationStarting;
 
         coreWebView.AddWebResourceRequestedFilter(
             "*",
@@ -664,6 +656,161 @@ public partial class MainWindow : Window
 
         coreWebView.WebResourceRequested +=
             CoreWebView2_OnWebResourceRequested;
+    }
+
+    private void CoreWebView2_OnNavigationStarting(
+        object? sender,
+        CoreWebView2NavigationStartingEventArgs e)
+    {
+        if (!IsExternalWebUri(
+                e.Uri))
+        {
+            return;
+        }
+
+        e.Cancel =
+            true;
+
+        OpenExternalWebUri(
+            e.Uri);
+    }
+
+    private void CoreWebView2_OnNewWindowRequested(
+        object? sender,
+        CoreWebView2NewWindowRequestedEventArgs e)
+    {
+        /*
+         * Ein eingebettetes zweites Browserfenster wird
+         * grundsätzlich nicht zugelassen.
+         */
+        e.Handled =
+            true;
+
+        /*
+         * Externe Weblinks werden an Windows bzw. den
+         * Standardbrowser übergeben.
+         *
+         * Interne Sprungmarken sollten diesen Handler nach
+         * der HTML-Aufbereitung nicht mehr erreichen.
+         */
+        if (IsExternalWebUri(
+                e.Uri))
+        {
+            OpenExternalWebUri(
+                e.Uri);
+        }
+    }
+
+    private static bool IsExternalWebUri(
+        string? uri)
+    {
+        if (string.IsNullOrWhiteSpace(
+                uri))
+        {
+            return false;
+        }
+
+        return
+            uri.StartsWith(
+                "http://",
+                StringComparison.OrdinalIgnoreCase) ||
+            uri.StartsWith(
+                "https://",
+                StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static void OpenExternalWebUri(
+        string uri)
+    {
+        try
+        {
+            Process.Start(
+                new ProcessStartInfo
+                {
+                    FileName =
+                        uri,
+
+                    UseShellExecute =
+                        true
+                });
+        }
+        catch
+        {
+            MessageBox.Show(
+                "Der Link konnte nicht im Standardbrowser geöffnet werden.",
+                "Telenec Mail",
+                MessageBoxButton.OK,
+                MessageBoxImage.Information);
+        }
+    }
+
+    private static string PrepareHtmlForMailView(
+        string html)
+    {
+        if (string.IsNullOrWhiteSpace(
+                html))
+        {
+            return html;
+        }
+
+        /*
+         * Manche HTML-Newsletter verwenden target="_blank"
+         * auch für reine Sprungmarken innerhalb derselben Mail.
+         *
+         * Beispiel:
+         *
+         * <a href="#welt-etf" target="_blank">
+         *
+         * target="_blank" würde WebView2 über
+         * NewWindowRequested laufen lassen.
+         *
+         * Für interne Sprungmarken entfernen wir deshalb nur
+         * dieses target-Attribut. Der eigentliche href bleibt
+         * unverändert und WebView2 kann den Sprung innerhalb
+         * des bereits geladenen Dokuments nativ ausführen.
+         *
+         * Externe Links werden nicht verändert.
+         */
+        return Regex.Replace(
+            html,
+            @"<a\b[^>]*>",
+            match =>
+            {
+                var tag =
+                    match.Value;
+
+                var hrefMatch =
+                    Regex.Match(
+                        tag,
+                        @"\bhref\s*=\s*[""'](?<href>[^""']*)[""']",
+                        RegexOptions.IgnoreCase);
+
+                if (!hrefMatch.Success)
+                {
+                    return tag;
+                }
+
+                var href =
+                    hrefMatch
+                        .Groups["href"]
+                        .Value
+                        .Trim();
+
+                if (!href.StartsWith(
+                        "#",
+                        StringComparison.Ordinal))
+                {
+                    return tag;
+                }
+
+                return Regex.Replace(
+                    tag,
+                    @"\s+target\s*=\s*[""'][^""']*[""']",
+                    string.Empty,
+                    RegexOptions.IgnoreCase);
+            },
+            RegexOptions.IgnoreCase |
+            RegexOptions.Singleline);
     }
 
     private void CoreWebView2_OnWebResourceRequested(
@@ -736,10 +883,14 @@ public partial class MainWindow : Window
         ExternalImagesNotice.Visibility =
             Visibility.Collapsed;
 
+        var html =
+            PrepareHtmlForMailView(
+                message.HtmlBody!);
+
         HtmlMailView
             .CoreWebView2
             .NavigateToString(
-                message.HtmlBody!);
+                html);
 
         await Task.CompletedTask;
     }
@@ -1031,13 +1182,6 @@ public partial class MainWindow : Window
             return;
         }
 
-        /*
-         * Wenn der Benutzer gerade den Gesendet-Ordner
-         * betrachtet, aktualisieren wir ihn direkt.
-         *
-         * In anderen Ordnern vermeiden wir einen unnötigen
-         * Komplett-Reload der aktuellen Ansicht.
-         */
         if (string.Equals(
                 _viewModel.SelectedFolder?.DisplayName,
                 "Gesendet",
