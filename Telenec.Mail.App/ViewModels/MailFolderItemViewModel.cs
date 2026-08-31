@@ -4,6 +4,7 @@ public sealed class MailFolderItemViewModel : BaseViewModel
 {
     private string _headerSubtitle;
     private int _unreadCount;
+    private int _messageCount;
 
     public MailFolderItemViewModel(
         string folderId,
@@ -13,8 +14,11 @@ public sealed class MailFolderItemViewModel : BaseViewModel
         bool hasSeparatorAfter = false,
         int messageCount = 0)
     {
-        FolderId = folderId;
-        DisplayName = displayName;
+        FolderId =
+            folderId;
+
+        DisplayName =
+            displayName;
 
         _headerSubtitle =
             headerSubtitle;
@@ -22,11 +26,11 @@ public sealed class MailFolderItemViewModel : BaseViewModel
         _unreadCount =
             unreadCount;
 
+        _messageCount =
+            messageCount;
+
         HasSeparatorAfter =
             hasSeparatorAfter;
-
-        MessageCount =
-            messageCount;
     }
 
     public string FolderId { get; }
@@ -74,12 +78,48 @@ public sealed class MailFolderItemViewModel : BaseViewModel
         }
     }
 
-    public int MessageCount { get; }
+    public int MessageCount
+    {
+        get =>
+            _messageCount;
+
+        private set
+        {
+            if (_messageCount == value)
+            {
+                return;
+            }
+
+            _messageCount =
+                value;
+
+            OnPropertyChanged();
+        }
+    }
 
     public bool HasUnreadCount =>
         UnreadCount > 0;
 
     public bool HasSeparatorAfter { get; }
+
+    public void UpdateState(
+        string headerSubtitle,
+        int unreadCount,
+        int messageCount)
+    {
+        MessageCount =
+            Math.Max(
+                messageCount,
+                0);
+
+        UnreadCount =
+            Math.Max(
+                unreadCount,
+                0);
+
+        HeaderSubtitle =
+            headerSubtitle;
+    }
 
     public void DecrementUnreadCount()
     {

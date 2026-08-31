@@ -13,6 +13,7 @@ public sealed class MainViewModel : BaseViewModel
     private readonly IMailDataSource _mailDataSource;
 
     private int _mailMoveOperationState;
+    private int _mailSynchronizationOperationState;
 
     private MailFolderItemViewModel? _selectedFolder;
     private MailMessageItemViewModel? _selectedMessage;
@@ -96,9 +97,14 @@ public sealed class MainViewModel : BaseViewModel
         Volatile.Read(
             ref _mailMoveOperationState) != 0;
 
+    private bool IsMailSynchronizationRunning =>
+        Volatile.Read(
+            ref _mailSynchronizationOperationState) != 0;
+
     public MailFolderItemViewModel? SelectedFolder
     {
-        get => _selectedFolder;
+        get =>
+            _selectedFolder;
 
         set
         {
@@ -128,7 +134,8 @@ public sealed class MainViewModel : BaseViewModel
 
     public MailMessageItemViewModel? SelectedMessage
     {
-        get => _selectedMessage;
+        get =>
+            _selectedMessage;
 
         set
         {
@@ -163,7 +170,8 @@ public sealed class MainViewModel : BaseViewModel
 
     public bool IsLoading
     {
-        get => _isLoading;
+        get =>
+            _isLoading;
 
         private set
         {
@@ -184,7 +192,8 @@ public sealed class MainViewModel : BaseViewModel
 
     public string LoadingMessage
     {
-        get => _loadingMessage;
+        get =>
+            _loadingMessage;
 
         private set
         {
@@ -202,7 +211,8 @@ public sealed class MainViewModel : BaseViewModel
 
     public bool HasLoadError
     {
-        get => _hasLoadError;
+        get =>
+            _hasLoadError;
 
         private set
         {
@@ -220,7 +230,8 @@ public sealed class MainViewModel : BaseViewModel
 
     public string LoadErrorMessage
     {
-        get => _loadErrorMessage;
+        get =>
+            _loadErrorMessage;
 
         private set
         {
@@ -238,7 +249,8 @@ public sealed class MainViewModel : BaseViewModel
 
     public bool IsEmptyFolder
     {
-        get => _isEmptyFolder;
+        get =>
+            _isEmptyFolder;
 
         private set
         {
@@ -256,7 +268,8 @@ public sealed class MainViewModel : BaseViewModel
 
     public MailConnectionState ConnectionState
     {
-        get => _connectionState;
+        get =>
+            _connectionState;
 
         private set
         {
@@ -274,7 +287,8 @@ public sealed class MainViewModel : BaseViewModel
 
     public string ConnectionStatusText
     {
-        get => _connectionStatusText;
+        get =>
+            _connectionStatusText;
 
         private set
         {
@@ -301,27 +315,148 @@ public sealed class MainViewModel : BaseViewModel
         await InitializeCoreAsync(
             preferredFolderId: null,
             preferredMessageUniqueId: null,
+            preferredMessageId: null,
             cancellationToken);
     }
 
     public async Task ReloadAsync(
         CancellationToken cancellationToken = default)
     {
-        var preferredFolderId =
-            SelectedFolder?.FolderId;
+        if (!_isInitialized)
+        {
+            var preferredFolderId =
+                SelectedFolder?.FolderId;
 
-        uint? preferredMessageUniqueId =
-            SelectedMessage?.UniqueId;
+            var preferredMessageUniqueId =
+                SelectedMessage?.UniqueId;
 
-        CancelCurrentFolderLoad();
+            var preferredMessageId =
+                SelectedMessage?.MessageId;
 
-        _isInitialized =
-            false;
+            CancelCurrentFolderLoad();
 
-        await InitializeCoreAsync(
-            preferredFolderId,
-            preferredMessageUniqueId,
+            await InitializeCoreAsync(
+                preferredFolderId,
+                preferredMessageUniqueId,
+                preferredMessageId,
+                cancellationToken);
+
+            return;
+        }
+
+        await SynchronizeCoreAsync(
+            showUserFeedback: true,
             cancellationToken);
+    }
+
+    public Task SynchronizeAsync(
+        CancellationToken cancellationToken = default)
+    {
+        return SynchronizeCoreAsync(
+            showUserFeedback: false,
+            cancellationToken);
+    }
+
+    private async Task SynchronizeCoreAsync(
+        bool showUserFeedback,
+        CancellationToken cancellationToken)
+    {
+        if (IsLoading ||
+            !TryBeginSynchronization())
+        {
+            return;
+        }
+
+        if (showUserFeedback)
+        {
+            HasLoadError =
+                false;
+
+            LoadErrorMessage =
+                string.Empty;
+
+            ConnectionState =
+                MailConnectionState.Connecting;
+
+            ConnectionStatusText =
+                "Synchronisieren …";
+        }
+
+        try
+        {
+            var serverFolders =
+                await _mailDataSource
+                    .GetFoldersAsync(
+                        cancellationToken);
+
+            cancellationToken
+                .ThrowIfCancellationRequested();
+
+            SynchronizeFolderCollection(
+                serverFolders);
+
+            if (IsLoading)
+            {
+                return;
+            }
+
+            var folderToSynchronize =
+                _selectedFolder;
+
+            if (folderToSynchronize is null)
+            {
+                SetSelectedMessageWithoutReadMarking(
+                    null);
+
+                Messages.Clear();
+
+                IsEmptyFolder =
+                    true;
+
+                SetConnected();
+
+                return;
+            }
+
+            var serverMessages =
+                await _mailDataSource
+                    .GetMessagesAsync(
+                        folderToSynchronize.FolderId,
+                        maximumMessageCount: 20,
+                        cancellationToken:
+                            cancellationToken);
+
+            cancellationToken
+                .ThrowIfCancellationRequested();
+
+            if (!ReferenceEquals(
+                    _selectedFolder,
+                    folderToSynchronize))
+            {
+                return;
+            }
+
+            SynchronizeMessageCollection(
+                serverMessages);
+
+            IsEmptyFolder =
+                Messages.Count == 0;
+
+            SetConnected();
+        }
+        catch (OperationCanceledException)
+            when (cancellationToken.IsCancellationRequested)
+        {
+        }
+        catch (Exception ex)
+        {
+            SetSynchronizationErrorState(
+                ex);
+        }
+        finally
+        {
+            EndSynchronization();
+        }
     }
 
     public async Task<bool> DownloadAttachmentAsync(
@@ -715,6 +850,24 @@ public sealed class MainViewModel : BaseViewModel
             nameof(CanUndoLastMove));
     }
 
+    private bool TryBeginSynchronization()
+    {
+        var previousState =
+            Interlocked.CompareExchange(
+                ref _mailSynchronizationOperationState,
+                1,
+                0);
+
+        return previousState == 0;
+    }
+
+    private void EndSynchronization()
+    {
+        Interlocked.Exchange(
+            ref _mailSynchronizationOperationState,
+            0);
+    }
+
     private string? GetRestoreTargetFolderId(
         MailFolderItemViewModel trashFolder,
         IReadOnlyList<uint> uniqueIds)
@@ -861,6 +1014,7 @@ public sealed class MainViewModel : BaseViewModel
     private async Task InitializeCoreAsync(
         string? preferredFolderId,
         uint? preferredMessageUniqueId,
+        string? preferredMessageId,
         CancellationToken cancellationToken)
     {
         BeginLoading(
@@ -891,24 +1045,8 @@ public sealed class MainViewModel : BaseViewModel
             foreach (var folder in folders)
             {
                 MailFolders.Add(
-                    new MailFolderItemViewModel(
-                        folderId:
-                            folder.FolderId,
-
-                        displayName:
-                            folder.DisplayName,
-
-                        headerSubtitle:
-                            folder.HeaderSubtitle,
-
-                        unreadCount:
-                            folder.UnreadCount,
-
-                        hasSeparatorAfter:
-                            folder.HasSeparatorAfter,
-
-                        messageCount:
-                            folder.MessageCount));
+                    CreateFolderViewModel(
+                        folder));
             }
 
             _selectedFolder =
@@ -949,6 +1087,7 @@ public sealed class MainViewModel : BaseViewModel
             await LoadFolderMessagesAsync(
                 _selectedFolder,
                 preferredMessageUniqueId,
+                preferredMessageId,
                 cancellationToken);
         }
         catch (OperationCanceledException)
@@ -965,13 +1104,15 @@ public sealed class MainViewModel : BaseViewModel
             IsLoading =
                 false;
 
-            SetErrorState(ex);
+            SetErrorState(
+                ex);
         }
     }
 
     private async Task LoadFolderMessagesAsync(
         MailFolderItemViewModel folder,
         uint? preferredMessageUniqueId = null,
+        string? preferredMessageId = null,
         CancellationToken cancellationToken = default)
     {
         var previousSource =
@@ -1008,88 +1149,16 @@ public sealed class MainViewModel : BaseViewModel
                     .GetMessagesAsync(
                         folder.FolderId,
                         maximumMessageCount: 20,
-                        cancellationToken: token);
+                        cancellationToken:
+                            token);
 
             token.ThrowIfCancellationRequested();
 
             foreach (var message in messages)
             {
                 Messages.Add(
-                    new MailMessageItemViewModel(
-                        sender:
-                            message.Sender,
-
-                        senderAddress:
-                            message.SenderAddress,
-
-                        recipientAddress:
-                            message.RecipientAddress,
-
-                        subject:
-                            message.Subject,
-
-                        preview:
-                            message.Preview,
-
-                        displayTime:
-                            message.DisplayTime,
-
-                        displayDateTime:
-                            message.DisplayDateTime,
-
-                        senderInitial:
-                            message.SenderInitial,
-
-                        greeting:
-                            message.Greeting,
-
-                        body:
-                            message.Body,
-
-                        closing:
-                            message.Closing,
-
-                        signature:
-                            message.Signature,
-
-                        isUnread:
-                            message.IsUnread,
-
-                        emphasizeSender:
-                            message.EmphasizeSender,
-
-                        highlightTitle:
-                            message.HighlightTitle,
-
-                        highlightText:
-                            message.HighlightText,
-
-                        htmlBody:
-                            message.HtmlBody,
-
-                        uniqueId:
-                            message.UniqueId,
-
-                        attachments:
-                            message.Attachments,
-
-                        hasSmimeSignature:
-                            message.HasSmimeSignature,
-
-                        messageId:
-                            message.MessageId,
-
-                        references:
-                            message.References,
-
-                        toAddresses:
-                            message.ToAddresses,
-
-                        ccAddresses:
-                            message.CcAddresses,
-
-                        replyToAddresses:
-                            message.ReplyToAddresses));
+                    CreateMessageViewModel(
+                        message));
             }
 
             MailMessageItemViewModel?
@@ -1100,8 +1169,10 @@ public sealed class MainViewModel : BaseViewModel
                 preferredMessage =
                     Messages.FirstOrDefault(
                         message =>
-                            message.UniqueId ==
-                            preferredMessageUniqueId.Value);
+                            IsSameMessageIdentity(
+                                message,
+                                preferredMessageUniqueId.Value,
+                                preferredMessageId));
             }
 
             SetSelectedMessageWithoutReadMarking(
@@ -1122,7 +1193,8 @@ public sealed class MainViewModel : BaseViewModel
                     _folderLoadCancellationSource,
                     loadSource))
             {
-                SetErrorState(ex);
+                SetErrorState(
+                    ex);
             }
         }
         finally
@@ -1143,6 +1215,390 @@ public sealed class MainViewModel : BaseViewModel
 
             loadSource.Dispose();
         }
+    }
+
+    private void SynchronizeFolderCollection(
+        IReadOnlyList<MailFolderData> serverFolders)
+    {
+        var selectedFolderId =
+            _selectedFolder?.FolderId;
+
+        var serverFolderIds =
+            serverFolders
+                .Select(
+                    folder =>
+                        folder.FolderId)
+                .ToHashSet(
+                    StringComparer.OrdinalIgnoreCase);
+
+        for (var index = MailFolders.Count - 1;
+             index >= 0;
+             index--)
+        {
+            if (!serverFolderIds.Contains(
+                    MailFolders[index].FolderId))
+            {
+                MailFolders.RemoveAt(
+                    index);
+            }
+        }
+
+        for (var targetIndex = 0;
+             targetIndex < serverFolders.Count;
+             targetIndex++)
+        {
+            var serverFolder =
+                serverFolders[targetIndex];
+
+            var existingFolder =
+                MailFolders.FirstOrDefault(
+                    folder =>
+                        string.Equals(
+                            folder.FolderId,
+                            serverFolder.FolderId,
+                            StringComparison.OrdinalIgnoreCase));
+
+            if (existingFolder is null)
+            {
+                existingFolder =
+                    CreateFolderViewModel(
+                        serverFolder);
+
+                MailFolders.Insert(
+                    Math.Min(
+                        targetIndex,
+                        MailFolders.Count),
+                    existingFolder);
+            }
+            else
+            {
+                existingFolder.UpdateState(
+                    serverFolder.HeaderSubtitle,
+                    serverFolder.UnreadCount,
+                    serverFolder.MessageCount);
+
+                var currentIndex =
+                    MailFolders.IndexOf(
+                        existingFolder);
+
+                if (currentIndex != targetIndex &&
+                    currentIndex >= 0 &&
+                    targetIndex < MailFolders.Count)
+                {
+                    MailFolders.Move(
+                        currentIndex,
+                        targetIndex);
+                }
+            }
+        }
+
+        var synchronizedSelectedFolder =
+            !string.IsNullOrWhiteSpace(
+                selectedFolderId)
+                ? MailFolders.FirstOrDefault(
+                    folder =>
+                        string.Equals(
+                            folder.FolderId,
+                            selectedFolderId,
+                            StringComparison.OrdinalIgnoreCase))
+                : null;
+
+        synchronizedSelectedFolder ??=
+            MailFolders.FirstOrDefault();
+
+        if (ReferenceEquals(
+                _selectedFolder,
+                synchronizedSelectedFolder))
+        {
+            return;
+        }
+
+        _selectedFolder =
+            synchronizedSelectedFolder;
+
+        OnPropertyChanged(
+            nameof(SelectedFolder));
+
+        NotifySelectedFolderActionStateChanged();
+    }
+
+    private void SynchronizeMessageCollection(
+        IReadOnlyList<MailMessageData> serverMessages)
+    {
+        var selectedMessageUniqueId =
+            _selectedMessage?.UniqueId;
+
+        var selectedMessageId =
+            _selectedMessage?.MessageId;
+
+        for (var index = Messages.Count - 1;
+             index >= 0;
+             index--)
+        {
+            var localMessage =
+                Messages[index];
+
+            var stillExists =
+                serverMessages.Any(
+                    serverMessage =>
+                        IsSameMessageIdentity(
+                            localMessage,
+                            serverMessage.UniqueId,
+                            serverMessage.MessageId));
+
+            if (!stillExists)
+            {
+                Messages.RemoveAt(
+                    index);
+            }
+        }
+
+        for (var targetIndex = 0;
+             targetIndex < serverMessages.Count;
+             targetIndex++)
+        {
+            var serverMessage =
+                serverMessages[targetIndex];
+
+            var existingMessage =
+                Messages.FirstOrDefault(
+                    message =>
+                        IsSameMessageIdentity(
+                            message,
+                            serverMessage.UniqueId,
+                            serverMessage.MessageId));
+
+            if (existingMessage is null)
+            {
+                existingMessage =
+                    CreateMessageViewModel(
+                        serverMessage);
+
+                Messages.Insert(
+                    Math.Min(
+                        targetIndex,
+                        Messages.Count),
+                    existingMessage);
+            }
+            else
+            {
+                UpdateMessageReadState(
+                    existingMessage,
+                    serverMessage);
+
+                var currentIndex =
+                    Messages.IndexOf(
+                        existingMessage);
+
+                if (currentIndex != targetIndex &&
+                    currentIndex >= 0 &&
+                    targetIndex < Messages.Count)
+                {
+                    Messages.Move(
+                        currentIndex,
+                        targetIndex);
+                }
+            }
+        }
+
+        if (!selectedMessageUniqueId.HasValue)
+        {
+            if (_selectedMessage is not null &&
+                !Messages.Contains(
+                    _selectedMessage))
+            {
+                SetSelectedMessageWithoutReadMarking(
+                    null);
+            }
+
+            return;
+        }
+
+        var synchronizedSelectedMessage =
+            Messages.FirstOrDefault(
+                message =>
+                    IsSameMessageIdentity(
+                        message,
+                        selectedMessageUniqueId.Value,
+                        selectedMessageId));
+
+        if (ReferenceEquals(
+                _selectedMessage,
+                synchronizedSelectedMessage))
+        {
+            return;
+        }
+
+        SetSelectedMessageWithoutReadMarking(
+            synchronizedSelectedMessage);
+    }
+
+    private static MailFolderItemViewModel
+        CreateFolderViewModel(
+            MailFolderData folder)
+    {
+        return new MailFolderItemViewModel(
+            folderId:
+                folder.FolderId,
+
+            displayName:
+                folder.DisplayName,
+
+            headerSubtitle:
+                folder.HeaderSubtitle,
+
+            unreadCount:
+                folder.UnreadCount,
+
+            hasSeparatorAfter:
+                folder.HasSeparatorAfter,
+
+            messageCount:
+                folder.MessageCount);
+    }
+
+    private static MailMessageItemViewModel
+        CreateMessageViewModel(
+            MailMessageData message)
+    {
+        return new MailMessageItemViewModel(
+            sender:
+                message.Sender,
+
+            senderAddress:
+                message.SenderAddress,
+
+            recipientAddress:
+                message.RecipientAddress,
+
+            subject:
+                message.Subject,
+
+            preview:
+                message.Preview,
+
+            displayTime:
+                message.DisplayTime,
+
+            displayDateTime:
+                message.DisplayDateTime,
+
+            senderInitial:
+                message.SenderInitial,
+
+            greeting:
+                message.Greeting,
+
+            body:
+                message.Body,
+
+            closing:
+                message.Closing,
+
+            signature:
+                message.Signature,
+
+            isUnread:
+                message.IsUnread,
+
+            emphasizeSender:
+                message.EmphasizeSender,
+
+            highlightTitle:
+                message.HighlightTitle,
+
+            highlightText:
+                message.HighlightText,
+
+            htmlBody:
+                message.HtmlBody,
+
+            uniqueId:
+                message.UniqueId,
+
+            attachments:
+                message.Attachments,
+
+            hasSmimeSignature:
+                message.HasSmimeSignature,
+
+            messageId:
+                message.MessageId,
+
+            references:
+                message.References,
+
+            toAddresses:
+                message.ToAddresses,
+
+            ccAddresses:
+                message.CcAddresses,
+
+            replyToAddresses:
+                message.ReplyToAddresses);
+    }
+
+    private static void UpdateMessageReadState(
+        MailMessageItemViewModel localMessage,
+        MailMessageData serverMessage)
+    {
+        if (localMessage.IsUnread ==
+            serverMessage.IsUnread)
+        {
+            return;
+        }
+
+        if (serverMessage.IsUnread)
+        {
+            localMessage.MarkAsUnread();
+        }
+        else
+        {
+            localMessage.MarkAsRead();
+        }
+    }
+
+    private static bool IsSameMessageIdentity(
+        MailMessageItemViewModel message,
+        uint uniqueId,
+        string? messageId)
+    {
+        if (message.UniqueId !=
+            uniqueId)
+        {
+            return false;
+        }
+
+        var existingMessageId =
+            NormalizeMessageId(
+                message.MessageId);
+
+        var incomingMessageId =
+            NormalizeMessageId(
+                messageId);
+
+        if (existingMessageId is null &&
+            incomingMessageId is null)
+        {
+            return true;
+        }
+
+        return string.Equals(
+            existingMessageId,
+            incomingMessageId,
+            StringComparison.Ordinal);
+    }
+
+    private static string? NormalizeMessageId(
+        string? messageId)
+    {
+        if (string.IsNullOrWhiteSpace(
+                messageId))
+        {
+            return null;
+        }
+
+        return messageId.Trim();
     }
 
     private void SetSelectedMessageWithoutReadMarking(
@@ -1238,11 +1694,35 @@ public sealed class MainViewModel : BaseViewModel
     private void SetErrorState(
         Exception exception)
     {
-        HasLoadError =
-            true;
+        SetConnectionErrorState(
+            exception,
+            showLoadError:
+                true);
+    }
 
-        IsEmptyFolder =
-            false;
+    private void SetSynchronizationErrorState(
+        Exception exception)
+    {
+        SetConnectionErrorState(
+            exception,
+            showLoadError:
+                false);
+    }
+
+    private void SetConnectionErrorState(
+        Exception exception,
+        bool showLoadError)
+    {
+        HasLoadError =
+            showLoadError;
+
+        if (showLoadError)
+        {
+            IsEmptyFolder =
+                false;
+        }
+
+        string errorMessage;
 
         switch (exception)
         {
@@ -1253,7 +1733,7 @@ public sealed class MainViewModel : BaseViewModel
                 ConnectionStatusText =
                     "Anmeldung erforderlich";
 
-                LoadErrorMessage =
+                errorMessage =
                     "Die gespeicherten Zugangsdaten wurden vom Mailserver nicht akzeptiert. " +
                     "Bitte melden Sie das Konto ab und anschließend erneut an.";
                 break;
@@ -1265,7 +1745,7 @@ public sealed class MainViewModel : BaseViewModel
                 ConnectionStatusText =
                     "Sicherheitsfehler";
 
-                LoadErrorMessage =
+                errorMessage =
                     "Die sichere Verbindung zum Mailserver konnte nicht geprüft werden. " +
                     "Aus Sicherheitsgründen wurde die Verbindung abgebrochen.";
                 break;
@@ -1278,7 +1758,7 @@ public sealed class MainViewModel : BaseViewModel
                 ConnectionStatusText =
                     "Offline";
 
-                LoadErrorMessage =
+                errorMessage =
                     "Der Mailserver ist momentan nicht erreichbar. " +
                     "Bitte prüfen Sie Ihre Internetverbindung.";
                 break;
@@ -1290,11 +1770,16 @@ public sealed class MainViewModel : BaseViewModel
                 ConnectionStatusText =
                     "Verbindungsfehler";
 
-                LoadErrorMessage =
+                errorMessage =
                     "Die E-Mail-Daten konnten momentan nicht geladen werden. " +
                     "Bitte versuchen Sie es erneut.";
                 break;
         }
+
+        LoadErrorMessage =
+            showLoadError
+                ? errorMessage
+                : string.Empty;
     }
 
     private void CancelCurrentFolderLoad()
