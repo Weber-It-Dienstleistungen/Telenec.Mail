@@ -12,6 +12,14 @@ public sealed class MainViewModel : BaseViewModel
 {
     private readonly IMailDataSource _mailDataSource;
 
+    private readonly IMailMessageStateSource
+        _mailMessageStateSource;
+
+    private readonly Dictionary<string, uint>
+        _uidValidityByFolder =
+            new(
+                StringComparer.OrdinalIgnoreCase);
+
     private int _mailMoveOperationState;
     private int _mailSynchronizationOperationState;
 
@@ -43,13 +51,20 @@ public sealed class MainViewModel : BaseViewModel
         MailConnectionState.Connecting;
 
     public MainViewModel(
-        IMailDataSource mailDataSource)
+        IMailDataSource mailDataSource,
+        IMailMessageStateSource mailMessageStateSource)
     {
         ArgumentNullException.ThrowIfNull(
             mailDataSource);
 
+        ArgumentNullException.ThrowIfNull(
+            mailMessageStateSource);
+
         _mailDataSource =
             mailDataSource;
+
+        _mailMessageStateSource =
+            mailMessageStateSource;
 
         MailFolders =
             new ObservableCollection<
@@ -418,9 +433,9 @@ public sealed class MainViewModel : BaseViewModel
                 return;
             }
 
-            var serverMessages =
-                await _mailDataSource
-                    .GetMessagesAsync(
+            var stateSnapshot =
+                await _mailMessageStateSource
+                    .GetMessageStatesAsync(
                         folderToSynchronize.FolderId,
                         maximumMessageCount: 20,
                         cancellationToken:
@@ -436,8 +451,43 @@ public sealed class MainViewModel : BaseViewModel
                 return;
             }
 
-            SynchronizeMessageCollection(
-                serverMessages);
+            var requiresFullMessageReload =
+                RequiresFullMessageReload(
+                    folderToSynchronize.FolderId,
+                    stateSnapshot);
+
+            if (requiresFullMessageReload)
+            {
+                var serverMessages =
+                    await _mailDataSource
+                        .GetMessagesAsync(
+                            folderToSynchronize.FolderId,
+                            maximumMessageCount: 20,
+                            cancellationToken:
+                                cancellationToken);
+
+                cancellationToken
+                    .ThrowIfCancellationRequested();
+
+                if (!ReferenceEquals(
+                        _selectedFolder,
+                        folderToSynchronize))
+                {
+                    return;
+                }
+
+                SynchronizeMessageCollection(
+                    serverMessages);
+            }
+            else
+            {
+                SynchronizeMessageReadStates(
+                    stateSnapshot.Messages);
+            }
+
+            _uidValidityByFolder[
+                folderToSynchronize.FolderId] =
+                    stateSnapshot.UidValidity;
 
             IsEmptyFolder =
                 Messages.Count == 0;
@@ -1024,6 +1074,8 @@ public sealed class MainViewModel : BaseViewModel
         MailFolders.Clear();
         Messages.Clear();
 
+        _uidValidityByFolder.Clear();
+
         _selectedFolder =
             null;
 
@@ -1217,6 +1269,103 @@ public sealed class MainViewModel : BaseViewModel
         }
     }
 
+    private bool RequiresFullMessageReload(
+        string folderId,
+        MailFolderMessageStateSnapshot snapshot)
+    {
+        if (!string.Equals(
+                folderId,
+                snapshot.FolderId,
+                StringComparison.OrdinalIgnoreCase))
+        {
+            return true;
+        }
+
+        if (_uidValidityByFolder.TryGetValue(
+                folderId,
+                out var previousUidValidity) &&
+            previousUidValidity !=
+                snapshot.UidValidity)
+        {
+            return true;
+        }
+
+        if (Messages.Count !=
+            snapshot.Messages.Count)
+        {
+            return true;
+        }
+
+        var statesByUniqueId =
+            snapshot
+                .Messages
+                .GroupBy(
+                    state =>
+                        state.UniqueId)
+                .ToDictionary(
+                    group =>
+                        group.Key,
+                    group =>
+                        group.First());
+
+        if (statesByUniqueId.Count !=
+            snapshot.Messages.Count)
+        {
+            return true;
+        }
+
+        foreach (var message in Messages)
+        {
+            if (!statesByUniqueId.ContainsKey(
+                    message.UniqueId))
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private void SynchronizeMessageReadStates(
+        IReadOnlyList<MailMessageStateData> states)
+    {
+        var statesByUniqueId =
+            states
+                .GroupBy(
+                    state =>
+                        state.UniqueId)
+                .ToDictionary(
+                    group =>
+                        group.Key,
+                    group =>
+                        group.First());
+
+        foreach (var message in Messages)
+        {
+            if (!statesByUniqueId.TryGetValue(
+                    message.UniqueId,
+                    out var state))
+            {
+                continue;
+            }
+
+            if (message.IsUnread ==
+                state.IsUnread)
+            {
+                continue;
+            }
+
+            if (state.IsUnread)
+            {
+                message.MarkAsUnread();
+            }
+            else
+            {
+                message.MarkAsRead();
+            }
+        }
+    }
+
     private void SynchronizeFolderCollection(
         IReadOnlyList<MailFolderData> serverFolders)
     {
@@ -1230,6 +1379,22 @@ public sealed class MainViewModel : BaseViewModel
                         folder.FolderId)
                 .ToHashSet(
                     StringComparer.OrdinalIgnoreCase);
+
+        var removedUidValidityEntries =
+            _uidValidityByFolder
+                .Keys
+                .Where(
+                    folderId =>
+                        !serverFolderIds.Contains(
+                            folderId))
+                .ToList();
+
+        foreach (var folderId in
+                 removedUidValidityEntries)
+        {
+            _uidValidityByFolder.Remove(
+                folderId);
+        }
 
         for (var index = MailFolders.Count - 1;
              index >= 0;

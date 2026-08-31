@@ -26,6 +26,10 @@ public partial class App : Application
                     ImapMailDataSource>();
 
                 services.AddSingleton<
+                    IMailMessageStateSource,
+                    ImapMailMessageStateSource>();
+
+                services.AddSingleton<
                     IMailSendService,
                     MailKitSendService>();
 
