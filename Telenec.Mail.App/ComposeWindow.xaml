@@ -1,7 +1,7 @@
 ﻿<Window x:Class="Telenec.Mail.App.ComposeWindow"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-        Title="Neue E-Mail"
+        Title="{Binding WindowTitle}"
         Width="800"
         Height="650"
         MinWidth="650"
@@ -43,7 +43,7 @@
                 <StackPanel>
 
                     <TextBlock
-                        Text="Neue E-Mail"
+                        Text="{Binding HeaderTitle}"
                         FontSize="24"
                         FontWeight="SemiBold"
                         Foreground="{StaticResource Text.Primary}" />
@@ -172,6 +172,7 @@
             <Grid>
 
                 <TextBox
+                    x:Name="BodyTextBox"
                     Text="{Binding Body,
                         UpdateSourceTrigger=PropertyChanged}"
                     IsReadOnly="{Binding IsSending}"

@@ -457,6 +457,12 @@
                                         Opened="MessageContextMenu_OnOpened">
 
                                         <MenuItem
+                                            Header="Antworten"
+                                            Click="ReplyMenuItem_OnClick" />
+
+                                        <Separator />
+
+                                        <MenuItem
                                             Header="Als ungelesen markieren"
                                             IsEnabled="{Binding CanMarkAsUnread}"
                                             Click="MarkAsUnreadMenuItem_OnClick" />
@@ -465,6 +471,7 @@
 
                                         <MenuItem
                                             Header="Löschen"
+                                            Tag="MessageAction"
                                             Click="DeleteMenuItem_OnClick" />
 
                                     </ContextMenu>

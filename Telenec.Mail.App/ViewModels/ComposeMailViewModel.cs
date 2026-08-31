@@ -9,6 +9,14 @@ public sealed class ComposeMailViewModel : BaseViewModel
     private readonly IMailSendService _mailSendService;
     private readonly IMailAccountStore _mailAccountStore;
 
+    private MailMessageItemViewModel? _replySourceMessage;
+
+    private string _windowTitle =
+        "Neue E-Mail";
+
+    private string _headerTitle =
+        "Neue E-Mail";
+
     private string _fromAddress =
         "Wird geladen …";
 
@@ -21,6 +29,7 @@ public sealed class ComposeMailViewModel : BaseViewModel
     private string _body =
         string.Empty;
 
+    private bool _focusBodyOnLoad;
     private bool _isSending;
 
     public ComposeMailViewModel(
@@ -38,6 +47,44 @@ public sealed class ComposeMailViewModel : BaseViewModel
 
         _mailAccountStore =
             mailAccountStore;
+    }
+
+    public string WindowTitle
+    {
+        get =>
+            _windowTitle;
+
+        private set
+        {
+            if (_windowTitle == value)
+            {
+                return;
+            }
+
+            _windowTitle =
+                value;
+
+            OnPropertyChanged();
+        }
+    }
+
+    public string HeaderTitle
+    {
+        get =>
+            _headerTitle;
+
+        private set
+        {
+            if (_headerTitle == value)
+            {
+                return;
+            }
+
+            _headerTitle =
+                value;
+
+            OnPropertyChanged();
+        }
     }
 
     public string FromAddress
@@ -115,6 +162,25 @@ public sealed class ComposeMailViewModel : BaseViewModel
         }
     }
 
+    public bool FocusBodyOnLoad
+    {
+        get =>
+            _focusBodyOnLoad;
+
+        private set
+        {
+            if (_focusBodyOnLoad == value)
+            {
+                return;
+            }
+
+            _focusBodyOnLoad =
+                value;
+
+            OnPropertyChanged();
+        }
+    }
+
     public bool IsSending
     {
         get => _isSending;
@@ -141,6 +207,33 @@ public sealed class ComposeMailViewModel : BaseViewModel
         !string.IsNullOrWhiteSpace(
             RecipientAddress);
 
+    public void PrepareReply(
+        MailMessageItemViewModel message)
+    {
+        ArgumentNullException.ThrowIfNull(
+            message);
+
+        _replySourceMessage =
+            message;
+
+        WindowTitle =
+            "Antworten";
+
+        HeaderTitle =
+            "Antworten";
+
+        Subject =
+            CreateReplySubject(
+                message.Subject);
+
+        Body =
+            CreateReplyBody(
+                message);
+
+        FocusBodyOnLoad =
+            true;
+    }
+
     public async Task InitializeAsync(
         CancellationToken cancellationToken = default)
     {
@@ -154,6 +247,9 @@ public sealed class ComposeMailViewModel : BaseViewModel
             FromAddress =
                 "Kein aktives Mailkonto";
 
+            ApplyReplyRecipient(
+                activeAccountAddress: null);
+
             return;
         }
 
@@ -162,12 +258,167 @@ public sealed class ComposeMailViewModel : BaseViewModel
         {
             FromAddress =
                 $"{account.DisplayName} <{account.EmailAddress}>";
+        }
+        else
+        {
+            FromAddress =
+                account.EmailAddress;
+        }
+
+        ApplyReplyRecipient(
+            account.EmailAddress);
+    }
+
+    private void ApplyReplyRecipient(
+        string? activeAccountAddress)
+    {
+        var replySource =
+            _replySourceMessage;
+
+        if (replySource is null)
+        {
+            return;
+        }
+
+        var senderAddress =
+            replySource
+                .SenderAddress
+                .Trim();
+
+        var recipientAddress =
+            replySource
+                .RecipientAddress
+                .Trim();
+
+        /*
+         * Wenn die ausgewählte Nachricht vom eigenen Konto
+         * stammt, darf "Antworten" nicht einfach wieder an
+         * die eigene Absenderadresse adressieren.
+         *
+         * In diesem Fall verwenden wir den bisherigen
+         * Empfänger der Nachricht.
+         */
+        if (!string.IsNullOrWhiteSpace(
+                activeAccountAddress) &&
+            string.Equals(
+                senderAddress,
+                activeAccountAddress.Trim(),
+                StringComparison.OrdinalIgnoreCase) &&
+            !string.IsNullOrWhiteSpace(
+                recipientAddress))
+        {
+            RecipientAddress =
+                recipientAddress;
 
             return;
         }
 
-        FromAddress =
-            account.EmailAddress;
+        RecipientAddress =
+            senderAddress;
+    }
+
+    private static string CreateReplySubject(
+        string? originalSubject)
+    {
+        var subject =
+            originalSubject?
+                .Trim()
+            ?? string.Empty;
+
+        if (subject.StartsWith(
+                "Re:",
+                StringComparison.OrdinalIgnoreCase) ||
+            subject.StartsWith(
+                "AW:",
+                StringComparison.OrdinalIgnoreCase))
+        {
+            return subject;
+        }
+
+        return string.IsNullOrWhiteSpace(
+                subject)
+            ? "Re:"
+            : $"Re: {subject}";
+    }
+
+    private static string CreateReplyBody(
+        MailMessageItemViewModel message)
+    {
+        var senderDescription =
+            CreateReplySenderDescription(
+                message);
+
+        var originalBody =
+            string.IsNullOrWhiteSpace(
+                message.Body)
+                ? "(Kein darstellbarer Nachrichtentext.)"
+                : message.Body.TrimEnd();
+
+        var quotedBody =
+            QuoteText(
+                originalBody);
+
+        return
+            Environment.NewLine +
+            Environment.NewLine +
+            $"Am {message.DisplayDateTime} schrieb {senderDescription}:" +
+            Environment.NewLine +
+            quotedBody;
+    }
+
+    private static string CreateReplySenderDescription(
+        MailMessageItemViewModel message)
+    {
+        var senderName =
+            message.Sender.Trim();
+
+        var senderAddress =
+            message.SenderAddress.Trim();
+
+        if (string.IsNullOrWhiteSpace(
+                senderAddress))
+        {
+            return string.IsNullOrWhiteSpace(
+                    senderName)
+                ? "Unbekannter Absender"
+                : senderName;
+        }
+
+        if (string.IsNullOrWhiteSpace(
+                senderName) ||
+            string.Equals(
+                senderName,
+                senderAddress,
+                StringComparison.OrdinalIgnoreCase))
+        {
+            return senderAddress;
+        }
+
+        return
+            $"{senderName} <{senderAddress}>";
+    }
+
+    private static string QuoteText(
+        string text)
+    {
+        var normalized =
+            text.Replace(
+                    "\r\n",
+                    "\n")
+                .Replace(
+                    '\r',
+                    '\n');
+
+        return string.Join(
+            Environment.NewLine,
+            normalized
+                .Split('\n')
+                .Select(
+                    line =>
+                        string.IsNullOrEmpty(
+                            line)
+                            ? ">"
+                            : $"> {line}"));
     }
 
     public async Task<MailSendResult> SendAsync(

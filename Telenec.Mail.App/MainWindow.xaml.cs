@@ -444,6 +444,36 @@ public partial class MainWindow : Window
             return;
         }
 
+        if (e.Key == Key.R &&
+            Keyboard.Modifiers.HasFlag(
+                ModifierKeys.Control))
+        {
+            if (e.IsRepeat)
+            {
+                e.Handled =
+                    true;
+
+                return;
+            }
+
+            var message =
+                _viewModel.SelectedMessage;
+
+            if (_viewModel.IsLoading ||
+                message is null)
+            {
+                return;
+            }
+
+            e.Handled =
+                true;
+
+            await ReplyToMessageFromUiAsync(
+                message);
+
+            return;
+        }
+
         if (e.Key == Key.Z &&
             Keyboard.Modifiers.HasFlag(
                 ModifierKeys.Control))
@@ -1064,8 +1094,18 @@ public partial class MainWindow : Window
             return;
         }
 
-        if (contextMenu.Items.Count < 3 ||
-            contextMenu.Items[2] is not MenuItem actionMenuItem)
+        var actionMenuItem =
+            contextMenu
+                .Items
+                .OfType<MenuItem>()
+                .FirstOrDefault(
+                    item =>
+                        string.Equals(
+                            item.Tag?.ToString(),
+                            "MessageAction",
+                            StringComparison.Ordinal));
+
+        if (actionMenuItem is null)
         {
             return;
         }
@@ -1074,6 +1114,21 @@ public partial class MainWindow : Window
             _viewModel.IsTrashFolderSelected
                 ? "Wiederherstellen"
                 : "Löschen";
+    }
+
+    private async void ReplyMenuItem_OnClick(
+        object sender,
+        RoutedEventArgs e)
+    {
+        if (_viewModel.IsLoading ||
+            sender is not FrameworkElement menuItem ||
+            menuItem.DataContext is not MailMessageItemViewModel message)
+        {
+            return;
+        }
+
+        await ReplyToMessageFromUiAsync(
+            message);
     }
 
     private async void DeleteMenuItem_OnClick(
@@ -1295,14 +1350,30 @@ public partial class MainWindow : Window
             Visibility.Visible;
     }
 
-    private async void ComposeMailButton_OnClick(
-        object sender,
-        RoutedEventArgs e)
+    private async Task ReplyToMessageFromUiAsync(
+        MailMessageItemViewModel message)
     {
+        if (_viewModel.IsLoading ||
+            !_viewModel.Messages.Contains(
+                message))
+        {
+            return;
+        }
+
         var composeWindow =
             _serviceProvider
                 .GetRequiredService<ComposeWindow>();
 
+        composeWindow.PrepareReply(
+            message);
+
+        await ShowComposeWindowAsync(
+            composeWindow);
+    }
+
+    private async Task ShowComposeWindowAsync(
+        ComposeWindow composeWindow)
+    {
         composeWindow.Owner =
             this;
 
@@ -1322,6 +1393,18 @@ public partial class MainWindow : Window
             await _viewModel
                 .ReloadAsync();
         }
+    }
+
+    private async void ComposeMailButton_OnClick(
+        object sender,
+        RoutedEventArgs e)
+    {
+        var composeWindow =
+            _serviceProvider
+                .GetRequiredService<ComposeWindow>();
+
+        await ShowComposeWindowAsync(
+            composeWindow);
     }
 
     private async void RefreshButton_OnClick(

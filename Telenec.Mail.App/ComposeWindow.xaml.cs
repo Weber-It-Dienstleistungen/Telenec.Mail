@@ -25,6 +25,17 @@ public partial class ComposeWindow : Window
             ComposeWindow_OnLoaded;
     }
 
+    public void PrepareReply(
+        MailMessageItemViewModel message)
+    {
+        ArgumentNullException.ThrowIfNull(
+            message);
+
+        _viewModel
+            .PrepareReply(
+                message);
+    }
+
     private async void ComposeWindow_OnLoaded(
         object sender,
         RoutedEventArgs e)
@@ -41,6 +52,15 @@ public partial class ComposeWindow : Window
                 "Telenec Mail",
                 MessageBoxButton.OK,
                 MessageBoxImage.Warning);
+        }
+
+        if (_viewModel.FocusBodyOnLoad)
+        {
+            BodyTextBox.Focus();
+            BodyTextBox.CaretIndex =
+                0;
+
+            return;
         }
 
         RecipientTextBox.Focus();
