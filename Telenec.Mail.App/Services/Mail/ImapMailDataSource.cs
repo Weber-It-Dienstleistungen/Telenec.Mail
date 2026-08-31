@@ -3,6 +3,7 @@ using MailKit.Net.Imap;
 using MailKit.Search;
 using MailKit.Security;
 using MimeKit;
+using System.IO;
 using System.Net;
 using System.Text.RegularExpressions;
 using Telenec.Mail.App.Models;
@@ -183,24 +184,6 @@ public sealed class ImapMailDataSource : IMailDataSource
                     MailMessageData>();
             }
 
-            /*
-             * Wichtig:
-             *
-             * Wir dürfen NICHT einfach die letzten 20
-             * IMAP-Sequenzpositionen verwenden.
-             *
-             * Ein IMAP-MOVE fügt eine wiederhergestellte
-             * Nachricht im Zielordner technisch neu ein.
-             * Dadurch erhält sie eine neue UID und eine neue
-             * Sequenzposition am Ende des Ordners.
-             *
-             * Würden wir nach Sequenzposition laden,
-             * würden alte wiederhergestellte Nachrichten
-             * fälschlich wie neue Nachrichten behandelt.
-             *
-             * Deshalb bestimmen wir zuerst die tatsächlich
-             * neuesten Nachrichten anhand ihres Mail-Datums.
-             */
             var uniqueIds =
                 await GetNewestMessageUniqueIdsAsync(
                     folder,
@@ -213,11 +196,6 @@ public sealed class ImapMailDataSource : IMailDataSource
                     MailMessageData>();
             }
 
-            /*
-             * Erst nachdem die richtigen UIDs feststehen,
-             * laden wir die für Darstellung und Inhalt
-             * benötigten Metadaten.
-             */
             var summaries =
                 await folder.FetchAsync(
                     uniqueIds,
@@ -227,15 +205,6 @@ public sealed class ImapMailDataSource : IMailDataSource
                     MessageSummaryItems.BodyStructure,
                     cancellationToken);
 
-            /*
-             * FetchAsync garantiert uns nicht, dass die
-             * Rückgabereihenfolge exakt der UID-Liste entspricht.
-             *
-             * Daher wird die endgültige sichtbare Reihenfolge
-             * nochmals explizit anhand des Mail-Datums hergestellt.
-             *
-             * Index ist ausschließlich Tie-Breaker.
-             */
             var orderedSummaries =
                 summaries
                     .OrderByDescending(
@@ -280,13 +249,6 @@ public sealed class ImapMailDataSource : IMailDataSource
             int maximumMessageCount,
             CancellationToken cancellationToken)
     {
-        /*
-         * Bevorzugter Weg:
-         *
-         * Der IMAP-Server sortiert selbst nach dem Date-Header.
-         * Dadurch müssen wir auch bei großen Postfächern nicht
-         * sämtliche Nachrichtenmetadaten herunterladen.
-         */
         try
         {
             var sortedUniqueIds =
@@ -305,15 +267,6 @@ public sealed class ImapMailDataSource : IMailDataSource
         }
         catch (NotSupportedException)
         {
-            /*
-             * Nicht jeder IMAP-Server unterstützt SORT.
-             *
-             * In diesem Fall laden wir ausschließlich leichte
-             * Metadaten aller Nachrichten und sortieren lokal.
-             *
-             * Die eigentlichen Bodies werden weiterhin nur
-             * für maximal maximumMessageCount Nachrichten geladen.
-             */
             var lightweightSummaries =
                 await folder.FetchAsync(
                     0,
@@ -340,13 +293,6 @@ public sealed class ImapMailDataSource : IMailDataSource
     private static DateTimeOffset GetMessageSortDate(
         IMessageSummary summary)
     {
-        /*
-         * Envelope.Date entspricht dem Datum, das wir auch
-         * im Client anzeigen.
-         *
-         * Nachrichten ohne brauchbaren Date-Header landen
-         * bewusst am Ende der chronologischen Darstellung.
-         */
         return summary.Envelope?.Date
             ?? DateTimeOffset.MinValue;
     }
@@ -587,14 +533,6 @@ public sealed class ImapMailDataSource : IMailDataSource
                             uniqueId))
                 .ToList();
 
-        /*
-         * MailKit liefert hier die Zuordnung:
-         *
-         * UID im Quellordner -> UID im Zielordner.
-         *
-         * Genau diese Information benötigen wir für Undo,
-         * weil IMAP-UIDs ordnerbezogen sind.
-         */
         var uniqueIdMap =
             await sourceFolder.MoveToAsync(
                 sourceUniqueIds,
@@ -919,6 +857,22 @@ public sealed class ImapMailDataSource : IMailDataSource
                 .Trim()
                 .FirstOrDefault();
 
+        /*
+         * Die Information, dass ein S/MIME-Signaturpart
+         * vorhanden ist, wird bewusst getrennt von der
+         * normalen Anhangsliste gespeichert.
+         *
+         * Das bedeutet noch NICHT, dass die Signatur
+         * kryptografisch geprüft oder gültig ist.
+         */
+        var hasSmimeSignature =
+            HasSmimeSignature(
+                summary);
+
+        var attachments =
+            CreateAttachmentData(
+                summary);
+
         return new MailMessageData(
             Sender:
                 senderName,
@@ -975,7 +929,149 @@ public sealed class ImapMailDataSource : IMailDataSource
                 bodyContent.HtmlBody,
 
             UniqueId:
-                summary.UniqueId.Id);
+                summary.UniqueId.Id,
+
+            Attachments:
+                attachments,
+
+            HasSmimeSignature:
+                hasSmimeSignature);
+    }
+
+    private static bool HasSmimeSignature(
+        IMessageSummary summary)
+    {
+        return summary
+            .Attachments
+            .Any(
+                IsSmimeSignaturePart);
+    }
+
+    private static IReadOnlyList<MailAttachmentData>
+        CreateAttachmentData(
+            IMessageSummary summary)
+    {
+        var attachments =
+            new List<MailAttachmentData>();
+
+        var attachmentNumber =
+            0;
+
+        foreach (var attachment in summary.Attachments)
+        {
+            if (IsSmimeSignaturePart(
+                    attachment))
+            {
+                continue;
+            }
+
+            attachmentNumber++;
+
+            var partSpecifier =
+                attachment.PartSpecifier;
+
+            if (string.IsNullOrWhiteSpace(
+                    partSpecifier))
+            {
+                continue;
+            }
+
+            var fileName =
+                GetSafeAttachmentFileName(
+                    attachment,
+                    attachmentNumber);
+
+            var contentType =
+                attachment.ContentType.MimeType;
+
+            if (string.IsNullOrWhiteSpace(
+                    contentType))
+            {
+                contentType =
+                    "application/octet-stream";
+            }
+
+            attachments.Add(
+                new MailAttachmentData(
+                    PartSpecifier:
+                        partSpecifier,
+
+                    FileName:
+                        fileName,
+
+                    ContentType:
+                        contentType,
+
+                    EncodedSizeBytes:
+                        attachment.Octets));
+        }
+
+        return attachments;
+    }
+
+    private static bool IsSmimeSignaturePart(
+        BodyPartBasic attachment)
+    {
+        var mimeType =
+            attachment.ContentType.MimeType;
+
+        if (string.IsNullOrWhiteSpace(
+                mimeType))
+        {
+            return false;
+        }
+
+        return
+            string.Equals(
+                mimeType,
+                "application/pkcs7-signature",
+                StringComparison.OrdinalIgnoreCase) ||
+            string.Equals(
+                mimeType,
+                "application/x-pkcs7-signature",
+                StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static string GetSafeAttachmentFileName(
+        BodyPartBasic attachment,
+        int attachmentNumber)
+    {
+        var fileName =
+            attachment.FileName?
+                .Trim();
+
+        if (string.IsNullOrWhiteSpace(
+                fileName))
+        {
+            if (string.Equals(
+                    attachment.ContentType.MimeType,
+                    "message/rfc822",
+                    StringComparison.OrdinalIgnoreCase))
+            {
+                return
+                    $"Angehängte Nachricht {attachmentNumber}.eml";
+            }
+
+            return
+                $"Anhang {attachmentNumber}";
+        }
+
+        try
+        {
+            var safeFileName =
+                Path.GetFileName(
+                    fileName);
+
+            return string.IsNullOrWhiteSpace(
+                    safeFileName)
+                ? $"Anhang {attachmentNumber}"
+                : safeFileName;
+        }
+        catch
+        {
+            return
+                $"Anhang {attachmentNumber}";
+        }
     }
 
     private static string GetDisplayName(

@@ -715,6 +715,7 @@
                     <RowDefinition Height="Auto" />
                     <RowDefinition Height="1" />
                     <RowDefinition Height="Auto" />
+                    <RowDefinition Height="Auto" />
                     <RowDefinition Height="*" />
                 </Grid.RowDefinitions>
 
@@ -723,6 +724,7 @@
                     Margin="32,26,32,22">
 
                     <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto" />
                         <RowDefinition Height="Auto" />
                         <RowDefinition Height="Auto" />
                     </Grid.RowDefinitions>
@@ -806,11 +808,71 @@
 
                     </Button>
 
-                    <Grid
+                    <!-- S/MIME STATUS -->
+
+                    <Border
                         Grid.Row="1"
                         Grid.Column="0"
                         Grid.ColumnSpan="2"
-                        Margin="0,20,0,0">
+                        Margin="0,14,0,0"
+                        Padding="12,7"
+                        HorizontalAlignment="Left"
+                        CornerRadius="5"
+                        Background="{StaticResource Status.Error}">
+
+                        <Border.Style>
+
+                            <Style TargetType="Border">
+
+                                <Setter
+                                    Property="Visibility"
+                                    Value="Collapsed" />
+
+                                <Style.Triggers>
+
+                                    <DataTrigger
+                                        Binding="{Binding SelectedMessage.HasSmimeSignature}"
+                                        Value="True">
+
+                                        <Setter
+                                            Property="Visibility"
+                                            Value="Visible" />
+
+                                    </DataTrigger>
+
+                                </Style.Triggers>
+
+                            </Style>
+
+                        </Border.Style>
+
+                        <StackPanel
+                            Orientation="Horizontal">
+
+                            <TextBlock
+                                Text="&#xE72E;"
+                                Margin="0,0,8,0"
+                                FontFamily="Segoe Fluent Icons"
+                                FontSize="15"
+                                Foreground="White"
+                                VerticalAlignment="Center" />
+
+                            <TextBlock
+                                Text="Digital signiert (S/MIME) · Signatur noch nicht geprüft"
+                                FontSize="11"
+                                FontWeight="SemiBold"
+                                Foreground="White"
+                                VerticalAlignment="Center" />
+
+                        </StackPanel>
+
+                    </Border>
+
+                    <Grid
+                        Grid.Row="2"
+                        Grid.Column="0"
+                        Grid.ColumnSpan="2"
+                        Margin="0,16,0,0">
 
                         <Grid.ColumnDefinitions>
                             <ColumnDefinition Width="44" />
@@ -931,7 +993,157 @@
 
                 </Border>
 
-                <Grid Grid.Row="3">
+                <!-- ANHÄNGE -->
+
+                <Border
+                    Grid.Row="3"
+                    Margin="20,12,20,0"
+                    Padding="14,12"
+                    CornerRadius="6"
+                    BorderBrush="{StaticResource Border.Default}"
+                    BorderThickness="1"
+                    Background="{StaticResource Surface.Background}">
+
+                    <Border.Style>
+
+                        <Style TargetType="Border">
+
+                            <Setter
+                                Property="Visibility"
+                                Value="Collapsed" />
+
+                            <Style.Triggers>
+
+                                <DataTrigger
+                                    Binding="{Binding SelectedMessage.HasAttachments}"
+                                    Value="True">
+
+                                    <Setter
+                                        Property="Visibility"
+                                        Value="Visible" />
+
+                                </DataTrigger>
+
+                            </Style.Triggers>
+
+                        </Style>
+
+                    </Border.Style>
+
+                    <StackPanel>
+
+                        <StackPanel
+                            Orientation="Horizontal">
+
+                            <TextBlock
+                                Text="&#xE723;"
+                                Margin="0,0,8,0"
+                                FontFamily="Segoe Fluent Icons"
+                                FontSize="16"
+                                Foreground="{StaticResource Brand.Primary}"
+                                VerticalAlignment="Center" />
+
+                            <TextBlock
+                                Text="{Binding SelectedMessage.AttachmentSummary}"
+                                FontSize="12"
+                                FontWeight="SemiBold"
+                                Foreground="{StaticResource Text.Primary}"
+                                VerticalAlignment="Center" />
+
+                        </StackPanel>
+
+                        <ItemsControl
+                            Margin="0,4,0,0"
+                            ItemsSource="{Binding SelectedMessage.Attachments}">
+
+                            <ItemsControl.ItemsPanel>
+
+                                <ItemsPanelTemplate>
+                                    <WrapPanel />
+                                </ItemsPanelTemplate>
+
+                            </ItemsControl.ItemsPanel>
+
+                            <ItemsControl.ItemTemplate>
+
+                                <DataTemplate>
+
+                                    <Border
+                                        Margin="0,6,8,0"
+                                        Padding="10,8"
+                                        MinWidth="180"
+                                        MaxWidth="290"
+                                        CornerRadius="5"
+                                        BorderBrush="{StaticResource Border.Default}"
+                                        BorderThickness="1"
+                                        Background="{StaticResource Surface.Card}">
+
+                                        <Grid>
+
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="Auto" />
+                                                <ColumnDefinition Width="*" />
+                                            </Grid.ColumnDefinitions>
+
+                                            <TextBlock
+                                                Grid.Column="0"
+                                                Text="&#xE8A5;"
+                                                Margin="0,0,9,0"
+                                                FontFamily="Segoe Fluent Icons"
+                                                FontSize="18"
+                                                Foreground="{StaticResource Text.Secondary}"
+                                                VerticalAlignment="Center" />
+
+                                            <StackPanel
+                                                Grid.Column="1">
+
+                                                <TextBlock
+                                                    Text="{Binding FileName}"
+                                                    FontSize="12"
+                                                    FontWeight="SemiBold"
+                                                    Foreground="{StaticResource Text.Primary}"
+                                                    TextTrimming="CharacterEllipsis"
+                                                    ToolTip="{Binding FileName}" />
+
+                                                <StackPanel
+                                                    Margin="0,3,0,0"
+                                                    Orientation="Horizontal">
+
+                                                    <TextBlock
+                                                        Text="{Binding ContentType}"
+                                                        FontSize="10"
+                                                        Foreground="{StaticResource Text.Secondary}"
+                                                        TextTrimming="CharacterEllipsis" />
+
+                                                    <TextBlock
+                                                        Text=" · "
+                                                        FontSize="10"
+                                                        Foreground="{StaticResource Text.Muted}" />
+
+                                                    <TextBlock
+                                                        Text="{Binding DisplaySize}"
+                                                        FontSize="10"
+                                                        Foreground="{StaticResource Text.Secondary}" />
+
+                                                </StackPanel>
+
+                                            </StackPanel>
+
+                                        </Grid>
+
+                                    </Border>
+
+                                </DataTemplate>
+
+                            </ItemsControl.ItemTemplate>
+
+                        </ItemsControl>
+
+                    </StackPanel>
+
+                </Border>
+
+                <Grid Grid.Row="4">
 
                     <ScrollViewer
                         x:Name="PlainTextMailView"

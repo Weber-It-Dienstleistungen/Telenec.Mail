@@ -1,4 +1,6 @@
-﻿namespace Telenec.Mail.App.ViewModels;
+﻿using Telenec.Mail.App.Models;
+
+namespace Telenec.Mail.App.ViewModels;
 
 public sealed class MailMessageItemViewModel : BaseViewModel
 {
@@ -23,20 +25,45 @@ public sealed class MailMessageItemViewModel : BaseViewModel
         string? highlightTitle = null,
         string? highlightText = null,
         string? htmlBody = null,
-        uint uniqueId = 0)
+        uint uniqueId = 0,
+        IReadOnlyList<MailAttachmentData>? attachments = null,
+        bool hasSmimeSignature = false)
     {
-        Sender = sender;
-        SenderAddress = senderAddress;
-        RecipientAddress = recipientAddress;
-        Subject = subject;
-        Preview = preview;
-        DisplayTime = displayTime;
-        DisplayDateTime = displayDateTime;
-        SenderInitial = senderInitial;
-        Greeting = greeting;
-        Body = body;
-        Closing = closing;
-        Signature = signature;
+        Sender =
+            sender;
+
+        SenderAddress =
+            senderAddress;
+
+        RecipientAddress =
+            recipientAddress;
+
+        Subject =
+            subject;
+
+        Preview =
+            preview;
+
+        DisplayTime =
+            displayTime;
+
+        DisplayDateTime =
+            displayDateTime;
+
+        SenderInitial =
+            senderInitial;
+
+        Greeting =
+            greeting;
+
+        Body =
+            body;
+
+        Closing =
+            closing;
+
+        Signature =
+            signature;
 
         _isUnread =
             isUnread;
@@ -44,10 +71,24 @@ public sealed class MailMessageItemViewModel : BaseViewModel
         _emphasizeSender =
             emphasizeSender;
 
-        HighlightTitle = highlightTitle;
-        HighlightText = highlightText;
-        HtmlBody = htmlBody;
-        UniqueId = uniqueId;
+        HighlightTitle =
+            highlightTitle;
+
+        HighlightText =
+            highlightText;
+
+        HtmlBody =
+            htmlBody;
+
+        UniqueId =
+            uniqueId;
+
+        Attachments =
+            attachments
+            ?? Array.Empty<MailAttachmentData>();
+
+        HasSmimeSignature =
+            hasSmimeSignature;
     }
 
     public string Sender { get; }
@@ -126,13 +167,53 @@ public sealed class MailMessageItemViewModel : BaseViewModel
 
     public uint UniqueId { get; }
 
+    public IReadOnlyList<MailAttachmentData>
+        Attachments
+    { get; }
+
+    /*
+     * Bedeutet ausschließlich:
+     *
+     * In der MIME-Struktur wurde ein S/MIME-Signaturpart
+     * erkannt.
+     *
+     * Es bedeutet ausdrücklich noch NICHT:
+     *
+     * - Signatur kryptografisch gültig
+     * - Zertifikat vertrauenswürdig
+     * - Zertifikat nicht abgelaufen
+     * - Absenderidentität bestätigt
+     */
+    public bool HasSmimeSignature { get; }
+
     public bool HasHtmlBody =>
         !string.IsNullOrWhiteSpace(
             HtmlBody);
 
     public bool HasHighlight =>
-        !string.IsNullOrWhiteSpace(HighlightTitle) &&
-        !string.IsNullOrWhiteSpace(HighlightText);
+        !string.IsNullOrWhiteSpace(
+            HighlightTitle) &&
+        !string.IsNullOrWhiteSpace(
+            HighlightText);
+
+    public bool HasAttachments =>
+        Attachments.Count > 0;
+
+    public int AttachmentCount =>
+        Attachments.Count;
+
+    public string AttachmentSummary =>
+        AttachmentCount switch
+        {
+            0 =>
+                string.Empty,
+
+            1 =>
+                "1 Anhang",
+
+            _ =>
+                $"{AttachmentCount} Anhänge"
+        };
 
     public bool CanMarkAsUnread =>
         !IsUnread;

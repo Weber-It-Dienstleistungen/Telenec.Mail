@@ -12,19 +12,6 @@ public sealed class MainViewModel : BaseViewModel
 {
     private readonly IMailDataSource _mailDataSource;
 
-    /*
-     * Serverseitige MOVE-Operationen dürfen nicht parallel
-     * ausgeführt werden.
-     *
-     * Hintergrund:
-     *
-     * IMAP-UIDs sind ordnerbezogen. Nach einem erfolgreichen
-     * MOVE können UIDs aus der bisherigen Ansicht bereits
-     * ungültig sein.
-     *
-     * Deshalb wird eine zweite MOVE-Operation nicht in eine
-     * Warteschlange gestellt, sondern verworfen.
-     */
     private int _mailMoveOperationState;
 
     private MailFolderItemViewModel? _selectedFolder;
@@ -528,13 +515,6 @@ public sealed class MainViewModel : BaseViewModel
             return false;
         }
 
-        /*
-         * Wichtig:
-         *
-         * Für Undo sind jetzt die Ziel-UIDs relevant,
-         * weil die ursprünglichen UIDs nach einem IMAP-MOVE
-         * im Zielordner nicht mehr gültig sind.
-         */
         var targetUniqueIds =
             operation.TargetUniqueIds;
 
@@ -550,12 +530,6 @@ public sealed class MainViewModel : BaseViewModel
 
         try
         {
-            /*
-             * Aktion exakt rückwärts:
-             *
-             * vorher: Source -> Target
-             * Undo:    Target -> Source
-             */
             await _mailDataSource
                 .MoveMessagesAsync(
                     operation.TargetFolderId,
@@ -563,12 +537,6 @@ public sealed class MainViewModel : BaseViewModel
                     targetUniqueIds,
                     cancellationToken);
 
-            /*
-             * Erst NACH erfolgreichem Server-MOVE entfernen.
-             *
-             * Schlägt Undo fehl, bleibt die Information erhalten
-             * und der Benutzer kann es erneut versuchen.
-             */
             SetLastMoveOperation(
                 null);
 
@@ -635,10 +603,6 @@ public sealed class MainViewModel : BaseViewModel
 
         try
         {
-            /*
-             * Wiederherstellung ist technisch ebenfalls nur
-             * ein normaler serverseitiger IMAP-MOVE.
-             */
             await _mailDataSource
                 .MoveMessagesAsync(
                     trashFolder.FolderId,
@@ -646,11 +610,6 @@ public sealed class MainViewModel : BaseViewModel
                     uniqueIds,
                     cancellationToken);
 
-            /*
-             * Wenn die wiederhergestellten Nachrichten zur
-             * letzten bekannten Löschaktion gehören, passen wir
-             * die verbleibende Undo-Information entsprechend an.
-             */
             RemoveRestoredMessagesFromLastMove(
                 trashFolder.FolderId,
                 uniqueIds);
@@ -668,16 +627,6 @@ public sealed class MainViewModel : BaseViewModel
 
     private bool TryBeginMailMoveOperation()
     {
-        /*
-         * CompareExchange übernimmt die Sperre atomar.
-         *
-         * Nur der Aufrufer, der den Zustand von 0 auf 1
-         * ändern konnte, darf eine MOVE-Operation ausführen.
-         *
-         * Weitere Aktionen werden bewusst nicht aufgestaut,
-         * weil deren UIDs nach Abschluss der ersten Operation
-         * bereits veraltet sein könnten.
-         */
         var previousState =
             Interlocked.CompareExchange(
                 ref _mailMoveOperationState,
@@ -697,13 +646,6 @@ public sealed class MainViewModel : BaseViewModel
 
     private void EndMailMoveOperation()
     {
-        /*
-         * Die Freigabe erfolgt ausschließlich aus finally.
-         *
-         * Dadurch bleibt die Sperre auch bei Netzwerkfehler,
-         * Timeout, Cancellation oder einer sonstigen Exception
-         * niemals dauerhaft gesetzt.
-         */
         Interlocked.Exchange(
             ref _mailMoveOperationState,
             0);
@@ -719,11 +661,6 @@ public sealed class MainViewModel : BaseViewModel
         var operation =
             _lastMoveOperation;
 
-        /*
-         * Gehören ALLE ausgewählten Nachrichten zur letzten
-         * bekannten Verschiebeaktion in diesen Papierkorb,
-         * kennen wir den tatsächlichen Ursprungsordner.
-         */
         if (operation is not null &&
             operation.CanUndo &&
             string.Equals(
@@ -758,14 +695,6 @@ public sealed class MainViewModel : BaseViewModel
             }
         }
 
-        /*
-         * IMAP speichert keinen standardisierten
-         * "ursprünglichen Ordner".
-         *
-         * Bei älteren oder durch andere Clients gelöschten
-         * Nachrichten ist der Posteingang deshalb unser
-         * sicherer Wiederherstellungs-Fallback.
-         */
         return MailFolders
             .FirstOrDefault(
                 folder =>
@@ -859,13 +788,6 @@ public sealed class MainViewModel : BaseViewModel
     private void SetLastMoveOperation(
         MailMoveResult? operation)
     {
-        /*
-         * Eine neue MOVE-Aktion ersetzt immer die vorherige.
-         *
-         * Liefert der Server keine UID-Zuordnung,
-         * darf Strg+Z nicht versehentlich eine ältere
-         * Aktion rückgängig machen.
-         */
         _lastMoveOperation =
             operation?.CanUndo == true
                 ? operation
@@ -1082,7 +1004,13 @@ public sealed class MainViewModel : BaseViewModel
                             message.HtmlBody,
 
                         uniqueId:
-                            message.UniqueId));
+                            message.UniqueId,
+
+                        attachments:
+                            message.Attachments,
+
+                        hasSmimeSignature:
+                            message.HasSmimeSignature));
             }
 
             SelectedMessage =
