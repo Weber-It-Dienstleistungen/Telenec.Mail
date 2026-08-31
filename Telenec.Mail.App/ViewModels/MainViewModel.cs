@@ -1078,7 +1078,13 @@ public sealed class MainViewModel : BaseViewModel
                             message.Attachments,
 
                         hasSmimeSignature:
-                            message.HasSmimeSignature));
+                            message.HasSmimeSignature,
+
+                        messageId:
+                            message.MessageId,
+
+                        references:
+                            message.References));
             }
 
             SelectedMessage =

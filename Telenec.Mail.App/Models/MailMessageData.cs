@@ -20,4 +20,6 @@ public sealed record MailMessageData(
     string? HtmlBody = null,
     uint UniqueId = 0,
     IReadOnlyList<MailAttachmentData>? Attachments = null,
-    bool HasSmimeSignature = false);
+    bool HasSmimeSignature = false,
+    string? MessageId = null,
+    IReadOnlyList<string>? References = null);

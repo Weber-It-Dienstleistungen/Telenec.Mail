@@ -27,7 +27,9 @@ public sealed class MailMessageItemViewModel : BaseViewModel
         string? htmlBody = null,
         uint uniqueId = 0,
         IReadOnlyList<MailAttachmentData>? attachments = null,
-        bool hasSmimeSignature = false)
+        bool hasSmimeSignature = false,
+        string? messageId = null,
+        IReadOnlyList<string>? references = null)
     {
         Sender =
             sender;
@@ -89,6 +91,13 @@ public sealed class MailMessageItemViewModel : BaseViewModel
 
         HasSmimeSignature =
             hasSmimeSignature;
+
+        MessageId =
+            messageId;
+
+        References =
+            references?.ToArray()
+            ?? Array.Empty<string>();
     }
 
     public string Sender { get; }
@@ -185,6 +194,22 @@ public sealed class MailMessageItemViewModel : BaseViewModel
      * - Absenderidentität bestätigt
      */
     public bool HasSmimeSignature { get; }
+
+    /*
+     * Globale Message-ID der ursprünglichen Nachricht.
+     *
+     * Sie ist unabhängig von der IMAP-UID und wird für
+     * RFC-konformes Reply-Threading verwendet.
+     */
+    public string? MessageId { get; }
+
+    /*
+     * Bereits vorhandene References-Kette der Nachricht.
+     *
+     * Beim Antworten wird diese Kette übernommen und um
+     * die Message-ID der aktuellen Nachricht erweitert.
+     */
+    public IReadOnlyList<string> References { get; }
 
     public bool HasHtmlBody =>
         !string.IsNullOrWhiteSpace(

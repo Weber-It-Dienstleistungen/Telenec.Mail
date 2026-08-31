@@ -105,6 +105,11 @@ public sealed class MailKitSendService :
                 request.Subject,
                 request.Body);
 
+        ApplyReplyThreading(
+            message,
+            request.ParentMessageId,
+            request.ParentReferences);
+
         /*
          * Zuerst wird tatsächlich versendet.
          *
@@ -233,6 +238,102 @@ public sealed class MailKitSendService :
         return message;
     }
 
+    private static void ApplyReplyThreading(
+        MimeMessage message,
+        string? parentMessageId,
+        IReadOnlyList<string>? parentReferences)
+    {
+        if (string.IsNullOrWhiteSpace(
+                parentMessageId))
+        {
+            return;
+        }
+
+        var normalizedParentMessageId =
+            parentMessageId.Trim();
+
+        /*
+         * Ein fehlerhaftes Message-ID-Headerfeld einer
+         * fremden Ursprungsnachricht darf den Benutzer nicht
+         * daran hindern, überhaupt eine Antwort zu senden.
+         *
+         * MimeKit validiert die Message-ID beim Setzen.
+         */
+        try
+        {
+            message.InReplyTo =
+                normalizedParentMessageId;
+        }
+        catch (ArgumentException)
+        {
+            return;
+        }
+
+        if (parentReferences is not null)
+        {
+            foreach (var reference in parentReferences)
+            {
+                if (string.IsNullOrWhiteSpace(
+                        reference))
+                {
+                    continue;
+                }
+
+                var normalizedReference =
+                    reference.Trim();
+
+                if (message.References.Any(
+                        existingReference =>
+                            string.Equals(
+                                existingReference,
+                                normalizedReference,
+                                StringComparison.Ordinal)))
+                {
+                    continue;
+                }
+
+                try
+                {
+                    message.References.Add(
+                        normalizedReference);
+                }
+                catch (ArgumentException)
+                {
+                    /*
+                     * Eine einzelne fehlerhafte Reference
+                     * zerstört nicht die restliche Kette.
+                     */
+                }
+            }
+        }
+
+        /*
+         * Die Message-ID der direkt beantworteten Nachricht
+         * bildet das letzte Element der neuen References-Kette.
+         */
+        if (!message.References.Any(
+                existingReference =>
+                    string.Equals(
+                        existingReference,
+                        normalizedParentMessageId,
+                        StringComparison.Ordinal)))
+        {
+            try
+            {
+                message.References.Add(
+                    normalizedParentMessageId);
+            }
+            catch (ArgumentException)
+            {
+                /*
+                 * InReplyTo wurde bereits erfolgreich gesetzt.
+                 * Eine kaputte References-Angabe der Fremdmail
+                 * soll den Versand nicht blockieren.
+                 */
+            }
+        }
+    }
+
     private static async Task SendViaSmtpAsync(
         string userName,
         string password,
@@ -335,6 +436,10 @@ public sealed class MailKitSendService :
              * die zuvor über SMTP verschickt wurde.
              * Dadurch bleiben Message-ID, Datum, Betreff,
              * Absender und Inhalt identisch.
+             *
+             * Bei Antworten bleiben dadurch ebenfalls
+             * In-Reply-To und References exakt identisch
+             * mit der tatsächlich versendeten Nachricht.
              */
             await sentFolder.AppendAsync(
                 message,

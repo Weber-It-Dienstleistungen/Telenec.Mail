@@ -233,7 +233,8 @@ public sealed class ImapMailDataSource : IMailDataSource
                     MessageSummaryItems.UniqueId |
                     MessageSummaryItems.Envelope |
                     MessageSummaryItems.Flags |
-                    MessageSummaryItems.BodyStructure,
+                    MessageSummaryItems.BodyStructure |
+                    MessageSummaryItems.References,
                     cancellationToken);
 
             var orderedSummaries =
@@ -1366,6 +1367,30 @@ public sealed class ImapMailDataSource : IMailDataSource
                 summary,
                 bodyContent.InlinePartSpecifiers);
 
+        var messageId =
+            summary.Envelope?
+                .MessageId?
+                .Trim();
+
+        if (string.IsNullOrWhiteSpace(
+                messageId))
+        {
+            messageId =
+                null;
+        }
+
+        var references =
+            summary.References?
+                .Where(
+                    reference =>
+                        !string.IsNullOrWhiteSpace(
+                            reference))
+                .Select(
+                    reference =>
+                        reference.Trim())
+                .ToArray()
+            ?? Array.Empty<string>();
+
         return new MailMessageData(
             Sender:
                 senderName,
@@ -1428,7 +1453,13 @@ public sealed class ImapMailDataSource : IMailDataSource
                 attachments,
 
             HasSmimeSignature:
-                hasSmimeSignature);
+                hasSmimeSignature,
+
+            MessageId:
+                messageId,
+
+            References:
+                references);
     }
 
     private static bool HasSmimeSignature(

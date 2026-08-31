@@ -451,7 +451,13 @@ public sealed class ComposeMailViewModel : BaseViewModel
                         Subject,
 
                     Body:
-                        Body);
+                        Body,
+
+                    ParentMessageId:
+                        _replySourceMessage?.MessageId,
+
+                    ParentReferences:
+                        _replySourceMessage?.References);
 
             return await _mailSendService
                 .SendAsync(
