@@ -546,15 +546,6 @@
 
                                 </DataTrigger>
 
-                                <DataTrigger
-                                    Binding="{Binding EmphasizeSender}"
-                                    Value="True">
-                                    <Setter
-                                        TargetName="SenderText"
-                                        Property="FontWeight"
-                                        Value="SemiBold" />
-                                </DataTrigger>
-
                             </DataTemplate.Triggers>
 
                         </DataTemplate>
@@ -562,142 +553,6 @@
                     </ListBox.ItemTemplate>
 
                 </ListBox>
-
-                <Border
-                    Grid.Row="2"
-                    Background="{StaticResource Surface.Card}">
-
-                    <Border.Style>
-                        <Style TargetType="Border">
-                            <Setter
-                                Property="Visibility"
-                                Value="Collapsed" />
-                            <Style.Triggers>
-                                <DataTrigger
-                                    Binding="{Binding IsLoading}"
-                                    Value="True">
-                                    <Setter
-                                        Property="Visibility"
-                                        Value="Visible" />
-                                </DataTrigger>
-                            </Style.Triggers>
-                        </Style>
-                    </Border.Style>
-
-                    <StackPanel
-                        Width="260"
-                        HorizontalAlignment="Center"
-                        VerticalAlignment="Center">
-
-                        <TextBlock
-                            Text="{Binding LoadingMessage}"
-                            Margin="0,0,0,14"
-                            FontSize="13"
-                            Foreground="{StaticResource Text.Secondary}"
-                            TextAlignment="Center"
-                            TextWrapping="Wrap" />
-
-                        <ProgressBar
-                            Height="4"
-                            IsIndeterminate="True" />
-
-                    </StackPanel>
-
-                </Border>
-
-                <Border
-                    Grid.Row="2"
-                    Background="{StaticResource Surface.Card}">
-
-                    <Border.Style>
-                        <Style TargetType="Border">
-                            <Setter
-                                Property="Visibility"
-                                Value="Collapsed" />
-                            <Style.Triggers>
-                                <DataTrigger
-                                    Binding="{Binding HasLoadError}"
-                                    Value="True">
-                                    <Setter
-                                        Property="Visibility"
-                                        Value="Visible" />
-                                </DataTrigger>
-                            </Style.Triggers>
-                        </Style>
-                    </Border.Style>
-
-                    <StackPanel
-                        Width="285"
-                        HorizontalAlignment="Center"
-                        VerticalAlignment="Center">
-
-                        <TextBlock
-                            Text="E-Mails konnten nicht geladen werden"
-                            FontSize="15"
-                            FontWeight="SemiBold"
-                            Foreground="{StaticResource Text.Primary}"
-                            TextAlignment="Center" />
-
-                        <TextBlock
-                            Text="{Binding LoadErrorMessage}"
-                            Margin="0,9,0,18"
-                            FontSize="12"
-                            Foreground="{StaticResource Text.Secondary}"
-                            TextAlignment="Center"
-                            TextWrapping="Wrap" />
-
-                        <Button
-                            Content="Erneut versuchen"
-                            HorizontalAlignment="Center"
-                            Style="{StaticResource Button.Primary}"
-                            Click="RetryButton_OnClick" />
-
-                    </StackPanel>
-
-                </Border>
-
-                <Border
-                    Grid.Row="2"
-                    Background="{StaticResource Surface.Card}">
-
-                    <Border.Style>
-                        <Style TargetType="Border">
-                            <Setter
-                                Property="Visibility"
-                                Value="Collapsed" />
-                            <Style.Triggers>
-                                <DataTrigger
-                                    Binding="{Binding IsEmptyFolder}"
-                                    Value="True">
-                                    <Setter
-                                        Property="Visibility"
-                                        Value="Visible" />
-                                </DataTrigger>
-                            </Style.Triggers>
-                        </Style>
-                    </Border.Style>
-
-                    <StackPanel
-                        HorizontalAlignment="Center"
-                        VerticalAlignment="Center">
-
-                        <TextBlock
-                            Text="Dieser Ordner ist leer."
-                            FontSize="14"
-                            FontWeight="SemiBold"
-                            Foreground="{StaticResource Text.Primary}"
-                            HorizontalAlignment="Center" />
-
-                        <TextBlock
-                            Text="Hier befinden sich momentan keine Nachrichten."
-                            Margin="0,6,0,0"
-                            FontSize="12"
-                            Foreground="{StaticResource Text.Secondary}"
-                            HorizontalAlignment="Center" />
-
-                    </StackPanel>
-
-                </Border>
 
             </Grid>
 
@@ -807,8 +662,6 @@
                             VerticalAlignment="Center" />
 
                     </Button>
-
-                    <!-- S/MIME STATUS -->
 
                     <Border
                         Grid.Row="1"
@@ -1068,21 +921,67 @@
 
                                 <DataTemplate>
 
-                                    <Border
+                                    <Button
                                         Margin="0,6,8,0"
-                                        Padding="10,8"
                                         MinWidth="180"
-                                        MaxWidth="290"
-                                        CornerRadius="5"
-                                        BorderBrush="{StaticResource Border.Default}"
-                                        BorderThickness="1"
-                                        Background="{StaticResource Surface.Card}">
+                                        MaxWidth="310"
+                                        Padding="0"
+                                        Cursor="Hand"
+                                        ToolTip="Anhang speichern unter …"
+                                        Click="SaveAttachmentButton_OnClick">
+
+                                        <Button.Template>
+
+                                            <ControlTemplate TargetType="Button">
+
+                                                <Border
+                                                    x:Name="AttachmentCard"
+                                                    Padding="10,8"
+                                                    CornerRadius="5"
+                                                    BorderBrush="{StaticResource Border.Default}"
+                                                    BorderThickness="1"
+                                                    Background="{StaticResource Surface.Card}">
+
+                                                    <ContentPresenter />
+
+                                                </Border>
+
+                                                <ControlTemplate.Triggers>
+
+                                                    <Trigger
+                                                        Property="IsMouseOver"
+                                                        Value="True">
+
+                                                        <Setter
+                                                            TargetName="AttachmentCard"
+                                                            Property="BorderBrush"
+                                                            Value="{StaticResource Brand.Primary}" />
+
+                                                    </Trigger>
+
+                                                    <Trigger
+                                                        Property="IsKeyboardFocused"
+                                                        Value="True">
+
+                                                        <Setter
+                                                            TargetName="AttachmentCard"
+                                                            Property="BorderBrush"
+                                                            Value="{StaticResource Brand.Primary}" />
+
+                                                    </Trigger>
+
+                                                </ControlTemplate.Triggers>
+
+                                            </ControlTemplate>
+
+                                        </Button.Template>
 
                                         <Grid>
 
                                             <Grid.ColumnDefinitions>
                                                 <ColumnDefinition Width="Auto" />
                                                 <ColumnDefinition Width="*" />
+                                                <ColumnDefinition Width="Auto" />
                                             </Grid.ColumnDefinitions>
 
                                             <TextBlock
@@ -1129,9 +1028,18 @@
 
                                             </StackPanel>
 
+                                            <TextBlock
+                                                Grid.Column="2"
+                                                Text="&#xE74E;"
+                                                Margin="12,0,0,0"
+                                                FontFamily="Segoe Fluent Icons"
+                                                FontSize="15"
+                                                Foreground="{StaticResource Brand.Primary}"
+                                                VerticalAlignment="Center" />
+
                                         </Grid>
 
-                                    </Border>
+                                    </Button>
 
                                 </DataTemplate>
 
@@ -1142,6 +1050,8 @@
                     </StackPanel>
 
                 </Border>
+
+                <!-- MAILINHALT -->
 
                 <Grid Grid.Row="4">
 

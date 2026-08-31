@@ -1,4 +1,5 @@
-﻿using Telenec.Mail.App.Models;
+﻿using System.IO;
+using Telenec.Mail.App.Models;
 
 namespace Telenec.Mail.App.Services.Mail;
 
@@ -10,6 +11,13 @@ public interface IMailDataSource
     Task<IReadOnlyList<MailMessageData>> GetMessagesAsync(
         string folderId,
         int maximumMessageCount = 20,
+        CancellationToken cancellationToken = default);
+
+    Task DownloadAttachmentAsync(
+        string folderId,
+        uint uniqueId,
+        string partSpecifier,
+        Stream destination,
         CancellationToken cancellationToken = default);
 
     Task MarkAsReadAsync(

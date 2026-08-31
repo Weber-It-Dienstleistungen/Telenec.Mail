@@ -1,4 +1,5 @@
 ﻿using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Win32;
 using Microsoft.Web.WebView2.Core;
 using System.ComponentModel;
 using System.Diagnostics;
@@ -8,6 +9,7 @@ using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Controls.Primitives;
 using System.Windows.Input;
+using Telenec.Mail.App.Models;
 using Telenec.Mail.App.Services.Security;
 using Telenec.Mail.App.Services.Storage;
 using Telenec.Mail.App.ViewModels;
@@ -679,20 +681,9 @@ public partial class MainWindow : Window
         object? sender,
         CoreWebView2NewWindowRequestedEventArgs e)
     {
-        /*
-         * Ein eingebettetes zweites Browserfenster wird
-         * grundsätzlich nicht zugelassen.
-         */
         e.Handled =
             true;
 
-        /*
-         * Externe Weblinks werden an Windows bzw. den
-         * Standardbrowser übergeben.
-         *
-         * Interne Sprungmarken sollten diesen Handler nach
-         * der HTML-Aufbereitung nicht mehr erreichen.
-         */
         if (IsExternalWebUri(
                 e.Uri))
         {
@@ -753,24 +744,6 @@ public partial class MainWindow : Window
             return html;
         }
 
-        /*
-         * Manche HTML-Newsletter verwenden target="_blank"
-         * auch für reine Sprungmarken innerhalb derselben Mail.
-         *
-         * Beispiel:
-         *
-         * <a href="#welt-etf" target="_blank">
-         *
-         * target="_blank" würde WebView2 über
-         * NewWindowRequested laufen lassen.
-         *
-         * Für interne Sprungmarken entfernen wir deshalb nur
-         * dieses target-Attribut. Der eigentliche href bleibt
-         * unverändert und WebView2 kann den Sprung innerhalb
-         * des bereits geladenen Dokuments nativ ausführen.
-         *
-         * Externe Links werden nicht verändert.
-         */
         return Regex.Replace(
             html,
             @"<a\b[^>]*>",
@@ -893,6 +866,165 @@ public partial class MainWindow : Window
                 html);
 
         await Task.CompletedTask;
+    }
+
+    private async void SaveAttachmentButton_OnClick(
+        object sender,
+        RoutedEventArgs e)
+    {
+        if (sender is not FrameworkElement element ||
+            element.DataContext is not MailAttachmentData attachment)
+        {
+            return;
+        }
+
+        var message =
+            _viewModel.SelectedMessage;
+
+        if (message is null)
+        {
+            return;
+        }
+
+        var saveDialog =
+            new SaveFileDialog
+            {
+                Title =
+                    "Anhang speichern unter",
+
+                FileName =
+                    attachment.FileName,
+
+                Filter =
+                    "Alle Dateien (*.*)|*.*",
+
+                AddExtension =
+                    false,
+
+                OverwritePrompt =
+                    true,
+
+                CheckPathExists =
+                    true
+            };
+
+        var dialogResult =
+            saveDialog.ShowDialog(
+                this);
+
+        if (dialogResult != true)
+        {
+            return;
+        }
+
+        var targetPath =
+            saveDialog.FileName;
+
+        var targetDirectory =
+            Path.GetDirectoryName(
+                targetPath);
+
+        if (string.IsNullOrWhiteSpace(
+                targetDirectory))
+        {
+            MessageBox.Show(
+                "Der ausgewählte Speicherort ist ungültig.",
+                "Telenec Mail",
+                MessageBoxButton.OK,
+                MessageBoxImage.Error);
+
+            return;
+        }
+
+        /*
+         * Wir schreiben niemals direkt in die endgültige
+         * Zieldatei.
+         *
+         * So kann ein Verbindungsabbruch keine vermeintlich
+         * fertige, tatsächlich aber unvollständige Datei
+         * hinterlassen.
+         */
+        var temporaryPath =
+            Path.Combine(
+                targetDirectory,
+                $".{Path.GetFileName(targetPath)}." +
+                $"{Guid.NewGuid():N}.telenec-download");
+
+        try
+        {
+            await using (
+                var destination =
+                    new FileStream(
+                        temporaryPath,
+                        FileMode.CreateNew,
+                        FileAccess.Write,
+                        FileShare.None,
+                        bufferSize: 81920,
+                        options:
+                            FileOptions.Asynchronous |
+                            FileOptions.SequentialScan))
+            {
+                var downloaded =
+                    await _viewModel
+                        .DownloadAttachmentAsync(
+                            message,
+                            attachment,
+                            destination);
+
+                if (!downloaded)
+                {
+                    MessageBox.Show(
+                        "Der Anhang konnte nicht gespeichert werden.",
+                        "Telenec Mail",
+                        MessageBoxButton.OK,
+                        MessageBoxImage.Information);
+
+                    return;
+                }
+            }
+
+            /*
+             * Erst jetzt ist der Download vollständig.
+             *
+             * Die temporäre Datei wird atomar auf den vom
+             * Benutzer gewählten Namen verschoben.
+             */
+            File.Move(
+                temporaryPath,
+                targetPath,
+                overwrite: true);
+        }
+        catch
+        {
+            MessageBox.Show(
+                "Der Anhang konnte nicht gespeichert werden.\n\n" +
+                "Bitte prüfen Sie die Verbindung und den ausgewählten Speicherort.",
+                "Telenec Mail",
+                MessageBoxButton.OK,
+                MessageBoxImage.Error);
+        }
+        finally
+        {
+            TryDeleteFile(
+                temporaryPath);
+        }
+    }
+
+    private static void TryDeleteFile(
+        string path)
+    {
+        try
+        {
+            if (File.Exists(
+                    path))
+            {
+                File.Delete(
+                    path);
+            }
+        }
+        catch
+        {
+        }
     }
 
     private async void MarkAsUnreadMenuItem_OnClick(

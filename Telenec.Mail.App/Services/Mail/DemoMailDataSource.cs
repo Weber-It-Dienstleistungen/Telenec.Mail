@@ -1,4 +1,5 @@
-﻿using Telenec.Mail.App.Models;
+﻿using System.IO;
+using Telenec.Mail.App.Models;
 
 namespace Telenec.Mail.App.Services.Mail;
 
@@ -122,6 +123,27 @@ public sealed class DemoMailDataSource : IMailDataSource
         ];
 
         return Task.FromResult(messages);
+    }
+
+    public Task DownloadAttachmentAsync(
+        string folderId,
+        uint uniqueId,
+        string partSpecifier,
+        Stream destination,
+        CancellationToken cancellationToken = default)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+
+        /*
+         * Die Demo-Datenquelle besitzt aktuell keine
+         * Attachment-Testdaten.
+         *
+         * Die Methode existiert trotzdem, damit der
+         * DemoMailDataSource den gemeinsamen Vertrag
+         * IMailDataSource vollständig erfüllt.
+         */
+        throw new NotSupportedException(
+            "Der Demo-Maildienst unterstützt derzeit keine Anhänge.");
     }
 
     public Task MarkAsReadAsync(

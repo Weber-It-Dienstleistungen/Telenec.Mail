@@ -316,6 +316,74 @@ public sealed class MainViewModel : BaseViewModel
             cancellationToken);
     }
 
+    public async Task<bool> DownloadAttachmentAsync(
+        MailMessageItemViewModel message,
+        MailAttachmentData attachment,
+        Stream destination,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(
+            message);
+
+        ArgumentNullException.ThrowIfNull(
+            attachment);
+
+        ArgumentNullException.ThrowIfNull(
+            destination);
+
+        var folder =
+            _selectedFolder;
+
+        if (folder is null ||
+            message.UniqueId == 0 ||
+            string.IsNullOrWhiteSpace(
+                attachment.PartSpecifier) ||
+            !Messages.Contains(
+                message))
+        {
+            return false;
+        }
+
+        /*
+         * Der übergebene Anhang muss tatsächlich aus der
+         * ausgewählten Nachricht stammen.
+         *
+         * Damit verhindern wir, dass veraltete UI-Referenzen
+         * versehentlich mit einer anderen Nachricht kombiniert
+         * werden.
+         */
+        var attachmentBelongsToMessage =
+            message
+                .Attachments
+                .Any(
+                    currentAttachment =>
+                        ReferenceEquals(
+                            currentAttachment,
+                            attachment));
+
+        if (!attachmentBelongsToMessage)
+        {
+            return false;
+        }
+
+        /*
+         * Ordner, UID und MIME-Part werden jetzt gemeinsam
+         * an die Datenquelle übergeben.
+         *
+         * Die Datenquelle lädt ausschließlich diesen einen
+         * Attachment-Part.
+         */
+        await _mailDataSource
+            .DownloadAttachmentAsync(
+                folder.FolderId,
+                message.UniqueId,
+                attachment.PartSpecifier,
+                destination,
+                cancellationToken);
+
+        return true;
+    }
+
     public async Task<bool> MarkMessageAsUnreadAsync(
         MailMessageItemViewModel message,
         CancellationToken cancellationToken = default)

@@ -243,6 +243,128 @@ public sealed class ImapMailDataSource : IMailDataSource
         }
     }
 
+    public async Task DownloadAttachmentAsync(
+        string folderId,
+        uint uniqueId,
+        string partSpecifier,
+        Stream destination,
+        CancellationToken cancellationToken = default)
+    {
+        ValidateFolderId(
+            folderId,
+            nameof(folderId));
+
+        if (uniqueId == 0)
+        {
+            throw new ArgumentOutOfRangeException(
+                nameof(uniqueId),
+                "Die Nachrichten-ID muss größer als 0 sein.");
+        }
+
+        if (string.IsNullOrWhiteSpace(
+                partSpecifier))
+        {
+            throw new ArgumentException(
+                "Der MIME-Part darf nicht leer sein.",
+                nameof(partSpecifier));
+        }
+
+        ArgumentNullException.ThrowIfNull(
+            destination);
+
+        if (!destination.CanWrite)
+        {
+            throw new ArgumentException(
+                "Der Zielstream ist nicht beschreibbar.",
+                nameof(destination));
+        }
+
+        using var client =
+            await CreateAuthenticatedClientAsync(
+                cancellationToken);
+
+        try
+        {
+            var folder =
+                await client.GetFolderAsync(
+                    folderId,
+                    cancellationToken);
+
+            await folder.OpenAsync(
+                FolderAccess.ReadOnly,
+                cancellationToken);
+
+            if (folder is not IImapFolder imapFolder)
+            {
+                throw new InvalidOperationException(
+                    "Der Mailordner unterstützt keinen gezielten IMAP-Anhangabruf.");
+            }
+
+            var entity =
+                await imapFolder
+                    .GetBodyPartAsync(
+                        new UniqueId(
+                            uniqueId),
+                        partSpecifier,
+                        cancellationToken);
+
+            if (entity is MimePart mimePart)
+            {
+                /*
+                 * MimeKit modelliert Content nullable.
+                 *
+                 * Ein normaler Dateianhang ohne Content ist
+                 * für unseren Downloadpfad jedoch ungültig.
+                 */
+                var content =
+                    mimePart.Content
+                    ?? throw new InvalidDataException(
+                        "Der Anhang enthält keinen Dateinhalt.");
+
+                await content
+                    .DecodeToAsync(
+                        destination,
+                        cancellationToken);
+            }
+            else if (entity is MessagePart messagePart)
+            {
+                /*
+                 * Auch MessagePart.Message ist laut API
+                 * theoretisch optional.
+                 *
+                 * Ohne enthaltene Nachricht gibt es keine
+                 * gültige .eml-Datei zu speichern.
+                 */
+                var attachedMessage =
+                    messagePart.Message
+                    ?? throw new InvalidDataException(
+                        "Die angehängte E-Mail enthält keine Nachrichtendaten.");
+
+                await attachedMessage
+                    .WriteToAsync(
+                        destination,
+                        cancellationToken);
+            }
+            else
+            {
+                await entity
+                    .WriteToAsync(
+                        destination,
+                        contentOnly: true,
+                        cancellationToken);
+            }
+
+            await destination
+                .FlushAsync(
+                    cancellationToken);
+        }
+        finally
+        {
+            await DisconnectSafelyAsync(
+                client);
+        }
+    }
+
     private static async Task<IList<UniqueId>>
         GetNewestMessageUniqueIdsAsync(
             IMailFolder folder,
@@ -857,14 +979,6 @@ public sealed class ImapMailDataSource : IMailDataSource
                 .Trim()
                 .FirstOrDefault();
 
-        /*
-         * Die Information, dass ein S/MIME-Signaturpart
-         * vorhanden ist, wird bewusst getrennt von der
-         * normalen Anhangsliste gespeichert.
-         *
-         * Das bedeutet noch NICHT, dass die Signatur
-         * kryptografisch geprüft oder gültig ist.
-         */
         var hasSmimeSignature =
             HasSmimeSignature(
                 summary);
