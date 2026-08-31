@@ -115,21 +115,26 @@ public sealed class MailKitSendService :
                 account.DisplayName);
 
         /*
-         * Die MimeMessage wird bewusst vor dem SMTP-Aufbau
-         * vollständig vorbereitet.
+         * Die komplette MIME-Nachricht wird weiterhin vor
+         * dem SMTP-Verbindungsaufbau erstellt.
          *
-         * Kann ein lokaler Anhang nicht geöffnet werden,
-         * wurde zu diesem Zeitpunkt noch keine Nachricht
-         * an den SMTP-Server übertragen.
+         * Das gilt jetzt auch für Originalanhänge einer
+         * Weiterleitung:
+         *
+         * Erst wenn alle benötigten Server-Anhänge sicher
+         * geladen und geprüft wurden, beginnt SMTP.
          */
         using var message =
-            CreateMessage(
+            await CreateMessageAsync(
                 sender,
                 recipients,
                 ccRecipients,
                 request.Subject,
                 request.Body,
-                request.Attachments);
+                request.Attachments,
+                account.EmailAddress,
+                credential.Password,
+                cancellationToken);
 
         ApplyReplyThreading(
             message,
@@ -142,13 +147,6 @@ public sealed class MailKitSendService :
             message,
             cancellationToken);
 
-        /*
-         * Dieselbe MimeMessage wird anschließend im
-         * Gesendet-Ordner abgelegt.
-         *
-         * MimeContent setzt seekbare Content-Streams bei
-         * jedem Schreibvorgang wieder an den Anfang.
-         */
         var sentCopySaved =
             await TrySaveSentCopyAsync(
                 account.EmailAddress,
@@ -287,16 +285,27 @@ public sealed class MailKitSendService :
             parsedAddress.Address);
     }
 
-    private static MimeMessage CreateMessage(
-        MailboxAddress sender,
-        IReadOnlyList<MailboxAddress> recipients,
-        IReadOnlyList<MailboxAddress> ccRecipients,
-        string? subject,
-        string? body,
-        IReadOnlyList<MailSendAttachmentData>? attachments)
+    private static async Task<MimeMessage>
+        CreateMessageAsync(
+            MailboxAddress sender,
+            IReadOnlyList<MailboxAddress> recipients,
+            IReadOnlyList<MailboxAddress> ccRecipients,
+            string? subject,
+            string? body,
+            IReadOnlyList<MailSendAttachmentData>? attachments,
+            string userName,
+            string password,
+            CancellationToken cancellationToken)
     {
         var message =
             new MimeMessage();
+
+        ImapClient? sourceImapClient =
+            null;
+
+        var verifiedSourceMessages =
+            new HashSet<string>(
+                StringComparer.OrdinalIgnoreCase);
 
         try
         {
@@ -344,6 +353,14 @@ public sealed class MailKitSendService :
                 return message;
             }
 
+            /*
+             * Wichtig:
+             *
+             * Multipart sofort an MimeMessage hängen.
+             * Falls beim dritten oder vierten Anhang etwas
+             * scheitert, räumt message.Dispose() dadurch
+             * auch bereits geöffnete lokale Dateistreams auf.
+             */
             var mixedBody =
                 new Multipart(
                     "mixed");
@@ -351,12 +368,40 @@ public sealed class MailKitSendService :
             mixedBody.Add(
                 textBody);
 
+            message.Body =
+                mixedBody;
+
             foreach (var attachment in
                      attachments)
             {
-                var attachmentPart =
-                    CreateAttachmentPart(
-                        attachment);
+                MimeEntity attachmentPart;
+
+                if (attachment.IsServerAttachment)
+                {
+                    sourceImapClient ??=
+                        await CreateAuthenticatedSourceImapClientAsync(
+                            userName,
+                            password,
+                            cancellationToken);
+
+                    attachmentPart =
+                        await CreateServerAttachmentPartAsync(
+                            sourceImapClient,
+                            attachment,
+                            verifiedSourceMessages,
+                            cancellationToken);
+                }
+                else if (attachment.IsLocalFile)
+                {
+                    attachmentPart =
+                        CreateLocalAttachmentPart(
+                            attachment);
+                }
+                else
+                {
+                    throw new MailSendAttachmentException(
+                        $"Der Anhang „{attachment.FileName}“ besitzt keine gültige Quelle.");
+                }
 
                 try
                 {
@@ -371,27 +416,27 @@ public sealed class MailKitSendService :
                 }
             }
 
-            message.Body =
-                mixedBody;
-
             return message;
         }
         catch
         {
-            /*
-             * Wichtig bei Dateianhängen:
-             *
-             * MimeMessage.Dispose() räumt bereits
-             * angehängte MimeParts und damit deren
-             * FileStreams ebenfalls auf.
-             */
             message.Dispose();
 
             throw;
         }
+        finally
+        {
+            if (sourceImapClient is not null)
+            {
+                await DisconnectImapSafelyAsync(
+                    sourceImapClient);
+
+                sourceImapClient.Dispose();
+            }
+        }
     }
 
-    private static MimePart CreateAttachmentPart(
+    private static MimePart CreateLocalAttachmentPart(
         MailSendAttachmentData attachment)
     {
         ArgumentNullException.ThrowIfNull(
@@ -447,14 +492,6 @@ public sealed class MailKitSendService :
 
         try
         {
-            /*
-             * Während des Versands darf eine andere Anwendung
-             * die Datei weiterhin lesen, aber nicht verändern
-             * oder löschen.
-             *
-             * Dadurch kann sich der Dateiinhalt nicht mitten
-             * während eines SMTP-Versands ändern.
-             */
             contentStream =
                 new FileStream(
                     fullPath,
@@ -485,14 +522,6 @@ public sealed class MailKitSendService :
                     ContentTransferEncoding =
                         ContentEncoding.Base64,
 
-                    /*
-                     * Ausschließlich der bereinigte Dateiname
-                     * landet in Content-Disposition und
-                     * Content-Type.
-                     *
-                     * Der lokale Windows-Pfad wird niemals
-                     * Teil der E-Mail.
-                     */
                     FileName =
                         safeFileName
                 };
@@ -527,6 +556,285 @@ public sealed class MailKitSendService :
         catch
         {
             contentStream?.Dispose();
+
+            throw;
+        }
+    }
+
+    private static async Task<MimeEntity>
+        CreateServerAttachmentPartAsync(
+            ImapClient client,
+            MailSendAttachmentData attachment,
+            ISet<string> verifiedSourceMessages,
+            CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(
+            client);
+
+        ArgumentNullException.ThrowIfNull(
+            attachment);
+
+        ArgumentNullException.ThrowIfNull(
+            verifiedSourceMessages);
+
+        var safeFileName =
+            GetSafeServerAttachmentFileName(
+                attachment.FileName);
+
+        MimeEntity? entity =
+            null;
+
+        try
+        {
+            var sourceFolderId =
+                attachment.SourceFolderId
+                ?? throw new MailSendAttachmentException(
+                    $"Der Originalanhang „{safeFileName}“ besitzt keinen Quellordner.");
+
+            var partSpecifier =
+                attachment.SourcePartSpecifier
+                ?? throw new MailSendAttachmentException(
+                    $"Der Originalanhang „{safeFileName}“ besitzt keinen MIME-Part.");
+
+            if (attachment.SourceUniqueId == 0)
+            {
+                throw new MailSendAttachmentException(
+                    $"Der Originalanhang „{safeFileName}“ besitzt keine gültige Server-ID.");
+            }
+
+            var folder =
+                await client.GetFolderAsync(
+                    sourceFolderId,
+                    cancellationToken);
+
+            if (folder.Attributes.HasFlag(
+                    FolderAttributes.NoSelect))
+            {
+                throw new MailSendAttachmentException(
+                    $"Der Quellordner für „{safeFileName}“ kann nicht geöffnet werden.");
+            }
+
+            if (!folder.IsOpen)
+            {
+                await folder.OpenAsync(
+                    FolderAccess.ReadOnly,
+                    cancellationToken);
+            }
+
+            await EnsureServerAttachmentSourceIsCurrentAsync(
+                folder,
+                attachment,
+                verifiedSourceMessages,
+                cancellationToken);
+
+            if (folder is not IImapFolder imapFolder)
+            {
+                throw new MailSendAttachmentException(
+                    $"Der Mailserver unterstützt den gezielten Abruf von „{safeFileName}“ nicht.");
+            }
+
+            entity =
+                await imapFolder
+                    .GetBodyPartAsync(
+                        new UniqueId(
+                            attachment.SourceUniqueId),
+                        partSpecifier,
+                        cancellationToken);
+
+            /*
+             * Der ursprüngliche MIME-Inhalt bleibt erhalten.
+             *
+             * Wir normalisieren lediglich die Darstellung als
+             * echter Anhang und setzen einen bereinigten
+             * Dateinamen.
+             */
+            entity.ContentDisposition =
+                new ContentDisposition(
+                    ContentDisposition.Attachment)
+                {
+                    FileName =
+                        safeFileName
+                };
+
+            entity.ContentType.Name =
+                safeFileName;
+
+            var result =
+                entity;
+
+            entity =
+                null;
+
+            return result;
+        }
+        catch (OperationCanceledException)
+            when (cancellationToken.IsCancellationRequested)
+        {
+            entity?.Dispose();
+
+            throw;
+        }
+        catch (MailSendAttachmentException)
+        {
+            entity?.Dispose();
+
+            throw;
+        }
+        catch (Exception ex)
+        {
+            entity?.Dispose();
+
+            throw new MailSendAttachmentException(
+                $"Der Originalanhang „{safeFileName}“ konnte nicht vom Mailserver geladen werden.",
+                ex);
+        }
+    }
+
+    private static async Task
+        EnsureServerAttachmentSourceIsCurrentAsync(
+            IMailFolder folder,
+            MailSendAttachmentData attachment,
+            ISet<string> verifiedSourceMessages,
+            CancellationToken cancellationToken)
+    {
+        var sourceMessageId =
+            string.IsNullOrWhiteSpace(
+                attachment.SourceMessageId)
+                ? string.Empty
+                : attachment.SourceMessageId.Trim();
+
+        var verificationKey =
+            $"{folder.FullName}\u001F" +
+            $"{attachment.SourceUniqueId}\u001F" +
+            sourceMessageId;
+
+        if (verifiedSourceMessages.Contains(
+                verificationKey))
+        {
+            return;
+        }
+
+        var uniqueId =
+            new UniqueId(
+                attachment.SourceUniqueId);
+
+        var summaries =
+            await folder.FetchAsync(
+                new[]
+                {
+                    uniqueId
+                },
+                MessageSummaryItems.UniqueId |
+                MessageSummaryItems.Envelope,
+                cancellationToken);
+
+        var summary =
+            summaries.FirstOrDefault();
+
+        if (summary is null ||
+            !summary.UniqueId.IsValid)
+        {
+            throw new MailSendAttachmentException(
+                $"Die Ursprungsnachricht für „{attachment.FileName}“ ist auf dem Mailserver nicht mehr vorhanden.");
+        }
+
+        /*
+         * Die IMAP-UID allein reicht langfristig nicht als
+         * globale Identität.
+         *
+         * Wenn uns die ursprüngliche Message-ID bekannt ist,
+         * vergleichen wir sie deshalb zusätzlich mit der
+         * Nachricht, die aktuell unter dieser UID liegt.
+         */
+        if (!string.IsNullOrWhiteSpace(
+                sourceMessageId))
+        {
+            var currentMessageId =
+                summary.Envelope?
+                    .MessageId?
+                    .Trim();
+
+            if (!string.Equals(
+                    currentMessageId,
+                    sourceMessageId,
+                    StringComparison.Ordinal))
+            {
+                throw new MailSendAttachmentException(
+                    $"Die Ursprungsnachricht für „{attachment.FileName}“ hat sich auf dem Mailserver verändert.\n\n" +
+                    "Der Originalanhang wird deshalb nicht automatisch weitergeleitet.");
+            }
+        }
+
+        verifiedSourceMessages.Add(
+            verificationKey);
+    }
+
+    private static string
+        GetSafeServerAttachmentFileName(
+            string? fileName)
+    {
+        try
+        {
+            var safeFileName =
+                Path.GetFileName(
+                    fileName?.Trim());
+
+            if (!string.IsNullOrWhiteSpace(
+                    safeFileName))
+            {
+                return safeFileName;
+            }
+        }
+        catch
+        {
+        }
+
+        return "Anhang";
+    }
+
+    private static async Task<ImapClient>
+        CreateAuthenticatedSourceImapClientAsync(
+            string userName,
+            string password,
+            CancellationToken cancellationToken)
+    {
+        var client =
+            new ImapClient();
+
+        try
+        {
+            using (var connectionTimeoutSource =
+                   CancellationTokenSource.CreateLinkedTokenSource(
+                       cancellationToken))
+            {
+                connectionTimeoutSource.CancelAfter(
+                    ConnectionTimeout);
+
+                await client.ConnectAsync(
+                    ImapHost,
+                    ImapPort,
+                    SecureSocketOptions.SslOnConnect,
+                    connectionTimeoutSource.Token);
+            }
+
+            using (var authenticationTimeoutSource =
+                   CancellationTokenSource.CreateLinkedTokenSource(
+                       cancellationToken))
+            {
+                authenticationTimeoutSource.CancelAfter(
+                    AuthenticationTimeout);
+
+                await client.AuthenticateAsync(
+                    userName,
+                    password,
+                    authenticationTimeoutSource.Token);
+            }
+
+            return client;
+        }
+        catch
+        {
+            client.Dispose();
 
             throw;
         }

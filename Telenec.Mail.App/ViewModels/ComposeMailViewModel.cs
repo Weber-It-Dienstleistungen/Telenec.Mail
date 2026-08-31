@@ -295,14 +295,17 @@ public sealed class ComposeMailViewModel : BaseViewModel
         }
 
         /*
-         * Erst alle ausgewählten Dateien validieren.
+         * Server-Anhänge besitzen absichtlich keinen
+         * lokalen Dateipfad.
          *
-         * Wenn beispielsweise die dritte von fünf Dateien
-         * nicht lesbar ist, sollen nicht bereits die ersten
-         * beiden unbemerkt hinzugefügt worden sein.
+         * Für die Dublettenprüfung lokaler Dateien werden
+         * deshalb ausschließlich lokale Anhänge betrachtet.
          */
         var knownPaths =
             Attachments
+                .Where(
+                    attachment =>
+                        attachment.IsLocalFile)
                 .Select(
                     attachment =>
                         attachment.FilePath)
@@ -342,6 +345,97 @@ public sealed class ComposeMailViewModel : BaseViewModel
 
         foreach (var attachment in
                  newAttachments)
+        {
+            Attachments.Add(
+                attachment);
+        }
+
+        NotifyAttachmentStateChanged();
+    }
+
+    public void AddForwardedAttachments(
+        MailMessageItemViewModel message,
+        string sourceFolderId)
+    {
+        ArgumentNullException.ThrowIfNull(
+            message);
+
+        if (IsSending ||
+            message.Attachments.Count == 0)
+        {
+            return;
+        }
+
+        if (string.IsNullOrWhiteSpace(
+                sourceFolderId))
+        {
+            throw new InvalidOperationException(
+                "Der Quellordner der weitergeleiteten Nachricht konnte nicht ermittelt werden.");
+        }
+
+        if (message.UniqueId == 0)
+        {
+            throw new InvalidOperationException(
+                "Die Server-ID der weitergeleiteten Nachricht ist ungültig.");
+        }
+
+        /*
+         * Erst die komplette Liste validieren und erzeugen.
+         *
+         * Damit entsteht auch hier kein halbfertiger Zustand,
+         * wenn ein einzelner MIME-Part unerwartet ungültig
+         * sein sollte.
+         */
+        var forwardedAttachments =
+            new List<
+                MailSendAttachmentData>();
+
+        foreach (var attachment in
+                 message.Attachments)
+        {
+            if (string.IsNullOrWhiteSpace(
+                    attachment.PartSpecifier))
+            {
+                throw new InvalidOperationException(
+                    "Ein Originalanhang besitzt keinen gültigen MIME-Part.");
+            }
+
+            if (string.IsNullOrWhiteSpace(
+                    attachment.FileName))
+            {
+                throw new InvalidOperationException(
+                    "Ein Originalanhang besitzt keinen gültigen Dateinamen.");
+            }
+
+            forwardedAttachments.Add(
+                new MailSendAttachmentData(
+                    FilePath:
+                        string.Empty,
+
+                    FileName:
+                        attachment.FileName,
+
+                    SizeBytes:
+                        attachment.EncodedSizeBytes,
+
+                    SourceFolderId:
+                        sourceFolderId.Trim(),
+
+                    SourceUniqueId:
+                        message.UniqueId,
+
+                    SourcePartSpecifier:
+                        attachment.PartSpecifier,
+
+                    SourceMessageId:
+                        string.IsNullOrWhiteSpace(
+                            message.MessageId)
+                            ? null
+                            : message.MessageId.Trim()));
+        }
+
+        foreach (var attachment in
+                 forwardedAttachments)
         {
             Attachments.Add(
                 attachment);

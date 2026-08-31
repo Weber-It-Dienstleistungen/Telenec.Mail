@@ -3,8 +3,25 @@
 public sealed record MailSendAttachmentData(
     string FilePath,
     string FileName,
-    long SizeBytes)
+    long SizeBytes,
+    string? SourceFolderId = null,
+    uint SourceUniqueId = 0,
+    string? SourcePartSpecifier = null,
+    string? SourceMessageId = null)
 {
+    public bool IsLocalFile =>
+        !string.IsNullOrWhiteSpace(
+            FilePath);
+
+    public bool IsServerAttachment =>
+        string.IsNullOrWhiteSpace(
+            FilePath) &&
+        !string.IsNullOrWhiteSpace(
+            SourceFolderId) &&
+        SourceUniqueId > 0 &&
+        !string.IsNullOrWhiteSpace(
+            SourcePartSpecifier);
+
     public string DisplaySize =>
         FormatFileSize(
             SizeBytes);

@@ -13,6 +13,9 @@ public partial class ComposeWindow : Window
 {
     private readonly ComposeMailViewModel _viewModel;
 
+    private MailMessageItemViewModel?
+        _forwardSourceMessage;
+
     public ComposeWindow(
         ComposeMailViewModel viewModel)
     {
@@ -56,6 +59,9 @@ public partial class ComposeWindow : Window
         ArgumentNullException.ThrowIfNull(
             message);
 
+        _forwardSourceMessage =
+            message;
+
         _viewModel
             .PrepareForward(
                 message);
@@ -65,6 +71,11 @@ public partial class ComposeWindow : Window
         object sender,
         RoutedEventArgs e)
     {
+        if (!TryPrepareForwardAttachments())
+        {
+            return;
+        }
+
         try
         {
             await _viewModel
@@ -90,6 +101,71 @@ public partial class ComposeWindow : Window
         }
 
         RecipientTextBox.Focus();
+    }
+
+    private bool TryPrepareForwardAttachments()
+    {
+        var sourceMessage =
+            _forwardSourceMessage;
+
+        _forwardSourceMessage =
+            null;
+
+        if (sourceMessage is null ||
+            !sourceMessage.HasAttachments)
+        {
+            return true;
+        }
+
+        /*
+         * MainWindow setzt den Owner unmittelbar vor
+         * ShowDialog().
+         *
+         * Dadurch können wir hier den aktuell ausgewählten
+         * IMAP-Ordner ermitteln, ohne MainWindow oder den
+         * allgemeinen Forward-Aufruf verändern zu müssen.
+         */
+        if (Owner?.DataContext is not MainViewModel mainViewModel ||
+            mainViewModel.SelectedFolder is null ||
+            string.IsNullOrWhiteSpace(
+                mainViewModel.SelectedFolder.FolderId))
+        {
+            MessageBox.Show(
+                "Die Originalanhänge konnten nicht eindeutig ihrer Servernachricht zugeordnet werden.\n\n" +
+                "Die Weiterleitung wurde deshalb aus Sicherheitsgründen abgebrochen.",
+                "Weiterleiten nicht möglich",
+                MessageBoxButton.OK,
+                MessageBoxImage.Warning);
+
+            Close();
+
+            return false;
+        }
+
+        try
+        {
+            _viewModel
+                .AddForwardedAttachments(
+                    sourceMessage,
+                    mainViewModel
+                        .SelectedFolder
+                        .FolderId);
+
+            return true;
+        }
+        catch
+        {
+            MessageBox.Show(
+                "Die Originalanhänge konnten nicht für die Weiterleitung vorbereitet werden.\n\n" +
+                "Die Weiterleitung wurde nicht geöffnet, damit kein Anhang unbemerkt fehlt.",
+                "Weiterleiten nicht möglich",
+                MessageBoxButton.OK,
+                MessageBoxImage.Warning);
+
+            Close();
+
+            return false;
+        }
     }
 
     private void AddAttachmentButton_OnClick(
@@ -203,7 +279,7 @@ public partial class ComposeWindow : Window
             MessageBox.Show(
                 ex.Message +
                 "\n\nDie E-Mail wurde nicht versendet.",
-                "Anhang konnte nicht gelesen werden",
+                "Anhang konnte nicht vorbereitet werden",
                 MessageBoxButton.OK,
                 MessageBoxImage.Warning);
         }
