@@ -2,6 +2,7 @@
 using System.Collections.ObjectModel;
 using System.IO;
 using System.Net.Sockets;
+using System.Threading;
 using Telenec.Mail.App.Models;
 using Telenec.Mail.App.Services.Mail;
 
@@ -10,6 +11,21 @@ namespace Telenec.Mail.App.ViewModels;
 public sealed class MainViewModel : BaseViewModel
 {
     private readonly IMailDataSource _mailDataSource;
+
+    /*
+     * Serverseitige MOVE-Operationen dürfen nicht parallel
+     * ausgeführt werden.
+     *
+     * Hintergrund:
+     *
+     * IMAP-UIDs sind ordnerbezogen. Nach einem erfolgreichen
+     * MOVE können UIDs aus der bisherigen Ansicht bereits
+     * ungültig sein.
+     *
+     * Deshalb wird eine zweite MOVE-Operation nicht in eine
+     * Warteschlange gestellt, sondern verworfen.
+     */
+    private int _mailMoveOperationState;
 
     private MailFolderItemViewModel? _selectedFolder;
     private MailMessageItemViewModel? _selectedMessage;
@@ -67,7 +83,8 @@ public sealed class MainViewModel : BaseViewModel
 
     public bool CanUndoLastMove =>
         _lastMoveOperation?.CanUndo == true &&
-        !IsLoading;
+        !IsLoading &&
+        !IsMailMoveOperationRunning;
 
     public bool IsTrashFolderSelected =>
         _selectedFolder is not null &&
@@ -85,6 +102,10 @@ public sealed class MainViewModel : BaseViewModel
         IsTrashFolderSelected
             ? "\uE72B"
             : "\uE74D";
+
+    private bool IsMailMoveOperationRunning =>
+        Volatile.Read(
+            ref _mailMoveOperationState) != 0;
 
     public MailFolderItemViewModel? SelectedFolder
     {
@@ -390,20 +411,32 @@ public sealed class MainViewModel : BaseViewModel
                         message.UniqueId)
                 .ToList();
 
-        var moveResult =
-            await _mailDataSource
-                .MoveToTrashAsync(
-                    folder.FolderId,
-                    uniqueIds,
-                    cancellationToken);
+        if (!TryBeginMailMoveOperation())
+        {
+            return false;
+        }
 
-        SetLastMoveOperation(
-            moveResult);
+        try
+        {
+            var moveResult =
+                await _mailDataSource
+                    .MoveToTrashAsync(
+                        folder.FolderId,
+                        uniqueIds,
+                        cancellationToken);
 
-        await ReloadAsync(
-            cancellationToken);
+            SetLastMoveOperation(
+                moveResult);
 
-        return true;
+            await ReloadAsync(
+                cancellationToken);
+
+            return true;
+        }
+        finally
+        {
+            EndMailMoveOperation();
+        }
     }
 
     public async Task<bool> MoveMessagesAsync(
@@ -453,21 +486,33 @@ public sealed class MainViewModel : BaseViewModel
                         message.UniqueId)
                 .ToList();
 
-        var moveResult =
-            await _mailDataSource
-                .MoveMessagesAsync(
-                    sourceFolder.FolderId,
-                    targetFolder.FolderId,
-                    uniqueIds,
-                    cancellationToken);
+        if (!TryBeginMailMoveOperation())
+        {
+            return false;
+        }
 
-        SetLastMoveOperation(
-            moveResult);
+        try
+        {
+            var moveResult =
+                await _mailDataSource
+                    .MoveMessagesAsync(
+                        sourceFolder.FolderId,
+                        targetFolder.FolderId,
+                        uniqueIds,
+                        cancellationToken);
 
-        await ReloadAsync(
-            cancellationToken);
+            SetLastMoveOperation(
+                moveResult);
 
-        return true;
+            await ReloadAsync(
+                cancellationToken);
+
+            return true;
+        }
+        finally
+        {
+            EndMailMoveOperation();
+        }
     }
 
     public async Task<bool> UndoLastMoveAsync(
@@ -498,32 +543,44 @@ public sealed class MainViewModel : BaseViewModel
             return false;
         }
 
-        /*
-         * Aktion exakt rückwärts:
-         *
-         * vorher: Source -> Target
-         * Undo:    Target -> Source
-         */
-        await _mailDataSource
-            .MoveMessagesAsync(
-                operation.TargetFolderId,
-                operation.SourceFolderId,
-                targetUniqueIds,
+        if (!TryBeginMailMoveOperation())
+        {
+            return false;
+        }
+
+        try
+        {
+            /*
+             * Aktion exakt rückwärts:
+             *
+             * vorher: Source -> Target
+             * Undo:    Target -> Source
+             */
+            await _mailDataSource
+                .MoveMessagesAsync(
+                    operation.TargetFolderId,
+                    operation.SourceFolderId,
+                    targetUniqueIds,
+                    cancellationToken);
+
+            /*
+             * Erst NACH erfolgreichem Server-MOVE entfernen.
+             *
+             * Schlägt Undo fehl, bleibt die Information erhalten
+             * und der Benutzer kann es erneut versuchen.
+             */
+            SetLastMoveOperation(
+                null);
+
+            await ReloadAsync(
                 cancellationToken);
 
-        /*
-         * Erst NACH erfolgreichem Server-MOVE entfernen.
-         *
-         * Schlägt Undo fehl, bleibt die Information erhalten
-         * und der Benutzer kann es erneut versuchen.
-         */
-        SetLastMoveOperation(
-            null);
-
-        await ReloadAsync(
-            cancellationToken);
-
-        return true;
+            return true;
+        }
+        finally
+        {
+            EndMailMoveOperation();
+        }
     }
 
     public async Task<bool> RestoreMessagesFromTrashAsync(
@@ -571,30 +628,88 @@ public sealed class MainViewModel : BaseViewModel
             return false;
         }
 
-        /*
-         * Wiederherstellung ist technisch ebenfalls nur
-         * ein normaler serverseitiger IMAP-MOVE.
-         */
-        await _mailDataSource
-            .MoveMessagesAsync(
+        if (!TryBeginMailMoveOperation())
+        {
+            return false;
+        }
+
+        try
+        {
+            /*
+             * Wiederherstellung ist technisch ebenfalls nur
+             * ein normaler serverseitiger IMAP-MOVE.
+             */
+            await _mailDataSource
+                .MoveMessagesAsync(
+                    trashFolder.FolderId,
+                    restoreTargetFolderId,
+                    uniqueIds,
+                    cancellationToken);
+
+            /*
+             * Wenn die wiederhergestellten Nachrichten zur
+             * letzten bekannten Löschaktion gehören, passen wir
+             * die verbleibende Undo-Information entsprechend an.
+             */
+            RemoveRestoredMessagesFromLastMove(
                 trashFolder.FolderId,
-                restoreTargetFolderId,
-                uniqueIds,
+                uniqueIds);
+
+            await ReloadAsync(
                 cancellationToken);
 
-        /*
-         * Wenn die wiederhergestellten Nachrichten zur
-         * letzten bekannten Löschaktion gehören, passen wir
-         * die verbleibende Undo-Information entsprechend an.
-         */
-        RemoveRestoredMessagesFromLastMove(
-            trashFolder.FolderId,
-            uniqueIds);
+            return true;
+        }
+        finally
+        {
+            EndMailMoveOperation();
+        }
+    }
 
-        await ReloadAsync(
-            cancellationToken);
+    private bool TryBeginMailMoveOperation()
+    {
+        /*
+         * CompareExchange übernimmt die Sperre atomar.
+         *
+         * Nur der Aufrufer, der den Zustand von 0 auf 1
+         * ändern konnte, darf eine MOVE-Operation ausführen.
+         *
+         * Weitere Aktionen werden bewusst nicht aufgestaut,
+         * weil deren UIDs nach Abschluss der ersten Operation
+         * bereits veraltet sein könnten.
+         */
+        var previousState =
+            Interlocked.CompareExchange(
+                ref _mailMoveOperationState,
+                1,
+                0);
+
+        if (previousState != 0)
+        {
+            return false;
+        }
+
+        OnPropertyChanged(
+            nameof(CanUndoLastMove));
 
         return true;
+    }
+
+    private void EndMailMoveOperation()
+    {
+        /*
+         * Die Freigabe erfolgt ausschließlich aus finally.
+         *
+         * Dadurch bleibt die Sperre auch bei Netzwerkfehler,
+         * Timeout, Cancellation oder einer sonstigen Exception
+         * niemals dauerhaft gesetzt.
+         */
+        Interlocked.Exchange(
+            ref _mailMoveOperationState,
+            0);
+
+        OnPropertyChanged(
+            nameof(CanUndoLastMove));
     }
 
     private string? GetRestoreTargetFolderId(
