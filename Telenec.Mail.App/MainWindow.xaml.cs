@@ -495,6 +495,33 @@ public partial class MainWindow : Window
         e.Handled =
             true;
 
+        /*
+         * Die Entf-Taste bedeutet semantisch "löschen".
+         *
+         * Im Papierkorb wäre ein erneuter Aufruf des normalen
+         * Löschpfads jedoch falsch. Ein dauerhaftes Löschen ist
+         * aktuell noch nicht als eigener, abgesicherter Workflow
+         * implementiert.
+         *
+         * Deshalb wird Entf hier bewusst abgefangen.
+         * Wiederherstellen bleibt weiterhin über Toolbar und
+         * Kontextmenü verfügbar.
+         */
+        if (_viewModel.IsTrashFolderSelected)
+        {
+            MessageBox.Show(
+                messages.Count == 1
+                    ? "Die Nachricht befindet sich bereits im Papierkorb.\n\n" +
+                      "Dauerhaftes Löschen ist derzeit nicht verfügbar."
+                    : "Die Nachrichten befinden sich bereits im Papierkorb.\n\n" +
+                      "Dauerhaftes Löschen ist derzeit nicht verfügbar.",
+                "Telenec Mail",
+                MessageBoxButton.OK,
+                MessageBoxImage.Information);
+
+            return;
+        }
+
         await DeleteMessagesFromUiAsync(
             messages);
     }
