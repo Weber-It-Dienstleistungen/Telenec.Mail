@@ -444,9 +444,47 @@ public partial class MainWindow : Window
             return;
         }
 
+        /*
+         * Strg + Shift + R muss vor Strg + R geprüft werden.
+         *
+         * Ansonsten würde HasFlag(Control) auch beim
+         * Reply-All-Shortcut bereits den normalen Reply
+         * auslösen.
+         */
         if (e.Key == Key.R &&
-            Keyboard.Modifiers.HasFlag(
-                ModifierKeys.Control))
+            Keyboard.Modifiers ==
+            (ModifierKeys.Control |
+             ModifierKeys.Shift))
+        {
+            if (e.IsRepeat)
+            {
+                e.Handled =
+                    true;
+
+                return;
+            }
+
+            var message =
+                _viewModel.SelectedMessage;
+
+            if (_viewModel.IsLoading ||
+                message is null)
+            {
+                return;
+            }
+
+            e.Handled =
+                true;
+
+            await ReplyAllToMessageFromUiAsync(
+                message);
+
+            return;
+        }
+
+        if (e.Key == Key.R &&
+            Keyboard.Modifiers ==
+            ModifierKeys.Control)
         {
             if (e.IsRepeat)
             {
@@ -966,14 +1004,6 @@ public partial class MainWindow : Window
             return;
         }
 
-        /*
-         * Wir schreiben niemals direkt in die endgültige
-         * Zieldatei.
-         *
-         * So kann ein Verbindungsabbruch keine vermeintlich
-         * fertige, tatsächlich aber unvollständige Datei
-         * hinterlassen.
-         */
         var temporaryPath =
             Path.Combine(
                 targetDirectory,
@@ -1013,12 +1043,6 @@ public partial class MainWindow : Window
                 }
             }
 
-            /*
-             * Erst jetzt ist der Download vollständig.
-             *
-             * Die temporäre Datei wird atomar auf den vom
-             * Benutzer gewählten Namen verschoben.
-             */
             File.Move(
                 temporaryPath,
                 targetPath,
@@ -1128,6 +1152,21 @@ public partial class MainWindow : Window
         }
 
         await ReplyToMessageFromUiAsync(
+            message);
+    }
+
+    private async void ReplyAllMenuItem_OnClick(
+        object sender,
+        RoutedEventArgs e)
+    {
+        if (_viewModel.IsLoading ||
+            sender is not FrameworkElement menuItem ||
+            menuItem.DataContext is not MailMessageItemViewModel message)
+        {
+            return;
+        }
+
+        await ReplyAllToMessageFromUiAsync(
             message);
     }
 
@@ -1365,6 +1404,27 @@ public partial class MainWindow : Window
                 .GetRequiredService<ComposeWindow>();
 
         composeWindow.PrepareReply(
+            message);
+
+        await ShowComposeWindowAsync(
+            composeWindow);
+    }
+
+    private async Task ReplyAllToMessageFromUiAsync(
+        MailMessageItemViewModel message)
+    {
+        if (_viewModel.IsLoading ||
+            !_viewModel.Messages.Contains(
+                message))
+        {
+            return;
+        }
+
+        var composeWindow =
+            _serviceProvider
+                .GetRequiredService<ComposeWindow>();
+
+        composeWindow.PrepareReplyAll(
             message);
 
         await ShowComposeWindowAsync(

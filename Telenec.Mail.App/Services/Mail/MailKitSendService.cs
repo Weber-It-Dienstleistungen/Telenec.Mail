@@ -64,9 +64,24 @@ public sealed class MailKitSendService :
         ArgumentNullException.ThrowIfNull(
             request);
 
-        var recipient =
-            ParseRecipient(
-                request.RecipientAddress);
+        var recipients =
+            ParseRecipientList(
+                request.RecipientAddress,
+                nameof(request.RecipientAddress),
+                "Empfänger",
+                required: true);
+
+        var ccRecipients =
+            ParseRecipientList(
+                request.CcAddress,
+                nameof(request.CcAddress),
+                "Cc-Adresse",
+                required: false);
+
+        ccRecipients =
+            RemoveDuplicateCcRecipients(
+                recipients,
+                ccRecipients);
 
         var account =
             await _mailAccountStore
@@ -101,7 +116,8 @@ public sealed class MailKitSendService :
         var message =
             CreateMessage(
                 sender,
-                recipient,
+                recipients,
+                ccRecipients,
                 request.Subject,
                 request.Body);
 
@@ -110,28 +126,12 @@ public sealed class MailKitSendService :
             request.ParentMessageId,
             request.ParentReferences);
 
-        /*
-         * Zuerst wird tatsächlich versendet.
-         *
-         * Erst wenn der SMTP-Server die Nachricht akzeptiert
-         * hat, versuchen wir anschließend eine Kopie im
-         * IMAP-Ordner "Gesendet" abzulegen.
-         */
         await SendViaSmtpAsync(
             account.EmailAddress,
             credential.Password,
             message,
             cancellationToken);
 
-        /*
-         * Ab diesem Punkt gilt die Nachricht als versendet.
-         *
-         * Das Speichern der Kopie darf deshalb niemals dazu
-         * führen, dass die gesamte Send-Methode mit einem
-         * Fehler endet. Sonst könnte der Benutzer denken,
-         * die Nachricht sei nicht verschickt worden und sie
-         * versehentlich ein zweites Mal senden.
-         */
         var sentCopySaved =
             await TrySaveSentCopyAsync(
                 account.EmailAddress,
@@ -146,28 +146,96 @@ public sealed class MailKitSendService :
                 sentCopySaved);
     }
 
-    private static MailboxAddress ParseRecipient(
-        string recipientAddress)
+    private static IReadOnlyList<MailboxAddress>
+        ParseRecipientList(
+            string? value,
+            string parameterName,
+            string displayName,
+            bool required)
     {
         if (string.IsNullOrWhiteSpace(
-                recipientAddress))
+                value))
+        {
+            if (required)
+            {
+                throw new ArgumentException(
+                    "Es wurde kein Empfänger angegeben.",
+                    parameterName);
+            }
+
+            return Array.Empty<MailboxAddress>();
+        }
+
+        var result =
+            new List<MailboxAddress>();
+
+        var seen =
+            new HashSet<string>(
+                StringComparer.OrdinalIgnoreCase);
+
+        var entries =
+            value.Split(
+                ';',
+                StringSplitOptions.RemoveEmptyEntries |
+                StringSplitOptions.TrimEntries);
+
+        foreach (var entry in entries)
+        {
+            if (!MailboxAddress.TryParse(
+                    entry,
+                    out var recipient) ||
+                recipient is null)
+            {
+                throw new ArgumentException(
+                    $"Die {displayName} „{entry}“ ist ungültig.",
+                    parameterName);
+            }
+
+            if (!seen.Add(
+                    recipient.Address))
+            {
+                continue;
+            }
+
+            result.Add(
+                recipient);
+        }
+
+        if (required &&
+            result.Count == 0)
         {
             throw new ArgumentException(
                 "Es wurde kein Empfänger angegeben.",
-                nameof(recipientAddress));
+                parameterName);
         }
 
-        if (!MailboxAddress.TryParse(
-                recipientAddress.Trim(),
-                out var recipient) ||
-            recipient is null)
+        return result;
+    }
+
+    private static IReadOnlyList<MailboxAddress>
+        RemoveDuplicateCcRecipients(
+            IReadOnlyList<MailboxAddress> recipients,
+            IReadOnlyList<MailboxAddress> ccRecipients)
+    {
+        if (ccRecipients.Count == 0)
         {
-            throw new ArgumentException(
-                "Die Empfängeradresse ist ungültig.",
-                nameof(recipientAddress));
+            return ccRecipients;
         }
 
-        return recipient;
+        var existingAddresses =
+            recipients
+                .Select(
+                    recipient =>
+                        recipient.Address)
+                .ToHashSet(
+                    StringComparer.OrdinalIgnoreCase);
+
+        return ccRecipients
+            .Where(
+                recipient =>
+                    existingAddresses.Add(
+                        recipient.Address))
+            .ToList();
     }
 
     private static MailboxAddress CreateSenderAddress(
@@ -203,7 +271,8 @@ public sealed class MailKitSendService :
 
     private static MimeMessage CreateMessage(
         MailboxAddress sender,
-        MailboxAddress recipient,
+        IReadOnlyList<MailboxAddress> recipients,
+        IReadOnlyList<MailboxAddress> ccRecipients,
         string? subject,
         string? body)
     {
@@ -213,8 +282,17 @@ public sealed class MailKitSendService :
         message.From.Add(
             sender);
 
-        message.To.Add(
-            recipient);
+        foreach (var recipient in recipients)
+        {
+            message.To.Add(
+                recipient);
+        }
+
+        foreach (var ccRecipient in ccRecipients)
+        {
+            message.Cc.Add(
+                ccRecipient);
+        }
 
         message.Subject =
             subject?.Trim()
@@ -252,13 +330,6 @@ public sealed class MailKitSendService :
         var normalizedParentMessageId =
             parentMessageId.Trim();
 
-        /*
-         * Ein fehlerhaftes Message-ID-Headerfeld einer
-         * fremden Ursprungsnachricht darf den Benutzer nicht
-         * daran hindern, überhaupt eine Antwort zu senden.
-         *
-         * MimeKit validiert die Message-ID beim Setzen.
-         */
         try
         {
             message.InReplyTo =
@@ -299,18 +370,10 @@ public sealed class MailKitSendService :
                 }
                 catch (ArgumentException)
                 {
-                    /*
-                     * Eine einzelne fehlerhafte Reference
-                     * zerstört nicht die restliche Kette.
-                     */
                 }
             }
         }
 
-        /*
-         * Die Message-ID der direkt beantworteten Nachricht
-         * bildet das letzte Element der neuen References-Kette.
-         */
         if (!message.References.Any(
                 existingReference =>
                     string.Equals(
@@ -325,11 +388,6 @@ public sealed class MailKitSendService :
             }
             catch (ArgumentException)
             {
-                /*
-                 * InReplyTo wurde bereits erfolgreich gesetzt.
-                 * Eine kaputte References-Angabe der Fremdmail
-                 * soll den Versand nicht blockieren.
-                 */
             }
         }
     }
@@ -429,18 +487,6 @@ public sealed class MailKitSendService :
                 return false;
             }
 
-            /*
-             * Gesendete Nachrichten gelten als gelesen.
-             *
-             * Die gleiche MimeMessage wird gespeichert,
-             * die zuvor über SMTP verschickt wurde.
-             * Dadurch bleiben Message-ID, Datum, Betreff,
-             * Absender und Inhalt identisch.
-             *
-             * Bei Antworten bleiben dadurch ebenfalls
-             * In-Reply-To und References exakt identisch
-             * mit der tatsächlich versendeten Nachricht.
-             */
             await sentFolder.AppendAsync(
                 message,
                 MessageFlags.Seen,
@@ -450,13 +496,6 @@ public sealed class MailKitSendService :
         }
         catch
         {
-            /*
-             * WICHTIG:
-             *
-             * Ein Fehler beim Speichern der Kopie bedeutet
-             * NICHT, dass der vorherige SMTP-Versand
-             * fehlgeschlagen ist.
-             */
             return false;
         }
         finally

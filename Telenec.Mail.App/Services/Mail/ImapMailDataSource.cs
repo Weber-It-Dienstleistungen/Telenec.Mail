@@ -18,30 +18,9 @@ public sealed class ImapMailDataSource : IMailDataSource
     private const string ImapHost = "mail.necnet.de";
     private const int ImapPort = 993;
 
-    /*
-     * WebView2.NavigateToString() akzeptiert maximal
-     * 2 MB HTML-Inhalt.
-     *
-     * CID-Bilder werden als data:-URI eingebettet.
-     * Dadurch wächst der HTML-Inhalt durch Base64.
-     *
-     * Wir prüfen deshalb jede Einbettung einzeln und
-     * übernehmen sie nur, wenn der fertige HTML-Inhalt
-     * weiterhin innerhalb dieses Limits bleibt.
-     */
     private const int MaximumWebViewHtmlBytes =
         2 * 1024 * 1024;
 
-    /*
-     * Erfasst cid:-Referenzen sowohl in normalen
-     * HTML-Attributen:
-     *
-     * src="cid:..."
-     *
-     * als auch beispielsweise in CSS:
-     *
-     * url(cid:...)
-     */
     private static readonly Regex CidReferenceRegex =
         new(
             @"\bcid:(?<contentId>[^""'\s<>)]+)",
@@ -342,12 +321,6 @@ public sealed class ImapMailDataSource : IMailDataSource
 
             if (entity is MimePart mimePart)
             {
-                /*
-                 * MimeKit modelliert Content nullable.
-                 *
-                 * Ein normaler Dateianhang ohne Content ist
-                 * für unseren Downloadpfad jedoch ungültig.
-                 */
                 var content =
                     mimePart.Content
                     ?? throw new InvalidDataException(
@@ -360,13 +333,6 @@ public sealed class ImapMailDataSource : IMailDataSource
             }
             else if (entity is MessagePart messagePart)
             {
-                /*
-                 * Auch MessagePart.Message ist laut API
-                 * theoretisch optional.
-                 *
-                 * Ohne enthaltene Nachricht gibt es keine
-                 * gültige .eml-Datei zu speichern.
-                 */
                 var attachedMessage =
                     messagePart.Message
                     ?? throw new InvalidDataException(
@@ -932,14 +898,6 @@ public sealed class ImapMailDataSource : IMailDataSource
             }
         }
 
-        /*
-         * Der Plaintext-Fallback wird bewusst noch aus dem
-         * ursprünglichen HTML erzeugt.
-         *
-         * Würden wir zuerst CID-Bilder als Base64-data:-URI
-         * einsetzen, müsste die Plaintext-Konvertierung unnötig
-         * durch möglicherweise große Base64-Blöcke laufen.
-         */
         if (string.IsNullOrWhiteSpace(
                 plainText) &&
             !string.IsNullOrWhiteSpace(
@@ -997,13 +955,6 @@ public sealed class ImapMailDataSource : IMailDataSource
                         StringComparer.Ordinal));
         }
 
-        /*
-         * Zuerst nur die CIDs betrachten, die das HTML
-         * tatsächlich referenziert.
-         *
-         * Dadurch laden wir nicht blind alle image/*-Parts
-         * einer Nachricht vom Server.
-         */
         var referencedContentIds =
             CidReferenceRegex
                 .Matches(
@@ -1034,12 +985,6 @@ public sealed class ImapMailDataSource : IMailDataSource
                         StringComparer.Ordinal));
         }
 
-        /*
-         * BodyStructure ist bereits mit dem Summary geladen.
-         *
-         * Wir bauen daraus eine Content-ID -> MIME-Part-Zuordnung,
-         * akzeptieren aber ausschließlich image/*.
-         */
         var imagePartsByContentId =
             new Dictionary<string, BodyPartBasic>(
                 StringComparer.OrdinalIgnoreCase);
@@ -1073,11 +1018,6 @@ public sealed class ImapMailDataSource : IMailDataSource
                 continue;
             }
 
-            /*
-             * Falls eine fehlerhafte MIME-Struktur dieselbe
-             * Content-ID mehrfach enthält, verwenden wir bewusst
-             * nur den ersten Part.
-             */
             imagePartsByContentId.TryAdd(
                 normalizedContentId,
                 bodyPart);
@@ -1122,13 +1062,6 @@ public sealed class ImapMailDataSource : IMailDataSource
                         bodyPart,
                         cancellationToken);
 
-                /*
-                 * Auch nach dem Abruf prüfen wir erneut, dass
-                 * tatsächlich ein image/* MimePart vorliegt.
-                 *
-                 * Ein anderer MIME-Typ wird niemals als Data-URI
-                 * in den HTML-Inhalt eingesetzt.
-                 */
                 if (entity is not MimePart mimePart ||
                     mimePart.Content is null ||
                     !string.Equals(
@@ -1166,11 +1099,6 @@ public sealed class ImapMailDataSource : IMailDataSource
                     Convert.ToBase64String(
                         buffer.ToArray());
 
-                /*
-                 * Nur genau die cid:-Referenzen ersetzen,
-                 * deren normalisierte Content-ID mit diesem
-                 * MIME-Part übereinstimmt.
-                 */
                 var candidateHtml =
                     CidReferenceRegex.Replace(
                         resolvedHtml,
@@ -1198,16 +1126,6 @@ public sealed class ImapMailDataSource : IMailDataSource
                     continue;
                 }
 
-                /*
-                 * NavigateToString() hat ein hartes 2-MB-Limit.
-                 *
-                 * Ein großes Inline-Bild darf deshalb nicht
-                 * dazu führen, dass anschließend die komplette
-                 * HTML-Mail nicht mehr dargestellt werden kann.
-                 *
-                 * In diesem Sonderfall bleibt die betreffende
-                 * CID-Referenz unangetastet.
-                 */
                 var candidateHtmlSize =
                     Encoding.UTF8.GetByteCount(
                         candidateHtml);
@@ -1231,14 +1149,6 @@ public sealed class ImapMailDataSource : IMailDataSource
             }
             catch
             {
-                /*
-                 * Ein defektes oder nicht abrufbares Inline-Bild
-                 * darf die eigentliche Mail nicht unlesbar machen.
-                 *
-                 * In diesem Fall bleibt die originale cid:-Referenz
-                 * bestehen und WebView zeigt höchstens für dieses
-                 * einzelne Bild einen Platzhalter.
-                 */
             }
         }
 
@@ -1259,11 +1169,6 @@ public sealed class ImapMailDataSource : IMailDataSource
             return string.Empty;
         }
 
-        /*
-         * HTML kann Sonderzeichen innerhalb der CID als
-         * Entity kodieren. Ein cid:-URI darf außerdem
-         * Prozent-Encoding enthalten.
-         */
         var normalized =
             WebUtility
                 .HtmlDecode(
@@ -1278,12 +1183,6 @@ public sealed class ImapMailDataSource : IMailDataSource
         }
         catch (UriFormatException)
         {
-            /*
-             * Eine ungültig kodierte CID wird nicht als
-             * Fehler der gesamten Nachricht behandelt.
-             *
-             * Wir verwenden dann den ursprünglichen Wert.
-             */
         }
 
         return normalized
@@ -1300,12 +1199,6 @@ public sealed class ImapMailDataSource : IMailDataSource
         var senderMailbox =
             summary.Envelope?
                 .From?
-                .Mailboxes
-                .FirstOrDefault();
-
-        var recipientMailbox =
-            summary.Envelope?
-                .To?
                 .Mailboxes
                 .FirstOrDefault();
 
@@ -1326,8 +1219,20 @@ public sealed class ImapMailDataSource : IMailDataSource
                 "Unbekannter Absender";
         }
 
+        var toAddresses =
+            GetMailboxAddresses(
+                summary.Envelope?.To);
+
+        var ccAddresses =
+            GetMailboxAddresses(
+                summary.Envelope?.Cc);
+
+        var replyToAddresses =
+            GetMailboxAddresses(
+                summary.Envelope?.ReplyTo);
+
         var recipientAddress =
-            recipientMailbox?.Address
+            toAddresses.FirstOrDefault()
             ?? string.Empty;
 
         var subject =
@@ -1459,7 +1364,42 @@ public sealed class ImapMailDataSource : IMailDataSource
                 messageId,
 
             References:
-                references);
+                references,
+
+            ToAddresses:
+                toAddresses,
+
+            CcAddresses:
+                ccAddresses,
+
+            ReplyToAddresses:
+                replyToAddresses);
+    }
+
+    private static IReadOnlyList<string>
+        GetMailboxAddresses(
+            InternetAddressList? addressList)
+    {
+        if (addressList is null)
+        {
+            return Array.Empty<string>();
+        }
+
+        return addressList
+            .Mailboxes
+            .Select(
+                mailbox =>
+                    mailbox.Address?.Trim())
+            .Where(
+                address =>
+                    !string.IsNullOrWhiteSpace(
+                        address))
+            .Select(
+                address =>
+                    address!)
+            .Distinct(
+                StringComparer.OrdinalIgnoreCase)
+            .ToArray();
     }
 
     private static bool HasSmimeSignature(
@@ -1499,15 +1439,6 @@ public sealed class ImapMailDataSource : IMailDataSource
                 continue;
             }
 
-            /*
-             * Ein erfolgreich als CID eingebetteter Part gehört
-             * zum sichtbaren Mailinhalt und soll deshalb nicht
-             * zusätzlich als normaler Benutzer-Anhang erscheinen.
-             *
-             * Relevant ist dies insbesondere für Clients, die
-             * trotz CID-Verwendung Content-Disposition: attachment
-             * setzen.
-             */
             if (inlinePartSpecifiers.Contains(
                     partSpecifier))
             {

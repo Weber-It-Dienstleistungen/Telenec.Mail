@@ -36,6 +36,17 @@ public partial class ComposeWindow : Window
                 message);
     }
 
+    public void PrepareReplyAll(
+        MailMessageItemViewModel message)
+    {
+        ArgumentNullException.ThrowIfNull(
+            message);
+
+        _viewModel
+            .PrepareReplyAll(
+                message);
+    }
+
     private async void ComposeWindow_OnLoaded(
         object sender,
         RoutedEventArgs e)

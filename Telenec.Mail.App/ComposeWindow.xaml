@@ -84,7 +84,7 @@
             Grid.Row="1"
             Background="{StaticResource Border.Subtle}" />
 
-        <!-- EMPFÄNGER / BETREFF -->
+        <!-- EMPFÄNGER / CC / BETREFF -->
 
         <Border
             Grid.Row="2"
@@ -94,6 +94,7 @@
             <Grid>
 
                 <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto" />
                     <RowDefinition Height="Auto" />
                     <RowDefinition Height="Auto" />
                 </Grid.RowDefinitions>
@@ -133,6 +134,89 @@
                 <TextBlock
                     Grid.Row="1"
                     Grid.Column="0"
+                    Text="Cc"
+                    Margin="0,0,14,16"
+                    FontSize="13"
+                    FontWeight="SemiBold"
+                    Foreground="{StaticResource Text.Secondary}"
+                    VerticalAlignment="Center">
+
+                    <TextBlock.Style>
+
+                        <Style TargetType="TextBlock">
+
+                            <Setter
+                                Property="Visibility"
+                                Value="Collapsed" />
+
+                            <Style.Triggers>
+
+                                <DataTrigger
+                                    Binding="{Binding ShowCcField}"
+                                    Value="True">
+
+                                    <Setter
+                                        Property="Visibility"
+                                        Value="Visible" />
+
+                                </DataTrigger>
+
+                            </Style.Triggers>
+
+                        </Style>
+
+                    </TextBlock.Style>
+
+                </TextBlock>
+
+                <TextBox
+                    x:Name="CcTextBox"
+                    Grid.Row="1"
+                    Grid.Column="1"
+                    Height="38"
+                    Margin="0,0,0,16"
+                    Padding="10,7"
+                    Text="{Binding CcAddress,
+                        UpdateSourceTrigger=PropertyChanged}"
+                    IsReadOnly="{Binding IsSending}"
+                    FontSize="13"
+                    VerticalContentAlignment="Center"
+                    Background="{StaticResource Surface.Background}"
+                    Foreground="{StaticResource Text.Primary}"
+                    BorderBrush="{StaticResource Border.Default}"
+                    BorderThickness="1">
+
+                    <TextBox.Style>
+
+                        <Style TargetType="TextBox">
+
+                            <Setter
+                                Property="Visibility"
+                                Value="Collapsed" />
+
+                            <Style.Triggers>
+
+                                <DataTrigger
+                                    Binding="{Binding ShowCcField}"
+                                    Value="True">
+
+                                    <Setter
+                                        Property="Visibility"
+                                        Value="Visible" />
+
+                                </DataTrigger>
+
+                            </Style.Triggers>
+
+                        </Style>
+
+                    </TextBox.Style>
+
+                </TextBox>
+
+                <TextBlock
+                    Grid.Row="2"
+                    Grid.Column="0"
                     Text="Betreff"
                     Margin="0,0,14,0"
                     FontSize="13"
@@ -141,7 +225,7 @@
                     VerticalAlignment="Center" />
 
                 <TextBox
-                    Grid.Row="1"
+                    Grid.Row="2"
                     Grid.Column="1"
                     Height="38"
                     Padding="10,7"

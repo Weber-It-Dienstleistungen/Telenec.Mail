@@ -11,6 +11,8 @@ public sealed class ComposeMailViewModel : BaseViewModel
 
     private MailMessageItemViewModel? _replySourceMessage;
 
+    private bool _isReplyAll;
+
     private string _windowTitle =
         "Neue E-Mail";
 
@@ -23,12 +25,16 @@ public sealed class ComposeMailViewModel : BaseViewModel
     private string _recipientAddress =
         string.Empty;
 
+    private string _ccAddress =
+        string.Empty;
+
     private string _subject =
         string.Empty;
 
     private string _body =
         string.Empty;
 
+    private bool _showCcField;
     private bool _focusBodyOnLoad;
     private bool _isSending;
 
@@ -126,6 +132,25 @@ public sealed class ComposeMailViewModel : BaseViewModel
         }
     }
 
+    public string CcAddress
+    {
+        get =>
+            _ccAddress;
+
+        set
+        {
+            if (_ccAddress == value)
+            {
+                return;
+            }
+
+            _ccAddress =
+                value;
+
+            OnPropertyChanged();
+        }
+    }
+
     public string Subject
     {
         get => _subject;
@@ -156,6 +181,25 @@ public sealed class ComposeMailViewModel : BaseViewModel
             }
 
             _body =
+                value;
+
+            OnPropertyChanged();
+        }
+    }
+
+    public bool ShowCcField
+    {
+        get =>
+            _showCcField;
+
+        private set
+        {
+            if (_showCcField == value)
+            {
+                return;
+            }
+
+            _showCcField =
                 value;
 
             OnPropertyChanged();
@@ -210,17 +254,45 @@ public sealed class ComposeMailViewModel : BaseViewModel
     public void PrepareReply(
         MailMessageItemViewModel message)
     {
+        PrepareReplyCore(
+            message,
+            replyAll: false);
+    }
+
+    public void PrepareReplyAll(
+        MailMessageItemViewModel message)
+    {
+        PrepareReplyCore(
+            message,
+            replyAll: true);
+    }
+
+    private void PrepareReplyCore(
+        MailMessageItemViewModel message,
+        bool replyAll)
+    {
         ArgumentNullException.ThrowIfNull(
             message);
 
         _replySourceMessage =
             message;
 
+        _isReplyAll =
+            replyAll;
+
         WindowTitle =
-            "Antworten";
+            replyAll
+                ? "Allen antworten"
+                : "Antworten";
 
         HeaderTitle =
-            "Antworten";
+            WindowTitle;
+
+        ShowCcField =
+            replyAll;
+
+        CcAddress =
+            string.Empty;
 
         Subject =
             CreateReplySubject(
@@ -247,7 +319,7 @@ public sealed class ComposeMailViewModel : BaseViewModel
             FromAddress =
                 "Kein aktives Mailkonto";
 
-            ApplyReplyRecipient(
+            ApplyReplyRecipients(
                 activeAccountAddress: null);
 
             return;
@@ -265,11 +337,11 @@ public sealed class ComposeMailViewModel : BaseViewModel
                 account.EmailAddress;
         }
 
-        ApplyReplyRecipient(
+        ApplyReplyRecipients(
             account.EmailAddress);
     }
 
-    private void ApplyReplyRecipient(
+    private void ApplyReplyRecipients(
         string? activeAccountAddress)
     {
         var replySource =
@@ -280,41 +352,281 @@ public sealed class ComposeMailViewModel : BaseViewModel
             return;
         }
 
-        var senderAddress =
-            replySource
-                .SenderAddress
-                .Trim();
-
-        var recipientAddress =
-            replySource
-                .RecipientAddress
-                .Trim();
-
-        /*
-         * Wenn die ausgewählte Nachricht vom eigenen Konto
-         * stammt, darf "Antworten" nicht einfach wieder an
-         * die eigene Absenderadresse adressieren.
-         *
-         * In diesem Fall verwenden wir den bisherigen
-         * Empfänger der Nachricht.
-         */
-        if (!string.IsNullOrWhiteSpace(
-                activeAccountAddress) &&
-            string.Equals(
-                senderAddress,
-                activeAccountAddress.Trim(),
-                StringComparison.OrdinalIgnoreCase) &&
-            !string.IsNullOrWhiteSpace(
-                recipientAddress))
+        if (_isReplyAll)
         {
-            RecipientAddress =
-                recipientAddress;
+            ApplyReplyAllRecipients(
+                replySource,
+                activeAccountAddress);
 
             return;
         }
 
+        ApplySingleReplyRecipients(
+            replySource,
+            activeAccountAddress);
+    }
+
+    private void ApplySingleReplyRecipients(
+        MailMessageItemViewModel replySource,
+        string? activeAccountAddress)
+    {
+        var senderIsOwnAccount =
+            IsSameAddress(
+                replySource.SenderAddress,
+                activeAccountAddress);
+
+        /*
+         * Antworten auf eine selbst gesendete Nachricht:
+         *
+         * Wir antworten weiterhin an den ursprünglichen
+         * Empfänger und nicht an uns selbst.
+         */
+        if (senderIsOwnAccount)
+        {
+            var originalRecipient =
+                replySource
+                    .ToAddresses
+                    .FirstOrDefault(
+                        address =>
+                            !IsSameAddress(
+                                address,
+                                activeAccountAddress));
+
+            originalRecipient ??=
+                !IsSameAddress(
+                    replySource.RecipientAddress,
+                    activeAccountAddress)
+                    ? replySource.RecipientAddress
+                    : null;
+
+            RecipientAddress =
+                originalRecipient
+                ?? string.Empty;
+
+            CcAddress =
+                string.Empty;
+
+            return;
+        }
+
+        /*
+         * RFC-konformes Antworten:
+         *
+         * Wenn Reply-To vorhanden ist, hat es Vorrang vor
+         * der From-Adresse.
+         */
+        var replyTargets =
+            replySource.ReplyToAddresses.Count > 0
+                ? replySource.ReplyToAddresses
+                : new[]
+                {
+                    replySource.SenderAddress
+                };
+
         RecipientAddress =
-            senderAddress;
+            JoinAddresses(
+                NormalizeAddresses(
+                    replyTargets,
+                    activeAccountAddress));
+
+        CcAddress =
+            string.Empty;
+    }
+
+    private void ApplyReplyAllRecipients(
+        MailMessageItemViewModel replySource,
+        string? activeAccountAddress)
+    {
+        var toAddresses =
+            new List<string>();
+
+        var ccAddresses =
+            new List<string>();
+
+        var usedAddresses =
+            new HashSet<string>(
+                StringComparer.OrdinalIgnoreCase);
+
+        var senderIsOwnAccount =
+            IsSameAddress(
+                replySource.SenderAddress,
+                activeAccountAddress);
+
+        /*
+         * Bei einer empfangenen Nachricht kommt zuerst das
+         * Reply-To-Ziel bzw. der Absender in das An-Feld.
+         *
+         * Bei einer selbst gesendeten Nachricht überspringen
+         * wir diesen Schritt, weil wir sonst uns selbst als
+         * Empfänger aufnehmen würden.
+         */
+        if (!senderIsOwnAccount)
+        {
+            var replyTargets =
+                replySource.ReplyToAddresses.Count > 0
+                    ? replySource.ReplyToAddresses
+                    : new[]
+                    {
+                        replySource.SenderAddress
+                    };
+
+            foreach (var address in replyTargets)
+            {
+                AddReplyAddress(
+                    toAddresses,
+                    usedAddresses,
+                    address,
+                    activeAccountAddress);
+            }
+        }
+
+        /*
+         * Alle ursprünglichen To-Empfänger bleiben To,
+         * außer dem eigenen Konto und bereits vorhandenen
+         * Empfängern.
+         */
+        foreach (var address in
+                 replySource.ToAddresses)
+        {
+            AddReplyAddress(
+                toAddresses,
+                usedAddresses,
+                address,
+                activeAccountAddress);
+        }
+
+        /*
+         * Fallback für ältere oder ungewöhnliche Nachrichten,
+         * bei denen nur RecipientAddress vorhanden ist.
+         */
+        if (toAddresses.Count == 0)
+        {
+            AddReplyAddress(
+                toAddresses,
+                usedAddresses,
+                replySource.RecipientAddress,
+                activeAccountAddress);
+        }
+
+        /*
+         * Ursprüngliche Cc-Empfänger bleiben Cc.
+         *
+         * Adressen, die bereits in To gelandet sind, werden
+         * nicht noch einmal aufgenommen.
+         */
+        foreach (var address in
+                 replySource.CcAddresses)
+        {
+            AddReplyAddress(
+                ccAddresses,
+                usedAddresses,
+                address,
+                activeAccountAddress);
+        }
+
+        /*
+         * Sollte nach allen Filtern noch kein To-Empfänger
+         * vorhanden sein, versuchen wir als letzten sicheren
+         * Fallback den Absender.
+         */
+        if (toAddresses.Count == 0)
+        {
+            AddReplyAddress(
+                toAddresses,
+                usedAddresses,
+                replySource.SenderAddress,
+                activeAccountAddress);
+        }
+
+        RecipientAddress =
+            JoinAddresses(
+                toAddresses);
+
+        CcAddress =
+            JoinAddresses(
+                ccAddresses);
+    }
+
+    private static IReadOnlyList<string>
+        NormalizeAddresses(
+            IEnumerable<string> addresses,
+            string? excludedAddress)
+    {
+        var result =
+            new List<string>();
+
+        var seen =
+            new HashSet<string>(
+                StringComparer.OrdinalIgnoreCase);
+
+        foreach (var address in addresses)
+        {
+            AddReplyAddress(
+                result,
+                seen,
+                address,
+                excludedAddress);
+        }
+
+        return result;
+    }
+
+    private static void AddReplyAddress(
+        ICollection<string> result,
+        ISet<string> usedAddresses,
+        string? address,
+        string? excludedAddress)
+    {
+        if (string.IsNullOrWhiteSpace(
+                address))
+        {
+            return;
+        }
+
+        var normalized =
+            address.Trim();
+
+        if (IsSameAddress(
+                normalized,
+                excludedAddress))
+        {
+            return;
+        }
+
+        if (!usedAddresses.Add(
+                normalized))
+        {
+            return;
+        }
+
+        result.Add(
+            normalized);
+    }
+
+    private static bool IsSameAddress(
+        string? firstAddress,
+        string? secondAddress)
+    {
+        if (string.IsNullOrWhiteSpace(
+                firstAddress) ||
+            string.IsNullOrWhiteSpace(
+                secondAddress))
+        {
+            return false;
+        }
+
+        return string.Equals(
+            firstAddress.Trim(),
+            secondAddress.Trim(),
+            StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static string JoinAddresses(
+        IEnumerable<string> addresses)
+    {
+        return string.Join(
+            "; ",
+            addresses);
     }
 
     private static string CreateReplySubject(
@@ -452,6 +764,12 @@ public sealed class ComposeMailViewModel : BaseViewModel
 
                     Body:
                         Body,
+
+                    CcAddress:
+                        string.IsNullOrWhiteSpace(
+                            CcAddress)
+                            ? null
+                            : CcAddress.Trim(),
 
                     ParentMessageId:
                         _replySourceMessage?.MessageId,

@@ -460,6 +460,10 @@
                                             Header="Antworten"
                                             Click="ReplyMenuItem_OnClick" />
 
+                                        <MenuItem
+                                            Header="Allen antworten"
+                                            Click="ReplyAllMenuItem_OnClick" />
+
                                         <Separator />
 
                                         <MenuItem

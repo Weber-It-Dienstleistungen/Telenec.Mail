@@ -29,7 +29,10 @@ public sealed class MailMessageItemViewModel : BaseViewModel
         IReadOnlyList<MailAttachmentData>? attachments = null,
         bool hasSmimeSignature = false,
         string? messageId = null,
-        IReadOnlyList<string>? references = null)
+        IReadOnlyList<string>? references = null,
+        IReadOnlyList<string>? toAddresses = null,
+        IReadOnlyList<string>? ccAddresses = null,
+        IReadOnlyList<string>? replyToAddresses = null)
     {
         Sender =
             sender;
@@ -98,6 +101,19 @@ public sealed class MailMessageItemViewModel : BaseViewModel
         References =
             references?.ToArray()
             ?? Array.Empty<string>();
+
+        ToAddresses =
+            CreateAddressSnapshot(
+                toAddresses,
+                recipientAddress);
+
+        CcAddresses =
+            CreateAddressSnapshot(
+                ccAddresses);
+
+        ReplyToAddresses =
+            CreateAddressSnapshot(
+                replyToAddresses);
     }
 
     public string Sender { get; }
@@ -211,6 +227,26 @@ public sealed class MailMessageItemViewModel : BaseViewModel
      */
     public IReadOnlyList<string> References { get; }
 
+    /*
+     * Vollständige ursprüngliche Empfängerlisten.
+     *
+     * RecipientAddress bleibt zusätzlich bestehen, weil die
+     * bestehende UI bisher einen einzelnen Hauptempfänger
+     * anzeigt.
+     */
+    public IReadOnlyList<string> ToAddresses { get; }
+
+    public IReadOnlyList<string> CcAddresses { get; }
+
+    /*
+     * Reply-To hat beim Antworten Vorrang vor From.
+     *
+     * Das ist insbesondere für Mailinglisten und Systeme
+     * wichtig, die Antworten bewusst an eine andere Adresse
+     * lenken.
+     */
+    public IReadOnlyList<string> ReplyToAddresses { get; }
+
     public bool HasHtmlBody =>
         !string.IsNullOrWhiteSpace(
             HtmlBody);
@@ -259,5 +295,63 @@ public sealed class MailMessageItemViewModel : BaseViewModel
 
         EmphasizeSender =
             true;
+    }
+
+    private static IReadOnlyList<string>
+        CreateAddressSnapshot(
+            IReadOnlyList<string>? addresses,
+            string? fallbackAddress = null)
+    {
+        var result =
+            new List<string>();
+
+        var seen =
+            new HashSet<string>(
+                StringComparer.OrdinalIgnoreCase);
+
+        if (addresses is not null)
+        {
+            foreach (var address in addresses)
+            {
+                AddAddress(
+                    result,
+                    seen,
+                    address);
+            }
+        }
+
+        if (result.Count == 0)
+        {
+            AddAddress(
+                result,
+                seen,
+                fallbackAddress);
+        }
+
+        return result;
+    }
+
+    private static void AddAddress(
+        ICollection<string> result,
+        ISet<string> seen,
+        string? address)
+    {
+        if (string.IsNullOrWhiteSpace(
+                address))
+        {
+            return;
+        }
+
+        var normalized =
+            address.Trim();
+
+        if (!seen.Add(
+                normalized))
+        {
+            return;
+        }
+
+        result.Add(
+            normalized);
     }
 }

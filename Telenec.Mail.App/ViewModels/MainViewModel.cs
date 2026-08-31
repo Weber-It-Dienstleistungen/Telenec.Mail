@@ -344,14 +344,6 @@ public sealed class MainViewModel : BaseViewModel
             return false;
         }
 
-        /*
-         * Der übergebene Anhang muss tatsächlich aus der
-         * ausgewählten Nachricht stammen.
-         *
-         * Damit verhindern wir, dass veraltete UI-Referenzen
-         * versehentlich mit einer anderen Nachricht kombiniert
-         * werden.
-         */
         var attachmentBelongsToMessage =
             message
                 .Attachments
@@ -366,13 +358,6 @@ public sealed class MainViewModel : BaseViewModel
             return false;
         }
 
-        /*
-         * Ordner, UID und MIME-Part werden jetzt gemeinsam
-         * an die Datenquelle übergeben.
-         *
-         * Die Datenquelle lädt ausschließlich diesen einen
-         * Attachment-Part.
-         */
         await _mailDataSource
             .DownloadAttachmentAsync(
                 folder.FolderId,
@@ -1084,7 +1069,16 @@ public sealed class MainViewModel : BaseViewModel
                             message.MessageId,
 
                         references:
-                            message.References));
+                            message.References,
+
+                        toAddresses:
+                            message.ToAddresses,
+
+                        ccAddresses:
+                            message.CcAddresses,
+
+                        replyToAddresses:
+                            message.ReplyToAddresses));
             }
 
             SelectedMessage =
