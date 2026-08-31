@@ -1,7 +1,10 @@
 ﻿using MailKit.Security;
+using Microsoft.Win32;
 using System.ComponentModel;
 using System.Windows;
 using System.Windows.Input;
+using Telenec.Mail.App.Models;
+using Telenec.Mail.App.Services.Mail;
 using Telenec.Mail.App.ViewModels;
 
 namespace Telenec.Mail.App;
@@ -79,6 +82,7 @@ public partial class ComposeWindow : Window
         if (_viewModel.FocusBodyOnLoad)
         {
             BodyTextBox.Focus();
+
             BodyTextBox.CaretIndex =
                 0;
 
@@ -86,6 +90,76 @@ public partial class ComposeWindow : Window
         }
 
         RecipientTextBox.Focus();
+    }
+
+    private void AddAttachmentButton_OnClick(
+        object sender,
+        RoutedEventArgs e)
+    {
+        if (!_viewModel.CanModifyAttachments)
+        {
+            return;
+        }
+
+        var fileDialog =
+            new OpenFileDialog
+            {
+                Title =
+                    "Datei anhängen",
+
+                Filter =
+                    "Alle Dateien (*.*)|*.*",
+
+                Multiselect =
+                    true,
+
+                CheckFileExists =
+                    true,
+
+                CheckPathExists =
+                    true
+            };
+
+        var result =
+            fileDialog.ShowDialog(
+                this);
+
+        if (result != true)
+        {
+            return;
+        }
+
+        try
+        {
+            _viewModel
+                .AddAttachmentFiles(
+                    fileDialog.FileNames);
+        }
+        catch
+        {
+            MessageBox.Show(
+                "Mindestens eine der ausgewählten Dateien konnte nicht als Anhang geöffnet werden.\n\n" +
+                "Bitte prüfen Sie, ob die Datei noch vorhanden und lesbar ist.",
+                "Anhang konnte nicht hinzugefügt werden",
+                MessageBoxButton.OK,
+                MessageBoxImage.Warning);
+        }
+    }
+
+    private void RemoveAttachmentButton_OnClick(
+        object sender,
+        RoutedEventArgs e)
+    {
+        if (!_viewModel.CanModifyAttachments ||
+            sender is not FrameworkElement element ||
+            element.DataContext is not MailSendAttachmentData attachment)
+        {
+            return;
+        }
+
+        _viewModel
+            .RemoveAttachment(
+                attachment);
     }
 
     private async void SendButton_OnClick(
@@ -124,6 +198,15 @@ public partial class ComposeWindow : Window
 
             Close();
         }
+        catch (MailSendAttachmentException ex)
+        {
+            MessageBox.Show(
+                ex.Message +
+                "\n\nDie E-Mail wurde nicht versendet.",
+                "Anhang konnte nicht gelesen werden",
+                MessageBoxButton.OK,
+                MessageBoxImage.Warning);
+        }
         catch (ArgumentException ex)
         {
             MessageBox.Show(
@@ -133,6 +216,7 @@ public partial class ComposeWindow : Window
                 MessageBoxImage.Information);
 
             RecipientTextBox.Focus();
+
             RecipientTextBox.SelectAll();
         }
         catch (MailKit.Security.AuthenticationException)

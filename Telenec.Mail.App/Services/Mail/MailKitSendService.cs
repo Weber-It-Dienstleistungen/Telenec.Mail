@@ -4,6 +4,7 @@ using MailKit.Net.Smtp;
 using MailKit.Security;
 using MimeKit;
 using MimeKit.Utils;
+using System.IO;
 using Telenec.Mail.App.Models;
 using Telenec.Mail.App.Services.Security;
 using Telenec.Mail.App.Services.Storage;
@@ -113,13 +114,22 @@ public sealed class MailKitSendService :
                 account.EmailAddress,
                 account.DisplayName);
 
-        var message =
+        /*
+         * Die MimeMessage wird bewusst vor dem SMTP-Aufbau
+         * vollständig vorbereitet.
+         *
+         * Kann ein lokaler Anhang nicht geöffnet werden,
+         * wurde zu diesem Zeitpunkt noch keine Nachricht
+         * an den SMTP-Server übertragen.
+         */
+        using var message =
             CreateMessage(
                 sender,
                 recipients,
                 ccRecipients,
                 request.Subject,
-                request.Body);
+                request.Body,
+                request.Attachments);
 
         ApplyReplyThreading(
             message,
@@ -132,6 +142,13 @@ public sealed class MailKitSendService :
             message,
             cancellationToken);
 
+        /*
+         * Dieselbe MimeMessage wird anschließend im
+         * Gesendet-Ordner abgelegt.
+         *
+         * MimeContent setzt seekbare Content-Streams bei
+         * jedem Schreibvorgang wieder an den Anfang.
+         */
         var sentCopySaved =
             await TrySaveSentCopyAsync(
                 account.EmailAddress,
@@ -163,7 +180,8 @@ public sealed class MailKitSendService :
                     parameterName);
             }
 
-            return Array.Empty<MailboxAddress>();
+            return Array.Empty<
+                MailboxAddress>();
         }
 
         var result =
@@ -274,46 +292,244 @@ public sealed class MailKitSendService :
         IReadOnlyList<MailboxAddress> recipients,
         IReadOnlyList<MailboxAddress> ccRecipients,
         string? subject,
-        string? body)
+        string? body,
+        IReadOnlyList<MailSendAttachmentData>? attachments)
     {
         var message =
             new MimeMessage();
 
-        message.From.Add(
-            sender);
-
-        foreach (var recipient in recipients)
+        try
         {
-            message.To.Add(
-                recipient);
-        }
+            message.From.Add(
+                sender);
 
-        foreach (var ccRecipient in ccRecipients)
-        {
-            message.Cc.Add(
-                ccRecipient);
-        }
-
-        message.Subject =
-            subject?.Trim()
-            ?? string.Empty;
-
-        message.Date =
-            DateTimeOffset.Now;
-
-        message.MessageId =
-            MimeUtils.GenerateMessageId();
-
-        message.Body =
-            new TextPart(
-                "plain")
+            foreach (var recipient in recipients)
             {
-                Text =
-                    body
-                    ?? string.Empty
-            };
+                message.To.Add(
+                    recipient);
+            }
 
-        return message;
+            foreach (var ccRecipient in
+                     ccRecipients)
+            {
+                message.Cc.Add(
+                    ccRecipient);
+            }
+
+            message.Subject =
+                subject?.Trim()
+                ?? string.Empty;
+
+            message.Date =
+                DateTimeOffset.Now;
+
+            message.MessageId =
+                MimeUtils.GenerateMessageId();
+
+            var textBody =
+                new TextPart(
+                    "plain")
+                {
+                    Text =
+                        body
+                        ?? string.Empty
+                };
+
+            if (attachments is null ||
+                attachments.Count == 0)
+            {
+                message.Body =
+                    textBody;
+
+                return message;
+            }
+
+            var mixedBody =
+                new Multipart(
+                    "mixed");
+
+            mixedBody.Add(
+                textBody);
+
+            foreach (var attachment in
+                     attachments)
+            {
+                var attachmentPart =
+                    CreateAttachmentPart(
+                        attachment);
+
+                try
+                {
+                    mixedBody.Add(
+                        attachmentPart);
+                }
+                catch
+                {
+                    attachmentPart.Dispose();
+
+                    throw;
+                }
+            }
+
+            message.Body =
+                mixedBody;
+
+            return message;
+        }
+        catch
+        {
+            /*
+             * Wichtig bei Dateianhängen:
+             *
+             * MimeMessage.Dispose() räumt bereits
+             * angehängte MimeParts und damit deren
+             * FileStreams ebenfalls auf.
+             */
+            message.Dispose();
+
+            throw;
+        }
+    }
+
+    private static MimePart CreateAttachmentPart(
+        MailSendAttachmentData attachment)
+    {
+        ArgumentNullException.ThrowIfNull(
+            attachment);
+
+        string fullPath;
+        string safeFileName;
+
+        try
+        {
+            if (string.IsNullOrWhiteSpace(
+                    attachment.FilePath))
+            {
+                throw new ArgumentException(
+                    "Der Dateipfad ist leer.");
+            }
+
+            fullPath =
+                Path.GetFullPath(
+                    attachment.FilePath);
+
+            safeFileName =
+                Path.GetFileName(
+                    attachment.FileName);
+
+            if (string.IsNullOrWhiteSpace(
+                    safeFileName))
+            {
+                safeFileName =
+                    Path.GetFileName(
+                        fullPath);
+            }
+
+            if (string.IsNullOrWhiteSpace(
+                    safeFileName))
+            {
+                throw new ArgumentException(
+                    "Der Dateiname ist ungültig.");
+            }
+        }
+        catch (Exception ex)
+            when (ex is
+                  ArgumentException or
+                  NotSupportedException)
+        {
+            throw new MailSendAttachmentException(
+                "Ein ausgewählter Anhang besitzt einen ungültigen Dateipfad.",
+                ex);
+        }
+
+        FileStream? contentStream =
+            null;
+
+        try
+        {
+            /*
+             * Während des Versands darf eine andere Anwendung
+             * die Datei weiterhin lesen, aber nicht verändern
+             * oder löschen.
+             *
+             * Dadurch kann sich der Dateiinhalt nicht mitten
+             * während eines SMTP-Versands ändern.
+             */
+            contentStream =
+                new FileStream(
+                    fullPath,
+                    FileMode.Open,
+                    FileAccess.Read,
+                    FileShare.Read,
+                    bufferSize: 81920,
+                    options:
+                        FileOptions.Asynchronous |
+                        FileOptions.SequentialScan);
+
+            var mimeType =
+                MimeTypes.GetMimeType(
+                    safeFileName);
+
+            var contentType =
+                ContentType.Parse(
+                    mimeType);
+
+            var mimePart =
+                new MimePart(
+                    contentType)
+                {
+                    ContentDisposition =
+                        new ContentDisposition(
+                            ContentDisposition.Attachment),
+
+                    ContentTransferEncoding =
+                        ContentEncoding.Base64,
+
+                    /*
+                     * Ausschließlich der bereinigte Dateiname
+                     * landet in Content-Disposition und
+                     * Content-Type.
+                     *
+                     * Der lokale Windows-Pfad wird niemals
+                     * Teil der E-Mail.
+                     */
+                    FileName =
+                        safeFileName
+                };
+
+            mimePart.Content =
+                new MimeContent(
+                    contentStream,
+                    ContentEncoding.Default);
+
+            /*
+             * Eigentum am Stream liegt ab hier bei
+             * MimeContent/MimeMessage.
+             */
+            contentStream =
+                null;
+
+            return mimePart;
+        }
+        catch (Exception ex)
+            when (ex is
+                  FileNotFoundException or
+                  DirectoryNotFoundException or
+                  UnauthorizedAccessException or
+                  IOException)
+        {
+            contentStream?.Dispose();
+
+            throw new MailSendAttachmentException(
+                $"Der Anhang „{safeFileName}“ kann nicht gelesen werden.",
+                ex);
+        }
+        catch
+        {
+            contentStream?.Dispose();
+
+            throw;
+        }
     }
 
     private static void ApplyReplyThreading(
@@ -342,7 +558,8 @@ public sealed class MailKitSendService :
 
         if (parentReferences is not null)
         {
-            foreach (var reference in parentReferences)
+            foreach (var reference in
+                     parentReferences)
             {
                 if (string.IsNullOrWhiteSpace(
                         reference))

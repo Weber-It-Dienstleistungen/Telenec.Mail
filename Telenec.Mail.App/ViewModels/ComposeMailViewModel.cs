@@ -1,4 +1,6 @@
-﻿using Telenec.Mail.App.Models;
+﻿using System.Collections.ObjectModel;
+using System.IO;
+using Telenec.Mail.App.Models;
 using Telenec.Mail.App.Services.Mail;
 using Telenec.Mail.App.Services.Storage;
 
@@ -53,7 +55,15 @@ public sealed class ComposeMailViewModel : BaseViewModel
 
         _mailAccountStore =
             mailAccountStore;
+
+        Attachments =
+            new ObservableCollection<
+                MailSendAttachmentData>();
     }
+
+    public ObservableCollection<
+        MailSendAttachmentData> Attachments
+    { get; }
 
     public string WindowTitle
     {
@@ -243,6 +253,9 @@ public sealed class ComposeMailViewModel : BaseViewModel
 
             OnPropertyChanged(
                 nameof(CanSend));
+
+            OnPropertyChanged(
+                nameof(CanModifyAttachments));
         }
     }
 
@@ -250,6 +263,179 @@ public sealed class ComposeMailViewModel : BaseViewModel
         !IsSending &&
         !string.IsNullOrWhiteSpace(
             RecipientAddress);
+
+    public bool CanModifyAttachments =>
+        !IsSending;
+
+    public bool HasAttachments =>
+        Attachments.Count > 0;
+
+    public string AttachmentSummary =>
+        Attachments.Count switch
+        {
+            0 =>
+                string.Empty,
+
+            1 =>
+                "1 Anhang",
+
+            _ =>
+                $"{Attachments.Count} Anhänge"
+        };
+
+    public void AddAttachmentFiles(
+        IEnumerable<string> filePaths)
+    {
+        ArgumentNullException.ThrowIfNull(
+            filePaths);
+
+        if (IsSending)
+        {
+            return;
+        }
+
+        /*
+         * Erst alle ausgewählten Dateien validieren.
+         *
+         * Wenn beispielsweise die dritte von fünf Dateien
+         * nicht lesbar ist, sollen nicht bereits die ersten
+         * beiden unbemerkt hinzugefügt worden sein.
+         */
+        var knownPaths =
+            Attachments
+                .Select(
+                    attachment =>
+                        attachment.FilePath)
+                .ToHashSet(
+                    StringComparer.OrdinalIgnoreCase);
+
+        var newAttachments =
+            new List<
+                MailSendAttachmentData>();
+
+        foreach (var filePath in filePaths)
+        {
+            if (string.IsNullOrWhiteSpace(
+                    filePath))
+            {
+                continue;
+            }
+
+            var attachment =
+                CreateAttachmentData(
+                    filePath);
+
+            if (!knownPaths.Add(
+                    attachment.FilePath))
+            {
+                continue;
+            }
+
+            newAttachments.Add(
+                attachment);
+        }
+
+        if (newAttachments.Count == 0)
+        {
+            return;
+        }
+
+        foreach (var attachment in
+                 newAttachments)
+        {
+            Attachments.Add(
+                attachment);
+        }
+
+        NotifyAttachmentStateChanged();
+    }
+
+    public void RemoveAttachment(
+        MailSendAttachmentData attachment)
+    {
+        ArgumentNullException.ThrowIfNull(
+            attachment);
+
+        if (IsSending)
+        {
+            return;
+        }
+
+        if (!Attachments.Remove(
+                attachment))
+        {
+            return;
+        }
+
+        NotifyAttachmentStateChanged();
+    }
+
+    private static MailSendAttachmentData
+        CreateAttachmentData(
+            string filePath)
+    {
+        var fullPath =
+            Path.GetFullPath(
+                filePath);
+
+        var fileName =
+            Path.GetFileName(
+                fullPath);
+
+        if (string.IsNullOrWhiteSpace(
+                fileName))
+        {
+            throw new ArgumentException(
+                "Der ausgewählte Dateiname ist ungültig.",
+                nameof(filePath));
+        }
+
+        if (!File.Exists(
+                fullPath))
+        {
+            throw new FileNotFoundException(
+                "Die ausgewählte Datei wurde nicht gefunden.",
+                fullPath);
+        }
+
+        /*
+         * Bereits beim Hinzufügen prüfen wir, ob die Datei
+         * tatsächlich lesbar ist.
+         *
+         * Der Stream wird sofort wieder geschlossen.
+         * Der eigentliche Versand öffnet die Datei später
+         * erneut und sperrt sie für Änderungen.
+         */
+        using var validationStream =
+            new FileStream(
+                fullPath,
+                FileMode.Open,
+                FileAccess.Read,
+                FileShare.ReadWrite |
+                FileShare.Delete);
+
+        var sizeBytes =
+            validationStream.Length;
+
+        return new MailSendAttachmentData(
+            FilePath:
+                fullPath,
+
+            FileName:
+                fileName,
+
+            SizeBytes:
+                sizeBytes);
+    }
+
+    private void NotifyAttachmentStateChanged()
+    {
+        OnPropertyChanged(
+            nameof(HasAttachments));
+
+        OnPropertyChanged(
+            nameof(AttachmentSummary));
+    }
 
     public void PrepareReply(
         MailMessageItemViewModel message)
@@ -425,12 +611,6 @@ public sealed class ComposeMailViewModel : BaseViewModel
                 replySource.SenderAddress,
                 activeAccountAddress);
 
-        /*
-         * Antworten auf eine selbst gesendete Nachricht:
-         *
-         * Wir antworten weiterhin an den ursprünglichen
-         * Empfänger und nicht an uns selbst.
-         */
         if (senderIsOwnAccount)
         {
             var originalRecipient =
@@ -459,12 +639,6 @@ public sealed class ComposeMailViewModel : BaseViewModel
             return;
         }
 
-        /*
-         * RFC-konformes Antworten:
-         *
-         * Wenn Reply-To vorhanden ist, hat es Vorrang vor
-         * der From-Adresse.
-         */
         var replyTargets =
             replySource.ReplyToAddresses.Count > 0
                 ? replySource.ReplyToAddresses
@@ -683,13 +857,6 @@ public sealed class ComposeMailViewModel : BaseViewModel
                 .Trim()
             ?? string.Empty;
 
-        /*
-         * Verschiedene Clients verwenden unterschiedliche
-         * Präfixe für Weiterleitungen.
-         *
-         * Wir erzeugen deshalb kein Fwd: Fwd: ...,
-         * wenn bereits ein übliches Präfix vorhanden ist.
-         */
         if (subject.StartsWith(
                 "Fwd:",
                 StringComparison.OrdinalIgnoreCase) ||
@@ -884,7 +1051,10 @@ public sealed class ComposeMailViewModel : BaseViewModel
                         _replySourceMessage?.MessageId,
 
                     ParentReferences:
-                        _replySourceMessage?.References);
+                        _replySourceMessage?.References,
+
+                    Attachments:
+                        Attachments.ToArray());
 
             return await _mailSendService
                 .SendAsync(

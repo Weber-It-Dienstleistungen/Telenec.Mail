@@ -6,4 +6,5 @@ public sealed record MailSendRequest(
     string Body,
     string? CcAddress = null,
     string? ParentMessageId = null,
-    IReadOnlyList<string>? ParentReferences = null);
+    IReadOnlyList<string>? ParentReferences = null,
+    IReadOnlyList<MailSendAttachmentData>? Attachments = null);

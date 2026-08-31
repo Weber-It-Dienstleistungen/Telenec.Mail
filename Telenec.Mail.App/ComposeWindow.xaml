@@ -3,9 +3,9 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         Title="{Binding WindowTitle}"
         Width="800"
-        Height="650"
+        Height="700"
         MinWidth="650"
-        MinHeight="500"
+        MinHeight="560"
         WindowStartupLocation="CenterOwner"
         Background="{StaticResource Surface.Background}"
         Foreground="{StaticResource Text.Primary}"
@@ -20,6 +20,7 @@
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto" />
             <RowDefinition Height="1" />
+            <RowDefinition Height="Auto" />
             <RowDefinition Height="Auto" />
             <RowDefinition Height="*" />
             <RowDefinition Height="1" />
@@ -243,10 +244,210 @@
 
         </Border>
 
-        <!-- NACHRICHT -->
+        <!-- ANHÄNGE -->
 
         <Border
             Grid.Row="3"
+            Margin="28,0,28,14">
+
+            <StackPanel>
+
+                <Grid>
+
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto" />
+                        <ColumnDefinition Width="*" />
+                    </Grid.ColumnDefinitions>
+
+                    <Button
+                        Grid.Column="0"
+                        Height="34"
+                        Padding="12,0"
+                        Cursor="Hand"
+                        IsEnabled="{Binding CanModifyAttachments}"
+                        Click="AddAttachmentButton_OnClick">
+
+                        <StackPanel
+                            Orientation="Horizontal">
+
+                            <TextBlock
+                                Text="&#xE723;"
+                                Margin="0,0,8,0"
+                                FontFamily="Segoe Fluent Icons"
+                                FontSize="15"
+                                VerticalAlignment="Center" />
+
+                            <TextBlock
+                                Text="Datei anhängen"
+                                FontSize="12"
+                                FontWeight="SemiBold"
+                                VerticalAlignment="Center" />
+
+                        </StackPanel>
+
+                    </Button>
+
+                    <TextBlock
+                        Grid.Column="1"
+                        Margin="12,0,0,0"
+                        Text="{Binding AttachmentSummary}"
+                        FontSize="11"
+                        Foreground="{StaticResource Text.Secondary}"
+                        VerticalAlignment="Center">
+
+                        <TextBlock.Style>
+
+                            <Style TargetType="TextBlock">
+
+                                <Setter
+                                    Property="Visibility"
+                                    Value="Collapsed" />
+
+                                <Style.Triggers>
+
+                                    <DataTrigger
+                                        Binding="{Binding HasAttachments}"
+                                        Value="True">
+
+                                        <Setter
+                                            Property="Visibility"
+                                            Value="Visible" />
+
+                                    </DataTrigger>
+
+                                </Style.Triggers>
+
+                            </Style>
+
+                        </TextBlock.Style>
+
+                    </TextBlock>
+
+                </Grid>
+
+                <ScrollViewer
+                    Margin="0,8,0,0"
+                    MaxHeight="105"
+                    VerticalScrollBarVisibility="Auto"
+                    HorizontalScrollBarVisibility="Disabled">
+
+                    <ItemsControl
+                        ItemsSource="{Binding Attachments}">
+
+                        <ItemsControl.Style>
+
+                            <Style TargetType="ItemsControl">
+
+                                <Setter
+                                    Property="Visibility"
+                                    Value="Collapsed" />
+
+                                <Style.Triggers>
+
+                                    <DataTrigger
+                                        Binding="{Binding HasAttachments}"
+                                        Value="True">
+
+                                        <Setter
+                                            Property="Visibility"
+                                            Value="Visible" />
+
+                                    </DataTrigger>
+
+                                </Style.Triggers>
+
+                            </Style>
+
+                        </ItemsControl.Style>
+
+                        <ItemsControl.ItemTemplate>
+
+                            <DataTemplate>
+
+                                <Border
+                                    Margin="0,0,0,5"
+                                    Padding="10,7"
+                                    CornerRadius="5"
+                                    Background="{StaticResource Surface.Card}"
+                                    BorderBrush="{StaticResource Border.Default}"
+                                    BorderThickness="1">
+
+                                    <Grid>
+
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="Auto" />
+                                            <ColumnDefinition Width="*" />
+                                            <ColumnDefinition Width="Auto" />
+                                            <ColumnDefinition Width="Auto" />
+                                        </Grid.ColumnDefinitions>
+
+                                        <TextBlock
+                                            Grid.Column="0"
+                                            Text="&#xE8A5;"
+                                            Margin="0,0,9,0"
+                                            FontFamily="Segoe Fluent Icons"
+                                            FontSize="16"
+                                            Foreground="{StaticResource Brand.Primary}"
+                                            VerticalAlignment="Center" />
+
+                                        <TextBlock
+                                            Grid.Column="1"
+                                            Text="{Binding FileName}"
+                                            FontSize="12"
+                                            FontWeight="SemiBold"
+                                            Foreground="{StaticResource Text.Primary}"
+                                            TextTrimming="CharacterEllipsis"
+                                            VerticalAlignment="Center" />
+
+                                        <TextBlock
+                                            Grid.Column="2"
+                                            Margin="12,0,8,0"
+                                            Text="{Binding DisplaySize}"
+                                            FontSize="10"
+                                            Foreground="{StaticResource Text.Secondary}"
+                                            VerticalAlignment="Center" />
+
+                                        <Button
+                                            Grid.Column="3"
+                                            Width="28"
+                                            Height="28"
+                                            Padding="0"
+                                            Cursor="Hand"
+                                            IsEnabled="{Binding DataContext.CanModifyAttachments,
+                                                RelativeSource={RelativeSource AncestorType=Window}}"
+                                            ToolTip="Anhang entfernen"
+                                            Click="RemoveAttachmentButton_OnClick">
+
+                                            <TextBlock
+                                                Text="&#xE711;"
+                                                FontFamily="Segoe Fluent Icons"
+                                                FontSize="12"
+                                                Foreground="{StaticResource Text.Secondary}"
+                                                HorizontalAlignment="Center"
+                                                VerticalAlignment="Center" />
+
+                                        </Button>
+
+                                    </Grid>
+
+                                </Border>
+
+                            </DataTemplate>
+
+                        </ItemsControl.ItemTemplate>
+
+                    </ItemsControl>
+
+                </ScrollViewer>
+
+            </StackPanel>
+
+        </Border>
+
+        <!-- NACHRICHT -->
+
+        <Border
+            Grid.Row="4"
             Margin="28,0,28,22"
             Background="{StaticResource Surface.Card}"
             BorderBrush="{StaticResource Border.Default}"
@@ -276,6 +477,7 @@
                     Opacity="0.88">
 
                     <Border.Style>
+
                         <Style TargetType="Border">
 
                             <Setter
@@ -297,6 +499,7 @@
                             </Style.Triggers>
 
                         </Style>
+
                     </Border.Style>
 
                     <StackPanel
@@ -333,13 +536,13 @@
         </Border>
 
         <Border
-            Grid.Row="4"
+            Grid.Row="5"
             Background="{StaticResource Border.Subtle}" />
 
         <!-- FUSS -->
 
         <Border
-            Grid.Row="5"
+            Grid.Row="6"
             Padding="28,18"
             Background="{StaticResource Surface.Card}">
 
