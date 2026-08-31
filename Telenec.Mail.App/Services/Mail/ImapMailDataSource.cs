@@ -5,6 +5,7 @@ using MailKit.Security;
 using MimeKit;
 using System.IO;
 using System.Net;
+using System.Text;
 using System.Text.RegularExpressions;
 using Telenec.Mail.App.Models;
 using Telenec.Mail.App.Services.Security;
@@ -16,6 +17,36 @@ public sealed class ImapMailDataSource : IMailDataSource
 {
     private const string ImapHost = "mail.necnet.de";
     private const int ImapPort = 993;
+
+    /*
+     * WebView2.NavigateToString() akzeptiert maximal
+     * 2 MB HTML-Inhalt.
+     *
+     * CID-Bilder werden als data:-URI eingebettet.
+     * Dadurch wächst der HTML-Inhalt durch Base64.
+     *
+     * Wir prüfen deshalb jede Einbettung einzeln und
+     * übernehmen sie nur, wenn der fertige HTML-Inhalt
+     * weiterhin innerhalb dieses Limits bleibt.
+     */
+    private const int MaximumWebViewHtmlBytes =
+        2 * 1024 * 1024;
+
+    /*
+     * Erfasst cid:-Referenzen sowohl in normalen
+     * HTML-Attributen:
+     *
+     * src="cid:..."
+     *
+     * als auch beispielsweise in CSS:
+     *
+     * url(cid:...)
+     */
+    private static readonly Regex CidReferenceRegex =
+        new(
+            @"\bcid:(?<contentId>[^""'\s<>)]+)",
+            RegexOptions.IgnoreCase |
+            RegexOptions.CultureInvariant);
 
     private readonly IMailAccountStore _mailAccountStore;
     private readonly ICredentialStore _credentialStore;
@@ -863,6 +894,10 @@ public sealed class ImapMailDataSource : IMailDataSource
         string? htmlBody =
             null;
 
+        var inlinePartSpecifiers =
+            new HashSet<string>(
+                StringComparer.Ordinal);
+
         if (summary.TextBody is not null)
         {
             var textEntity =
@@ -896,6 +931,14 @@ public sealed class ImapMailDataSource : IMailDataSource
             }
         }
 
+        /*
+         * Der Plaintext-Fallback wird bewusst noch aus dem
+         * ursprünglichen HTML erzeugt.
+         *
+         * Würden wir zuerst CID-Bilder als Base64-data:-URI
+         * einsetzen, müsste die Plaintext-Konvertierung unnötig
+         * durch möglicherweise große Base64-Blöcke laufen.
+         */
         if (string.IsNullOrWhiteSpace(
                 plainText) &&
             !string.IsNullOrWhiteSpace(
@@ -906,12 +949,347 @@ public sealed class ImapMailDataSource : IMailDataSource
                     htmlBody);
         }
 
+        if (!string.IsNullOrWhiteSpace(
+                htmlBody))
+        {
+            var cidResolution =
+                await ResolveCidImagesAsync(
+                    folder,
+                    summary,
+                    htmlBody,
+                    cancellationToken);
+
+            htmlBody =
+                cidResolution.HtmlBody;
+
+            inlinePartSpecifiers.UnionWith(
+                cidResolution.InlinePartSpecifiers);
+        }
+
         return new MessageBodyContent(
             PlainText:
                 plainText,
 
             HtmlBody:
-                htmlBody);
+                htmlBody,
+
+            InlinePartSpecifiers:
+                inlinePartSpecifiers);
+    }
+
+    private static async Task<CidResolutionResult>
+        ResolveCidImagesAsync(
+            IMailFolder folder,
+            IMessageSummary summary,
+            string htmlBody,
+            CancellationToken cancellationToken)
+    {
+        if (string.IsNullOrWhiteSpace(
+                htmlBody))
+        {
+            return new CidResolutionResult(
+                HtmlBody:
+                    htmlBody,
+
+                InlinePartSpecifiers:
+                    new HashSet<string>(
+                        StringComparer.Ordinal));
+        }
+
+        /*
+         * Zuerst nur die CIDs betrachten, die das HTML
+         * tatsächlich referenziert.
+         *
+         * Dadurch laden wir nicht blind alle image/*-Parts
+         * einer Nachricht vom Server.
+         */
+        var referencedContentIds =
+            CidReferenceRegex
+                .Matches(
+                    htmlBody)
+                .Cast<Match>()
+                .Select(
+                    match =>
+                        NormalizeContentId(
+                            match
+                                .Groups["contentId"]
+                                .Value))
+                .Where(
+                    contentId =>
+                        !string.IsNullOrWhiteSpace(
+                            contentId))
+                .Distinct(
+                    StringComparer.OrdinalIgnoreCase)
+                .ToList();
+
+        if (referencedContentIds.Count == 0)
+        {
+            return new CidResolutionResult(
+                HtmlBody:
+                    htmlBody,
+
+                InlinePartSpecifiers:
+                    new HashSet<string>(
+                        StringComparer.Ordinal));
+        }
+
+        /*
+         * BodyStructure ist bereits mit dem Summary geladen.
+         *
+         * Wir bauen daraus eine Content-ID -> MIME-Part-Zuordnung,
+         * akzeptieren aber ausschließlich image/*.
+         */
+        var imagePartsByContentId =
+            new Dictionary<string, BodyPartBasic>(
+                StringComparer.OrdinalIgnoreCase);
+
+        foreach (var bodyPart in
+                 summary.BodyParts.OfType<BodyPartBasic>())
+        {
+            if (!string.Equals(
+                    bodyPart.ContentType.MediaType,
+                    "image",
+                    StringComparison.OrdinalIgnoreCase))
+            {
+                continue;
+            }
+
+            if (string.IsNullOrWhiteSpace(
+                    bodyPart.ContentId) ||
+                string.IsNullOrWhiteSpace(
+                    bodyPart.PartSpecifier))
+            {
+                continue;
+            }
+
+            var normalizedContentId =
+                NormalizeContentId(
+                    bodyPart.ContentId);
+
+            if (string.IsNullOrWhiteSpace(
+                    normalizedContentId))
+            {
+                continue;
+            }
+
+            /*
+             * Falls eine fehlerhafte MIME-Struktur dieselbe
+             * Content-ID mehrfach enthält, verwenden wir bewusst
+             * nur den ersten Part.
+             */
+            imagePartsByContentId.TryAdd(
+                normalizedContentId,
+                bodyPart);
+        }
+
+        if (imagePartsByContentId.Count == 0)
+        {
+            return new CidResolutionResult(
+                HtmlBody:
+                    htmlBody,
+
+                InlinePartSpecifiers:
+                    new HashSet<string>(
+                        StringComparer.Ordinal));
+        }
+
+        var resolvedHtml =
+            htmlBody;
+
+        var inlinePartSpecifiers =
+            new HashSet<string>(
+                StringComparer.Ordinal);
+
+        foreach (var referencedContentId in
+                 referencedContentIds)
+        {
+            cancellationToken
+                .ThrowIfCancellationRequested();
+
+            if (!imagePartsByContentId.TryGetValue(
+                    referencedContentId,
+                    out var bodyPart))
+            {
+                continue;
+            }
+
+            try
+            {
+                var entity =
+                    await folder.GetBodyPartAsync(
+                        summary.UniqueId,
+                        bodyPart,
+                        cancellationToken);
+
+                /*
+                 * Auch nach dem Abruf prüfen wir erneut, dass
+                 * tatsächlich ein image/* MimePart vorliegt.
+                 *
+                 * Ein anderer MIME-Typ wird niemals als Data-URI
+                 * in den HTML-Inhalt eingesetzt.
+                 */
+                if (entity is not MimePart mimePart ||
+                    mimePart.Content is null ||
+                    !string.Equals(
+                        mimePart.ContentType.MediaType,
+                        "image",
+                        StringComparison.OrdinalIgnoreCase))
+                {
+                    continue;
+                }
+
+                using var buffer =
+                    new MemoryStream();
+
+                await mimePart.Content
+                    .DecodeToAsync(
+                        buffer,
+                        cancellationToken);
+
+                if (buffer.Length == 0)
+                {
+                    continue;
+                }
+
+                var mimeType =
+                    mimePart.ContentType.MimeType;
+
+                if (string.IsNullOrWhiteSpace(
+                        mimeType))
+                {
+                    continue;
+                }
+
+                var dataUri =
+                    $"data:{mimeType};base64," +
+                    Convert.ToBase64String(
+                        buffer.ToArray());
+
+                /*
+                 * Nur genau die cid:-Referenzen ersetzen,
+                 * deren normalisierte Content-ID mit diesem
+                 * MIME-Part übereinstimmt.
+                 */
+                var candidateHtml =
+                    CidReferenceRegex.Replace(
+                        resolvedHtml,
+                        match =>
+                        {
+                            var matchedContentId =
+                                NormalizeContentId(
+                                    match
+                                        .Groups["contentId"]
+                                        .Value);
+
+                            return string.Equals(
+                                    matchedContentId,
+                                    referencedContentId,
+                                    StringComparison.OrdinalIgnoreCase)
+                                ? dataUri
+                                : match.Value;
+                        });
+
+                if (string.Equals(
+                        candidateHtml,
+                        resolvedHtml,
+                        StringComparison.Ordinal))
+                {
+                    continue;
+                }
+
+                /*
+                 * NavigateToString() hat ein hartes 2-MB-Limit.
+                 *
+                 * Ein großes Inline-Bild darf deshalb nicht
+                 * dazu führen, dass anschließend die komplette
+                 * HTML-Mail nicht mehr dargestellt werden kann.
+                 *
+                 * In diesem Sonderfall bleibt die betreffende
+                 * CID-Referenz unangetastet.
+                 */
+                var candidateHtmlSize =
+                    Encoding.UTF8.GetByteCount(
+                        candidateHtml);
+
+                if (candidateHtmlSize >
+                    MaximumWebViewHtmlBytes)
+                {
+                    continue;
+                }
+
+                resolvedHtml =
+                    candidateHtml;
+
+                inlinePartSpecifiers.Add(
+                    bodyPart.PartSpecifier);
+            }
+            catch (OperationCanceledException)
+                when (cancellationToken.IsCancellationRequested)
+            {
+                throw;
+            }
+            catch
+            {
+                /*
+                 * Ein defektes oder nicht abrufbares Inline-Bild
+                 * darf die eigentliche Mail nicht unlesbar machen.
+                 *
+                 * In diesem Fall bleibt die originale cid:-Referenz
+                 * bestehen und WebView zeigt höchstens für dieses
+                 * einzelne Bild einen Platzhalter.
+                 */
+            }
+        }
+
+        return new CidResolutionResult(
+            HtmlBody:
+                resolvedHtml,
+
+            InlinePartSpecifiers:
+                inlinePartSpecifiers);
+    }
+
+    private static string NormalizeContentId(
+        string? contentId)
+    {
+        if (string.IsNullOrWhiteSpace(
+                contentId))
+        {
+            return string.Empty;
+        }
+
+        /*
+         * HTML kann Sonderzeichen innerhalb der CID als
+         * Entity kodieren. Ein cid:-URI darf außerdem
+         * Prozent-Encoding enthalten.
+         */
+        var normalized =
+            WebUtility
+                .HtmlDecode(
+                    contentId)
+                .Trim();
+
+        try
+        {
+            normalized =
+                Uri.UnescapeDataString(
+                    normalized);
+        }
+        catch (UriFormatException)
+        {
+            /*
+             * Eine ungültig kodierte CID wird nicht als
+             * Fehler der gesamten Nachricht behandelt.
+             *
+             * Wir verwenden dann den ursprünglichen Wert.
+             */
+        }
+
+        return normalized
+            .Trim()
+            .Trim(
+                '<',
+                '>');
     }
 
     private static MailMessageData CreateMessageData(
@@ -985,7 +1363,8 @@ public sealed class ImapMailDataSource : IMailDataSource
 
         var attachments =
             CreateAttachmentData(
-                summary);
+                summary,
+                bodyContent.InlinePartSpecifiers);
 
         return new MailMessageData(
             Sender:
@@ -1063,7 +1442,8 @@ public sealed class ImapMailDataSource : IMailDataSource
 
     private static IReadOnlyList<MailAttachmentData>
         CreateAttachmentData(
-            IMessageSummary summary)
+            IMessageSummary summary,
+            IReadOnlySet<string> inlinePartSpecifiers)
     {
         var attachments =
             new List<MailAttachmentData>();
@@ -1079,8 +1459,6 @@ public sealed class ImapMailDataSource : IMailDataSource
                 continue;
             }
 
-            attachmentNumber++;
-
             var partSpecifier =
                 attachment.PartSpecifier;
 
@@ -1089,6 +1467,23 @@ public sealed class ImapMailDataSource : IMailDataSource
             {
                 continue;
             }
+
+            /*
+             * Ein erfolgreich als CID eingebetteter Part gehört
+             * zum sichtbaren Mailinhalt und soll deshalb nicht
+             * zusätzlich als normaler Benutzer-Anhang erscheinen.
+             *
+             * Relevant ist dies insbesondere für Clients, die
+             * trotz CID-Verwendung Content-Disposition: attachment
+             * setzen.
+             */
+            if (inlinePartSpecifiers.Contains(
+                    partSpecifier))
+            {
+                continue;
+            }
+
+            attachmentNumber++;
 
             var fileName =
                 GetSafeAttachmentFileName(
@@ -1462,7 +1857,12 @@ public sealed class ImapMailDataSource : IMailDataSource
         }
     }
 
+    private sealed record CidResolutionResult(
+        string HtmlBody,
+        IReadOnlySet<string> InlinePartSpecifiers);
+
     private sealed record MessageBodyContent(
         string PlainText,
-        string? HtmlBody);
+        string? HtmlBody,
+        IReadOnlySet<string> InlinePartSpecifiers);
 }
