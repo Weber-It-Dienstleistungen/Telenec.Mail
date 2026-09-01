@@ -38,6 +38,9 @@ public sealed class MailKitSendService :
     private static readonly TimeSpan SentCopyTimeout =
         TimeSpan.FromSeconds(30);
 
+    private static readonly TimeSpan DraftSaveTimeout =
+        TimeSpan.FromSeconds(30);
+
     private readonly IMailAccountStore _mailAccountStore;
     private readonly ICredentialStore _credentialStore;
 
@@ -159,6 +162,102 @@ public sealed class MailKitSendService :
 
             SentCopySaved:
                 sentCopySaved);
+    }
+
+    public async Task SaveDraftAsync(
+        MailSendRequest request,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(
+            request);
+
+        /*
+         * Anders als beim Versand ist ein Empfänger für
+         * einen Entwurf ausdrücklich optional.
+         *
+         * Wenn Adressen vorhanden sind, validieren und
+         * normalisieren wir sie trotzdem mit exakt derselben
+         * Logik wie beim späteren Versand.
+         */
+        var recipients =
+            ParseRecipientList(
+                request.RecipientAddress,
+                nameof(request.RecipientAddress),
+                "Empfänger",
+                required: false);
+
+        var ccRecipients =
+            ParseRecipientList(
+                request.CcAddress,
+                nameof(request.CcAddress),
+                "Cc-Adresse",
+                required: false);
+
+        ccRecipients =
+            RemoveDuplicateCcRecipients(
+                recipients,
+                ccRecipients);
+
+        var account =
+            await _mailAccountStore
+                .GetActiveAccountAsync(
+                    cancellationToken);
+
+        if (account is null)
+        {
+            throw new InvalidOperationException(
+                "Es ist kein aktives Mailkonto eingerichtet.");
+        }
+
+        var credential =
+            await _credentialStore
+                .ReadAsync(
+                    account.AccountId,
+                    cancellationToken);
+
+        if (credential is null ||
+            string.IsNullOrWhiteSpace(
+                credential.Password))
+        {
+            throw new InvalidOperationException(
+                "Für das Mailkonto sind keine Zugangsdaten gespeichert.");
+        }
+
+        var sender =
+            CreateSenderAddress(
+                account.EmailAddress,
+                account.DisplayName);
+
+        /*
+         * Wichtig:
+         *
+         * Entwurf und späterer Versand benutzen bewusst
+         * dieselbe MIME-Erzeugung. Dadurch gelten auch für
+         * lokale und weitergeleitete Anhänge dieselben
+         * Prüfungen und Sicherheitsregeln.
+         */
+        using var message =
+            await CreateMessageAsync(
+                sender,
+                recipients,
+                ccRecipients,
+                request.Subject,
+                request.Body,
+                request.Attachments,
+                account.EmailAddress,
+                credential.Password,
+                cancellationToken);
+
+        ApplyReplyThreading(
+            message,
+            request.ParentMessageId,
+            request.ParentReferences);
+
+        await SaveDraftCopyAsync(
+            account.EmailAddress,
+            credential.Password,
+            message,
+            cancellationToken);
     }
 
     private static IReadOnlyList<MailboxAddress>
@@ -1030,6 +1129,70 @@ public sealed class MailKitSendService :
         }
     }
 
+    private static async Task SaveDraftCopyAsync(
+        string userName,
+        string password,
+        MimeMessage message,
+        CancellationToken cancellationToken)
+    {
+        using var client =
+            new ImapClient();
+
+        try
+        {
+            using var timeoutSource =
+                CancellationTokenSource.CreateLinkedTokenSource(
+                    cancellationToken);
+
+            timeoutSource.CancelAfter(
+                DraftSaveTimeout);
+
+            var operationCancellationToken =
+                timeoutSource.Token;
+
+            await client.ConnectAsync(
+                ImapHost,
+                ImapPort,
+                SecureSocketOptions.SslOnConnect,
+                operationCancellationToken);
+
+            await client.AuthenticateAsync(
+                userName,
+                password,
+                operationCancellationToken);
+
+            var draftFolder =
+                await GetDraftFolderAsync(
+                    client,
+                    operationCancellationToken);
+
+            if (draftFolder is null)
+            {
+                throw new InvalidOperationException(
+                    "Der Entwürfe-Ordner konnte auf dem Mailserver nicht gefunden werden.");
+            }
+
+            /*
+             * \Draft kennzeichnet die Nachricht serverseitig
+             * als Entwurf.
+             *
+             * \Seen verhindert zugleich, dass der eigene
+             * Entwurf im Client als ungelesene Nachricht
+             * gezählt oder hervorgehoben wird.
+             */
+            await draftFolder.AppendAsync(
+                message,
+                MessageFlags.Draft |
+                MessageFlags.Seen,
+                operationCancellationToken);
+        }
+        finally
+        {
+            await DisconnectImapSafelyAsync(
+                client);
+        }
+    }
+
     private static async Task<IMailFolder?>
         GetSentFolderAsync(
             ImapClient client,
@@ -1067,6 +1230,43 @@ public sealed class MailKitSendService :
                         folder.Name));
     }
 
+    private static async Task<IMailFolder?>
+        GetDraftFolderAsync(
+            ImapClient client,
+            CancellationToken cancellationToken)
+    {
+        var specialUseDrafts =
+            client.GetFolder(
+                SpecialFolder.Drafts);
+
+        if (specialUseDrafts is not null &&
+            !specialUseDrafts.Attributes.HasFlag(
+                FolderAttributes.NoSelect))
+        {
+            return specialUseDrafts;
+        }
+
+        if (client.PersonalNamespaces.Count == 0)
+        {
+            return null;
+        }
+
+        var folders =
+            await client.GetFoldersAsync(
+                client.PersonalNamespaces[0],
+                StatusItems.None,
+                false,
+                cancellationToken);
+
+        return folders
+            .FirstOrDefault(
+                folder =>
+                    !folder.Attributes.HasFlag(
+                        FolderAttributes.NoSelect) &&
+                    IsDraftFolderName(
+                        folder.Name));
+    }
+
     private static bool IsSentFolderName(
         string folderName)
     {
@@ -1084,6 +1284,28 @@ public sealed class MailKitSendService :
             "sent items" => true,
             "sent messages" => true,
             "gesendet" => true,
+            _ => false
+        };
+    }
+
+    private static bool IsDraftFolderName(
+        string folderName)
+    {
+        if (string.IsNullOrWhiteSpace(
+                folderName))
+        {
+            return false;
+        }
+
+        return folderName
+            .Trim()
+            .ToLowerInvariant() switch
+        {
+            "drafts" => true,
+            "draft" => true,
+            "draft messages" => true,
+            "entwürfe" => true,
+            "entwurf" => true,
             _ => false
         };
     }

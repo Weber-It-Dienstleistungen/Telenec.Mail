@@ -245,6 +245,13 @@ public partial class ComposeWindow : Window
         await SendMessageAsync();
     }
 
+    private async void SaveDraftButton_OnClick(
+        object sender,
+        RoutedEventArgs e)
+    {
+        await SaveDraftAsync();
+    }
+
     private async Task SendMessageAsync()
     {
         if (!_viewModel.CanSend)
@@ -333,11 +340,117 @@ public partial class ComposeWindow : Window
         }
     }
 
+    private async Task SaveDraftAsync()
+    {
+        if (!_viewModel.CanSaveDraft)
+        {
+            return;
+        }
+
+        try
+        {
+            await _viewModel
+                .SaveDraftAsync();
+
+            /*
+             * False ist hier absichtlich korrekt:
+             *
+             * MainWindow wertet ausschließlich true als
+             * erfolgreich versendete Nachricht.
+             *
+             * Ein gespeicherter Entwurf darf deshalb nicht
+             * den Versand-Workflow auslösen.
+             */
+            DialogResult =
+                false;
+
+            Close();
+        }
+        catch (MailSendAttachmentException ex)
+        {
+            MessageBox.Show(
+                ex.Message +
+                "\n\nDer Entwurf wurde nicht gespeichert.",
+                "Anhang konnte nicht vorbereitet werden",
+                MessageBoxButton.OK,
+                MessageBoxImage.Warning);
+        }
+        catch (ArgumentException ex)
+        {
+            MessageBox.Show(
+                ex.Message,
+                "Adressen prüfen",
+                MessageBoxButton.OK,
+                MessageBoxImage.Information);
+
+            if (string.Equals(
+                    ex.ParamName,
+                    nameof(MailSendRequest.CcAddress),
+                    StringComparison.Ordinal))
+            {
+                CcTextBox.Focus();
+
+                CcTextBox.SelectAll();
+
+                return;
+            }
+
+            RecipientTextBox.Focus();
+
+            RecipientTextBox.SelectAll();
+        }
+        catch (MailKit.Security.AuthenticationException)
+        {
+            MessageBox.Show(
+                "Der Mailserver hat die gespeicherten Zugangsdaten nicht akzeptiert.\n\n" +
+                "Der Entwurf wurde nicht gespeichert.",
+                "Anmeldung fehlgeschlagen",
+                MessageBoxButton.OK,
+                MessageBoxImage.Error);
+        }
+        catch (SslHandshakeException)
+        {
+            MessageBox.Show(
+                "Die sichere Verbindung zum Mailserver konnte nicht hergestellt werden.\n\n" +
+                "Der Entwurf wurde nicht gespeichert.",
+                "Sicherheitsfehler",
+                MessageBoxButton.OK,
+                MessageBoxImage.Error);
+        }
+        catch (OperationCanceledException)
+        {
+            MessageBox.Show(
+                "Das Speichern des Entwurfs hat zu lange gedauert und wurde abgebrochen.\n\n" +
+                "Der Inhalt bleibt im geöffneten Fenster erhalten.",
+                "Zeitüberschreitung",
+                MessageBoxButton.OK,
+                MessageBoxImage.Warning);
+        }
+        catch (InvalidOperationException ex)
+        {
+            MessageBox.Show(
+                ex.Message +
+                "\n\nDer Entwurf wurde nicht gespeichert.",
+                "Entwurf konnte nicht gespeichert werden",
+                MessageBoxButton.OK,
+                MessageBoxImage.Error);
+        }
+        catch
+        {
+            MessageBox.Show(
+                "Der Entwurf konnte nicht auf dem Mailserver gespeichert werden.\n\n" +
+                "Bitte prüfen Sie die Internetverbindung und versuchen Sie es erneut.",
+                "Entwurf konnte nicht gespeichert werden",
+                MessageBoxButton.OK,
+                MessageBoxImage.Error);
+        }
+    }
+
     private void CancelButton_OnClick(
         object sender,
         RoutedEventArgs e)
     {
-        if (_viewModel.IsSending)
+        if (_viewModel.IsBusy)
         {
             return;
         }
@@ -374,7 +487,12 @@ public partial class ComposeWindow : Window
         object? sender,
         CancelEventArgs e)
     {
-        if (_viewModel.IsSending)
+        /*
+         * Weder SMTP-Versand noch IMAP-Draft-Append dürfen
+         * durch Schließen des Fensters in einen undefinierten
+         * Zwischenzustand gebracht werden.
+         */
+        if (_viewModel.IsBusy)
         {
             e.Cancel =
                 true;

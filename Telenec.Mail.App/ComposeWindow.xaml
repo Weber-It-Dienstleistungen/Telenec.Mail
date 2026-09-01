@@ -124,7 +124,7 @@
                     Padding="10,7"
                     Text="{Binding RecipientAddress,
                         UpdateSourceTrigger=PropertyChanged}"
-                    IsReadOnly="{Binding IsSending}"
+                    IsReadOnly="{Binding IsBusy}"
                     FontSize="13"
                     VerticalContentAlignment="Center"
                     Background="{StaticResource Surface.Background}"
@@ -179,7 +179,7 @@
                     Padding="10,7"
                     Text="{Binding CcAddress,
                         UpdateSourceTrigger=PropertyChanged}"
-                    IsReadOnly="{Binding IsSending}"
+                    IsReadOnly="{Binding IsBusy}"
                     FontSize="13"
                     VerticalContentAlignment="Center"
                     Background="{StaticResource Surface.Background}"
@@ -232,7 +232,7 @@
                     Padding="10,7"
                     Text="{Binding Subject,
                         UpdateSourceTrigger=PropertyChanged}"
-                    IsReadOnly="{Binding IsSending}"
+                    IsReadOnly="{Binding IsBusy}"
                     FontSize="13"
                     VerticalContentAlignment="Center"
                     Background="{StaticResource Surface.Background}"
@@ -460,7 +460,7 @@
                     x:Name="BodyTextBox"
                     Text="{Binding Body,
                         UpdateSourceTrigger=PropertyChanged}"
-                    IsReadOnly="{Binding IsSending}"
+                    IsReadOnly="{Binding IsBusy}"
                     Padding="16"
                     AcceptsReturn="True"
                     AcceptsTab="True"
@@ -471,6 +471,11 @@
                     Background="Transparent"
                     Foreground="{StaticResource Text.Primary}"
                     BorderThickness="0" />
+
+                <!--
+                    Gemeinsame Sperre für Versand und
+                    Entwurfs-Speicherung.
+                -->
 
                 <Border
                     Background="{StaticResource Surface.Card}"
@@ -487,7 +492,7 @@
                             <Style.Triggers>
 
                                 <DataTrigger
-                                    Binding="{Binding IsSending}"
+                                    Binding="{Binding IsBusy}"
                                     Value="True">
 
                                     <Setter
@@ -503,25 +508,79 @@
                     </Border.Style>
 
                     <StackPanel
-                        Width="260"
+                        Width="280"
                         HorizontalAlignment="Center"
                         VerticalAlignment="Center">
 
                         <TextBlock
-                            Text="E-Mail wird gesendet …"
                             Margin="0,0,0,14"
                             FontSize="14"
                             FontWeight="SemiBold"
                             Foreground="{StaticResource Text.Primary}"
-                            HorizontalAlignment="Center" />
+                            HorizontalAlignment="Center">
+
+                            <TextBlock.Style>
+
+                                <Style TargetType="TextBlock">
+
+                                    <Setter
+                                        Property="Text"
+                                        Value="E-Mail wird gesendet …" />
+
+                                    <Style.Triggers>
+
+                                        <DataTrigger
+                                            Binding="{Binding IsSavingDraft}"
+                                            Value="True">
+
+                                            <Setter
+                                                Property="Text"
+                                                Value="Entwurf wird gespeichert …" />
+
+                                        </DataTrigger>
+
+                                    </Style.Triggers>
+
+                                </Style>
+
+                            </TextBlock.Style>
+
+                        </TextBlock>
 
                         <TextBlock
-                            Text="Bitte schließen Sie das Fenster während des Versands nicht."
                             Margin="0,0,0,16"
                             FontSize="11"
                             Foreground="{StaticResource Text.Secondary}"
                             TextAlignment="Center"
-                            TextWrapping="Wrap" />
+                            TextWrapping="Wrap">
+
+                            <TextBlock.Style>
+
+                                <Style TargetType="TextBlock">
+
+                                    <Setter
+                                        Property="Text"
+                                        Value="Bitte schließen Sie das Fenster während des Versands nicht." />
+
+                                    <Style.Triggers>
+
+                                        <DataTrigger
+                                            Binding="{Binding IsSavingDraft}"
+                                            Value="True">
+
+                                            <Setter
+                                                Property="Text"
+                                                Value="Bitte schließen Sie das Fenster während der Speicherung nicht." />
+
+                                        </DataTrigger>
+
+                                    </Style.Triggers>
+
+                                </Style>
+
+                            </TextBlock.Style>
+
+                        </TextBlock>
 
                         <ProgressBar
                             Height="4"
@@ -594,7 +653,7 @@
                                 <Style.Triggers>
 
                                     <DataTrigger
-                                        Binding="{Binding IsSending}"
+                                        Binding="{Binding IsBusy}"
                                         Value="True">
 
                                         <Setter
@@ -608,6 +667,57 @@
                             </Style>
 
                         </Button.Style>
+
+                    </Button>
+
+                    <Button
+                        Width="150"
+                        Height="38"
+                        Margin="0,0,10,0"
+                        Cursor="Hand"
+                        IsEnabled="{Binding CanSaveDraft}"
+                        Click="SaveDraftButton_OnClick">
+
+                        <Button.Style>
+
+                            <Style TargetType="Button">
+
+                                <Setter
+                                    Property="Background"
+                                    Value="{StaticResource Surface.Background}" />
+
+                                <Setter
+                                    Property="Foreground"
+                                    Value="{StaticResource Text.Primary}" />
+
+                                <Setter
+                                    Property="BorderBrush"
+                                    Value="{StaticResource Border.Default}" />
+
+                                <Setter
+                                    Property="BorderThickness"
+                                    Value="1" />
+
+                            </Style>
+
+                        </Button.Style>
+
+                        <StackPanel
+                            Orientation="Horizontal"
+                            HorizontalAlignment="Center">
+
+                            <TextBlock
+                                Text="&#xE74E;"
+                                Margin="0,0,8,0"
+                                FontFamily="Segoe Fluent Icons"
+                                FontSize="14"
+                                VerticalAlignment="Center" />
+
+                            <TextBlock
+                                Text="Entwurf speichern"
+                                VerticalAlignment="Center" />
+
+                        </StackPanel>
 
                     </Button>
 

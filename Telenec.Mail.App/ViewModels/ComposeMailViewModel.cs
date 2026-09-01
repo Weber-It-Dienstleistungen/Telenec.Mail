@@ -39,6 +39,7 @@ public sealed class ComposeMailViewModel : BaseViewModel
     private bool _showCcField;
     private bool _focusBodyOnLoad;
     private bool _isSending;
+    private bool _isSavingDraft;
 
     public ComposeMailViewModel(
         IMailSendService mailSendService,
@@ -105,7 +106,8 @@ public sealed class ComposeMailViewModel : BaseViewModel
 
     public string FromAddress
     {
-        get => _fromAddress;
+        get =>
+            _fromAddress;
 
         private set
         {
@@ -123,7 +125,8 @@ public sealed class ComposeMailViewModel : BaseViewModel
 
     public string RecipientAddress
     {
-        get => _recipientAddress;
+        get =>
+            _recipientAddress;
 
         set
         {
@@ -139,6 +142,9 @@ public sealed class ComposeMailViewModel : BaseViewModel
 
             OnPropertyChanged(
                 nameof(CanSend));
+
+            OnPropertyChanged(
+                nameof(CanSaveDraft));
         }
     }
 
@@ -158,12 +164,16 @@ public sealed class ComposeMailViewModel : BaseViewModel
                 value;
 
             OnPropertyChanged();
+
+            OnPropertyChanged(
+                nameof(CanSaveDraft));
         }
     }
 
     public string Subject
     {
-        get => _subject;
+        get =>
+            _subject;
 
         set
         {
@@ -176,12 +186,16 @@ public sealed class ComposeMailViewModel : BaseViewModel
                 value;
 
             OnPropertyChanged();
+
+            OnPropertyChanged(
+                nameof(CanSaveDraft));
         }
     }
 
     public string Body
     {
-        get => _body;
+        get =>
+            _body;
 
         set
         {
@@ -194,6 +208,9 @@ public sealed class ComposeMailViewModel : BaseViewModel
                 value;
 
             OnPropertyChanged();
+
+            OnPropertyChanged(
+                nameof(CanSaveDraft));
         }
     }
 
@@ -237,7 +254,8 @@ public sealed class ComposeMailViewModel : BaseViewModel
 
     public bool IsSending
     {
-        get => _isSending;
+        get =>
+            _isSending;
 
         private set
         {
@@ -252,22 +270,78 @@ public sealed class ComposeMailViewModel : BaseViewModel
             OnPropertyChanged();
 
             OnPropertyChanged(
+                nameof(IsBusy));
+
+            OnPropertyChanged(
                 nameof(CanSend));
+
+            OnPropertyChanged(
+                nameof(CanSaveDraft));
 
             OnPropertyChanged(
                 nameof(CanModifyAttachments));
         }
     }
 
+    public bool IsSavingDraft
+    {
+        get =>
+            _isSavingDraft;
+
+        private set
+        {
+            if (_isSavingDraft == value)
+            {
+                return;
+            }
+
+            _isSavingDraft =
+                value;
+
+            OnPropertyChanged();
+
+            OnPropertyChanged(
+                nameof(IsBusy));
+
+            OnPropertyChanged(
+                nameof(CanSend));
+
+            OnPropertyChanged(
+                nameof(CanSaveDraft));
+
+            OnPropertyChanged(
+                nameof(CanModifyAttachments));
+        }
+    }
+
+    public bool IsBusy =>
+        IsSending ||
+        IsSavingDraft;
+
     public bool CanSend =>
-        !IsSending &&
+        !IsBusy &&
         !string.IsNullOrWhiteSpace(
             RecipientAddress);
 
+    public bool CanSaveDraft =>
+        !IsBusy &&
+        HasDraftContent;
+
     public bool CanModifyAttachments =>
-        !IsSending;
+        !IsBusy;
 
     public bool HasAttachments =>
+        Attachments.Count > 0;
+
+    private bool HasDraftContent =>
+        !string.IsNullOrWhiteSpace(
+            RecipientAddress) ||
+        !string.IsNullOrWhiteSpace(
+            CcAddress) ||
+        !string.IsNullOrWhiteSpace(
+            Subject) ||
+        !string.IsNullOrWhiteSpace(
+            Body) ||
         Attachments.Count > 0;
 
     public string AttachmentSummary =>
@@ -289,7 +363,7 @@ public sealed class ComposeMailViewModel : BaseViewModel
         ArgumentNullException.ThrowIfNull(
             filePaths);
 
-        if (IsSending)
+        if (IsBusy)
         {
             return;
         }
@@ -360,7 +434,7 @@ public sealed class ComposeMailViewModel : BaseViewModel
         ArgumentNullException.ThrowIfNull(
             message);
 
-        if (IsSending ||
+        if (IsBusy ||
             message.Attachments.Count == 0)
         {
             return;
@@ -450,7 +524,7 @@ public sealed class ComposeMailViewModel : BaseViewModel
         ArgumentNullException.ThrowIfNull(
             attachment);
 
-        if (IsSending)
+        if (IsBusy)
         {
             return;
         }
@@ -497,8 +571,8 @@ public sealed class ComposeMailViewModel : BaseViewModel
          * tatsächlich lesbar ist.
          *
          * Der Stream wird sofort wieder geschlossen.
-         * Der eigentliche Versand öffnet die Datei später
-         * erneut und sperrt sie für Änderungen.
+         * Der eigentliche Versand oder die Draft-Speicherung
+         * öffnet die Datei später erneut.
          */
         using var validationStream =
             new FileStream(
@@ -529,6 +603,9 @@ public sealed class ComposeMailViewModel : BaseViewModel
 
         OnPropertyChanged(
             nameof(AttachmentSummary));
+
+        OnPropertyChanged(
+            nameof(CanSaveDraft));
     }
 
     public void PrepareReply(
@@ -1106,10 +1183,10 @@ public sealed class ComposeMailViewModel : BaseViewModel
     public async Task<MailSendResult> SendAsync(
         CancellationToken cancellationToken = default)
     {
-        if (IsSending)
+        if (IsBusy)
         {
             throw new InvalidOperationException(
-                "Es läuft bereits ein Versandvorgang.");
+                "Es läuft bereits ein Vorgang.");
         }
 
         if (string.IsNullOrWhiteSpace(
@@ -1125,30 +1202,8 @@ public sealed class ComposeMailViewModel : BaseViewModel
         try
         {
             var request =
-                new MailSendRequest(
-                    RecipientAddress:
-                        RecipientAddress.Trim(),
-
-                    Subject:
-                        Subject,
-
-                    Body:
-                        Body,
-
-                    CcAddress:
-                        string.IsNullOrWhiteSpace(
-                            CcAddress)
-                            ? null
-                            : CcAddress.Trim(),
-
-                    ParentMessageId:
-                        _replySourceMessage?.MessageId,
-
-                    ParentReferences:
-                        _replySourceMessage?.References,
-
-                    Attachments:
-                        Attachments.ToArray());
+                CreateMailRequest(
+                    requireRecipient: true);
 
             return await _mailSendService
                 .SendAsync(
@@ -1160,5 +1215,84 @@ public sealed class ComposeMailViewModel : BaseViewModel
             IsSending =
                 false;
         }
+    }
+
+    public async Task SaveDraftAsync(
+        CancellationToken cancellationToken = default)
+    {
+        if (IsBusy)
+        {
+            throw new InvalidOperationException(
+                "Es läuft bereits ein Vorgang.");
+        }
+
+        if (!HasDraftContent)
+        {
+            throw new InvalidOperationException(
+                "Der Entwurf enthält noch keinen Inhalt.");
+        }
+
+        IsSavingDraft =
+            true;
+
+        try
+        {
+            var request =
+                CreateMailRequest(
+                    requireRecipient: false);
+
+            await _mailSendService
+                .SaveDraftAsync(
+                    request,
+                    cancellationToken);
+        }
+        finally
+        {
+            IsSavingDraft =
+                false;
+        }
+    }
+
+    private MailSendRequest CreateMailRequest(
+        bool requireRecipient)
+    {
+        var recipientAddress =
+            string.IsNullOrWhiteSpace(
+                RecipientAddress)
+                ? string.Empty
+                : RecipientAddress.Trim();
+
+        if (requireRecipient &&
+            string.IsNullOrWhiteSpace(
+                recipientAddress))
+        {
+            throw new ArgumentException(
+                "Bitte geben Sie einen Empfänger an.");
+        }
+
+        return new MailSendRequest(
+            RecipientAddress:
+                recipientAddress,
+
+            Subject:
+                Subject,
+
+            Body:
+                Body,
+
+            CcAddress:
+                string.IsNullOrWhiteSpace(
+                    CcAddress)
+                    ? null
+                    : CcAddress.Trim(),
+
+            ParentMessageId:
+                _replySourceMessage?.MessageId,
+
+            ParentReferences:
+                _replySourceMessage?.References,
+
+            Attachments:
+                Attachments.ToArray());
     }
 }
