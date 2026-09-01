@@ -164,7 +164,7 @@ public sealed class MailKitSendService :
                 sentCopySaved);
     }
 
-    public async Task SaveDraftAsync(
+    public async Task<MailDraftSaveIdentity?> SaveDraftAsync(
         MailSendRequest request,
         CancellationToken cancellationToken = default)
     {
@@ -253,7 +253,7 @@ public sealed class MailKitSendService :
             request.ParentMessageId,
             request.ParentReferences);
 
-        await SaveDraftCopyAsync(
+        return await SaveDraftCopyAsync(
             account.EmailAddress,
             credential.Password,
             message,
@@ -1129,12 +1129,32 @@ public sealed class MailKitSendService :
         }
     }
 
-    private static async Task SaveDraftCopyAsync(
-        string userName,
-        string password,
-        MimeMessage message,
-        CancellationToken cancellationToken)
+    private static async Task<MailDraftSaveIdentity?>
+        SaveDraftCopyAsync(
+            string userName,
+            string password,
+            MimeMessage message,
+            CancellationToken cancellationToken)
     {
+        /*
+         * CreateMessageAsync erzeugt für jede gespeicherte
+         * Draft-Version bewusst eine neue Message-ID.
+         *
+         * Diese validieren wir VOR dem APPEND. Damit kann kein
+         * Server-Draft entstehen, für den uns anschließend
+         * die zweite Identitätskomponente fehlt.
+         */
+        var messageId =
+            message.MessageId?
+                .Trim();
+
+        if (string.IsNullOrWhiteSpace(
+                messageId))
+        {
+            throw new InvalidOperationException(
+                "Der Entwurf besitzt keine gültige Message-ID.");
+        }
+
         using var client =
             new ImapClient();
 
@@ -1179,12 +1199,44 @@ public sealed class MailKitSendService :
              * \Seen verhindert zugleich, dass der eigene
              * Entwurf im Client als ungelesene Nachricht
              * gezählt oder hervorgehoben wird.
+             *
+             * Bei Servern mit UIDPLUS liefert MailKit hier
+             * zusätzlich die tatsächlich vom Server
+             * vergebene UID zurück.
              */
-            await draftFolder.AppendAsync(
-                message,
-                MessageFlags.Draft |
-                MessageFlags.Seen,
-                operationCancellationToken);
+            var appendedUniqueId =
+                await draftFolder.AppendAsync(
+                    message,
+                    MessageFlags.Draft |
+                    MessageFlags.Seen,
+                    operationCancellationToken);
+
+            /*
+             * Ein fehlender UID-Rückgabewert bedeutet NICHT,
+             * dass das Speichern fehlgeschlagen ist.
+             *
+             * APPEND war erfolgreich; der Server unterstützt
+             * lediglich keine sichere Rückgabe der neuen UID.
+             *
+             * Deshalb geben wir null zurück. Der spätere
+             * Autosave-Workflow darf in diesem Fall nicht
+             * blind mit einer geratenen UID weiterarbeiten.
+             */
+            if (!appendedUniqueId.HasValue ||
+                !appendedUniqueId.Value.IsValid)
+            {
+                return null;
+            }
+
+            return new MailDraftSaveIdentity(
+                FolderId:
+                    draftFolder.FullName,
+
+                UniqueId:
+                    appendedUniqueId.Value.Id,
+
+                MessageId:
+                    messageId);
         }
         finally
         {

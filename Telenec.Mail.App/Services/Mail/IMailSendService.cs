@@ -8,7 +8,7 @@ public interface IMailSendService
         MailSendRequest request,
         CancellationToken cancellationToken = default);
 
-    Task SaveDraftAsync(
+    Task<MailDraftSaveIdentity?> SaveDraftAsync(
         MailSendRequest request,
         CancellationToken cancellationToken = default);
 }

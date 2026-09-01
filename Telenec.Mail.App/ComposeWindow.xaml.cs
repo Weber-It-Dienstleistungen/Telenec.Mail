@@ -11,19 +11,34 @@ namespace Telenec.Mail.App;
 
 public partial class ComposeWindow : Window
 {
+    /*
+     * Autosave läuft nur in geöffneten Compose-Fenstern und
+     * ausschließlich dann, wenn sich tatsächlich etwas
+     * geändert hat.
+     *
+     * 30 Sekunden sind zunächst bewusst konservativ:
+     *
+     * - ausreichend schneller Schutz gegen Datenverlust
+     * - gleichzeitig keine unnötige IMAP-Last bei jedem
+     *   einzelnen Tastendruck
+     */
+    private static readonly TimeSpan AutoSaveInterval =
+        TimeSpan.FromSeconds(30);
+
     private readonly ComposeMailViewModel _viewModel;
 
     private MailMessageItemViewModel?
         _forwardSourceMessage;
 
     /*
-     * Baseline des Compose-Inhalts unmittelbar nachdem das
-     * Fenster vollständig vorbereitet wurde.
+     * Baseline des zuletzt sicher gespeicherten Zustands.
      *
-     * Dadurch können wir später unterscheiden zwischen:
+     * Bei einem frisch geöffneten Compose-Fenster ist das
+     * zunächst der Ausgangszustand.
      *
-     * - vorhandener, unveränderter Inhalt
-     * - tatsächlich ungespeicherten Änderungen
+     * Nach erfolgreichem Autosave wird diese Baseline auf
+     * genau den Zustand gesetzt, der tatsächlich gespeichert
+     * wurde.
      */
     private bool _hasComposeBaseline;
 
@@ -44,6 +59,30 @@ public partial class ComposeWindow : Window
             Array.Empty<MailSendAttachmentData>();
 
     /*
+     * Der Autosave-Loop besitzt einen eigenen Lebenszyklus.
+     *
+     * Er startet nach vollständigem Laden des Compose-
+     * Fensters und wird beim endgültigen Schließen beendet.
+     */
+    private CancellationTokenSource?
+        _autoSaveCancellationTokenSource;
+
+    /*
+     * Autosave kann für das aktuelle Fenster bewusst
+     * angehalten werden.
+     *
+     * Das passiert insbesondere dann, wenn die vorherige
+     * Draft-Version nach einem erfolgreichen APPEND nicht
+     * sicher entfernt werden konnte.
+     *
+     * Damit verhindern wir, dass alle 30 Sekunden weitere
+     * Dubletten entstehen.
+     */
+    private bool _autoSaveSuspended;
+
+    private bool _autoSaveWarningShown;
+
+    /*
      * Wird nur gesetzt, wenn das Fenster nach einem
      * erfolgreichen Versand, Draft-Speichern oder einem
      * ausdrücklich bestätigten Verwerfen wirklich schließen
@@ -61,9 +100,6 @@ public partial class ComposeWindow : Window
     /*
      * MainWindow kann nach dem Schließen erkennen, ob sich
      * der serverseitige Draft-Bestand geändert hat.
-     *
-     * Dadurch wird der Entwürfe-Ordner nach Speichern oder
-     * Senden eines geöffneten Drafts sofort aktualisiert.
      */
     public bool DraftMailboxChanged
     {
@@ -84,6 +120,9 @@ public partial class ComposeWindow : Window
 
         Loaded +=
             ComposeWindow_OnLoaded;
+
+        Closed +=
+            ComposeWindow_OnClosed;
     }
 
     public void PrepareReply(
@@ -161,13 +200,11 @@ public partial class ComposeWindow : Window
 
         /*
          * Erst NACH der vollständigen Vorbereitung wird der
-         * aktuelle Zustand zur Baseline.
-         *
-         * Dadurch gelten z.B. automatisch erzeugter
-         * Reply-Text, Reply-Empfänger oder bereits vorhandene
-         * Draft-Anhänge nicht fälschlich als Benutzeränderung.
+         * Ausgangszustand zur Baseline.
          */
         CaptureComposeBaseline();
+
+        StartAutoSaveLoop();
 
         if (_viewModel.FocusBodyOnLoad)
         {
@@ -182,20 +219,344 @@ public partial class ComposeWindow : Window
         RecipientTextBox.Focus();
     }
 
+    private void ComposeWindow_OnClosed(
+        object? sender,
+        EventArgs e)
+    {
+        StopAutoSaveLoop();
+
+        Loaded -=
+            ComposeWindow_OnLoaded;
+
+        Closed -=
+            ComposeWindow_OnClosed;
+    }
+
+    private void StartAutoSaveLoop()
+    {
+        if (_autoSaveCancellationTokenSource is not null)
+        {
+            return;
+        }
+
+        _autoSaveCancellationTokenSource =
+            new CancellationTokenSource();
+
+        _ =
+            RunAutoSaveLoopAsync(
+                _autoSaveCancellationTokenSource.Token);
+    }
+
+    private void StopAutoSaveLoop()
+    {
+        var cancellationTokenSource =
+            _autoSaveCancellationTokenSource;
+
+        _autoSaveCancellationTokenSource =
+            null;
+
+        if (cancellationTokenSource is null)
+        {
+            return;
+        }
+
+        try
+        {
+            cancellationTokenSource.Cancel();
+        }
+        finally
+        {
+            cancellationTokenSource.Dispose();
+        }
+    }
+
+    private async Task RunAutoSaveLoopAsync(
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            while (true)
+            {
+                await Task.Delay(
+                    AutoSaveInterval,
+                    cancellationToken);
+
+                cancellationToken
+                    .ThrowIfCancellationRequested();
+
+                if (_autoSaveSuspended ||
+                    _allowClose ||
+                    _isProcessingCloseSave ||
+                    _viewModel.IsBusy)
+                {
+                    continue;
+                }
+
+                if (!HasUnsavedChanges() ||
+                    !_viewModel.CanSaveDraft)
+                {
+                    continue;
+                }
+
+                await TryAutoSaveDraftAsync(
+                    cancellationToken);
+            }
+        }
+        catch (OperationCanceledException)
+            when (cancellationToken.IsCancellationRequested)
+        {
+            /*
+             * Normales Ende beim Schließen des Fensters.
+             */
+        }
+        catch
+        {
+            /*
+             * Ein unerwarteter Fehler im Hintergrundloop darf
+             * niemals das Compose-Fenster oder den geschriebenen
+             * Inhalt zerstören.
+             *
+             * Autosave wird deshalb für dieses Fenster beendet.
+             * Manuelles Speichern und der Closing-Workflow
+             * bleiben weiterhin vollständig verfügbar.
+             */
+            _autoSaveSuspended =
+                true;
+        }
+    }
+
+    private async Task TryAutoSaveDraftAsync(
+        CancellationToken cancellationToken)
+    {
+        if (_autoSaveSuspended ||
+            _allowClose ||
+            _isProcessingCloseSave ||
+            _viewModel.IsBusy ||
+            !_viewModel.CanSaveDraft ||
+            !HasUnsavedChanges())
+        {
+            return;
+        }
+
+        /*
+         * Ganz entscheidend:
+         *
+         * Dies ist exakt der Zustand, den wir jetzt speichern
+         * wollen.
+         *
+         * Während der Netzwerkoperation darf der Benutzer
+         * theoretisch bereits weiter tippen.
+         *
+         * Deshalb dürfen wir nach Abschluss nicht einfach den
+         * dann sichtbaren Zustand zur Baseline erklären.
+         */
+        var savedSnapshot =
+            CreateComposeSnapshot();
+
+        try
+        {
+            var result =
+                await _viewModel
+                    .SaveDraftAsync(
+                        cancellationToken);
+
+            if (!result.WasSaved)
+            {
+                return;
+            }
+
+            DraftMailboxChanged =
+                true;
+
+            /*
+             * Der gespeicherte Textzustand stammt aus dem
+             * Snapshot vom START der Operation.
+             *
+             * Die Anhänge hingegen können nach dem Save neue
+             * serverseitige UID/MIME-Part-Referenzen besitzen.
+             *
+             * Deshalb übernehmen wir für die Attachment-
+             * Baseline bewusst die nun aktuellen Attachment-
+             * Objekte aus dem ViewModel.
+             */
+            ApplyAutoSaveBaseline(
+                savedSnapshot);
+
+            /*
+             * Ein wiederholbarer Autosave benötigt weiterhin
+             * eine gültige Draft-Identität.
+             *
+             * Auf unserem Telenec-Server sollte diese nach dem
+             * erfolgreichen Save vorhanden sein.
+             *
+             * Falls ein anderer Server keine sichere neue UID
+             * liefern kann, stoppen wir lieber als später blind
+             * neue Draft-Dubletten zu erzeugen.
+             */
+            if (!_viewModel.IsEditingDraft)
+            {
+                SuspendAutoSaveWithWarning(
+                    "Der aktuelle Entwurf wurde gespeichert.\n\n" +
+                    "Der Mailserver hat jedoch keine ausreichend sichere neue Entwurfs-ID zurückgegeben.\n\n" +
+                    "Das automatische Speichern wurde deshalb für dieses Fenster angehalten. " +
+                    "Sie können die Nachricht weiter bearbeiten und weiterhin manuell speichern oder versenden.");
+
+                return;
+            }
+
+            if (result.HasWarning)
+            {
+                SuspendAutoSaveWithWarning(
+                    "Der Entwurf wurde automatisch gespeichert.\n\n" +
+                    "Die vorherige Version konnte jedoch nicht automatisch vom Mailserver entfernt werden.\n\n" +
+                    "Damit keine weiteren Dubletten entstehen, wurde das automatische Speichern für dieses Fenster angehalten.\n\n" +
+                    "Im Ordner „Entwürfe“ kann zusätzlich eine ältere Version vorhanden sein.");
+
+                return;
+            }
+        }
+        catch (OperationCanceledException)
+            when (cancellationToken.IsCancellationRequested)
+        {
+            /*
+             * Fenster wird geschlossen.
+             */
+        }
+        catch (ArgumentException)
+        {
+            /*
+             * Typischer Fall während der Eingabe:
+             *
+             * Der Benutzer tippt gerade eine noch nicht
+             * vollständige Mailadresse.
+             *
+             * Autosave bleibt still und versucht es beim
+             * nächsten Intervall erneut.
+             */
+        }
+        catch
+        {
+            /*
+             * Netzwerkfehler, temporärer IMAP-Fehler,
+             * nicht erreichbarer Server usw.
+             *
+             * Keine modalen Fehlermeldungen aus einem
+             * Hintergrund-Autosave.
+             *
+             * Der Inhalt bleibt lokal im geöffneten Fenster
+             * erhalten und der nächste 30-Sekunden-Zyklus
+             * versucht es erneut.
+             */
+        }
+    }
+
+    private void SuspendAutoSaveWithWarning(
+        string message)
+    {
+        _autoSaveSuspended =
+            true;
+
+        if (_autoSaveWarningShown)
+        {
+            return;
+        }
+
+        _autoSaveWarningShown =
+            true;
+
+        MessageBox.Show(
+            message,
+            "Automatisches Speichern angehalten",
+            MessageBoxButton.OK,
+            MessageBoxImage.Warning);
+    }
+
+    private ComposeSnapshot CreateComposeSnapshot()
+    {
+        return new ComposeSnapshot(
+            RecipientAddress:
+                _viewModel.RecipientAddress,
+
+            CcAddress:
+                _viewModel.CcAddress,
+
+            Subject:
+                _viewModel.Subject,
+
+            Body:
+                _viewModel.Body,
+
+            Attachments:
+                _viewModel
+                    .Attachments
+                    .ToArray());
+    }
+
     private void CaptureComposeBaseline()
     {
+        ApplyComposeBaseline(
+            CreateComposeSnapshot());
+    }
+
+    private void ApplyComposeBaseline(
+        ComposeSnapshot snapshot)
+    {
+        ArgumentNullException.ThrowIfNull(
+            snapshot);
+
         _baselineRecipientAddress =
-            _viewModel.RecipientAddress;
+            snapshot.RecipientAddress;
 
         _baselineCcAddress =
-            _viewModel.CcAddress;
+            snapshot.CcAddress;
 
         _baselineSubject =
-            _viewModel.Subject;
+            snapshot.Subject;
 
         _baselineBody =
-            _viewModel.Body;
+            snapshot.Body;
 
+        _baselineAttachments =
+            snapshot.Attachments
+                .ToArray();
+
+        _hasComposeBaseline =
+            true;
+    }
+
+    private void ApplyAutoSaveBaseline(
+        ComposeSnapshot savedSnapshot)
+    {
+        ArgumentNullException.ThrowIfNull(
+            savedSnapshot);
+
+        /*
+         * Textfelder:
+         *
+         * exakt der Zustand, der beim Start des Autosaves
+         * gespeichert wurde.
+         */
+        _baselineRecipientAddress =
+            savedSnapshot.RecipientAddress;
+
+        _baselineCcAddress =
+            savedSnapshot.CcAddress;
+
+        _baselineSubject =
+            savedSnapshot.Subject;
+
+        _baselineBody =
+            savedSnapshot.Body;
+
+        /*
+         * Anhänge:
+         *
+         * Nach SaveDraftAsync kann ComposeMailViewModel die
+         * Serverreferenzen bereits auf die neue Draft-UID
+         * umgestellt haben.
+         *
+         * Deshalb ist hier der aktuelle Zustand korrekt.
+         */
         _baselineAttachments =
             _viewModel
                 .Attachments
@@ -268,14 +629,6 @@ public partial class ComposeWindow : Window
             return true;
         }
 
-        /*
-         * MainWindow setzt den Owner unmittelbar vor
-         * ShowDialog().
-         *
-         * Dadurch können wir hier den aktuell ausgewählten
-         * IMAP-Ordner ermitteln, ohne MainWindow oder den
-         * allgemeinen Forward-Aufruf verändern zu müssen.
-         */
         if (Owner?.DataContext is not MainViewModel mainViewModel ||
             mainViewModel.SelectedFolder is null ||
             string.IsNullOrWhiteSpace(
@@ -467,12 +820,6 @@ public partial class ComposeWindow : Window
                     MessageBoxImage.Warning);
             }
 
-            /*
-             * Der Versand ist abgeschlossen.
-             *
-             * OnClosing darf jetzt keine Rückfrage wegen des
-             * zuvor bearbeiteten Inhalts mehr anzeigen.
-             */
             _allowClose =
                 true;
 
@@ -553,12 +900,6 @@ public partial class ComposeWindow : Window
         _allowClose =
             true;
 
-        /*
-         * False ist weiterhin absichtlich korrekt:
-         *
-         * MainWindow wertet true ausschließlich als
-         * erfolgreich versendete Nachricht.
-         */
         DialogResult =
             false;
 
@@ -569,15 +910,6 @@ public partial class ComposeWindow : Window
     {
         if (!_viewModel.CanSaveDraft)
         {
-            /*
-             * Dieser Fall kann beim normalen Save-Button kaum
-             * auftreten, weil der Button dann deaktiviert ist.
-             *
-             * Er ist jedoch relevant, wenn der Benutzer das
-             * Fenster schließen und im Dialog "Ja" wählen
-             * sollte, obwohl kein speicherbarer Draft-Inhalt
-             * mehr vorhanden ist.
-             */
             MessageBox.Show(
                 "Der aktuelle Inhalt kann nicht als Entwurf gespeichert werden.\n\n" +
                 "Bitte ergänzen Sie den Entwurf oder schließen Sie ihn erneut und wählen Sie „Nein“, um die Änderungen zu verwerfen.",
@@ -602,15 +934,6 @@ public partial class ComposeWindow : Window
 
             if (result.HasWarning)
             {
-                /*
-                 * Wichtig:
-                 *
-                 * Die NEUE Version ist bereits sicher
-                 * gespeichert.
-                 *
-                 * Nur das Entfernen der alten Version ist
-                 * fehlgeschlagen.
-                 */
                 MessageBox.Show(
                     "Die neue Version des Entwurfs wurde erfolgreich gespeichert.\n\n" +
                     "Die vorherige Version konnte jedoch nicht automatisch entfernt werden.\n\n" +
@@ -716,12 +1039,6 @@ public partial class ComposeWindow : Window
             return;
         }
 
-        /*
-         * Nicht mehr direkt DialogResult=false setzen.
-         *
-         * Close() führt jetzt kontrolliert durch denselben
-         * Unsaved-Changes-Workflow wie X oder Alt+F4.
-         */
         Close();
     }
 
@@ -757,9 +1074,10 @@ public partial class ComposeWindow : Window
         }
 
         /*
-         * Weder SMTP-Versand noch IMAP-Draft-Append dürfen
-         * durch Schließen des Fensters in einen undefinierten
-         * Zwischenzustand gebracht werden.
+         * Ein laufender SMTP-/IMAP-Vorgang darf niemals durch
+         * das Schließen des Fensters unterbrochen werden.
+         *
+         * Das gilt jetzt auch für Autosave.
          */
         if (_viewModel.IsBusy ||
             _isProcessingCloseSave)
@@ -771,13 +1089,9 @@ public partial class ComposeWindow : Window
         }
 
         /*
-         * Kein Baseline-Zustand oder keinerlei tatsächliche
-         * Änderung:
-         *
-         * Das Fenster darf ohne Rückfrage schließen.
-         *
-         * Besonders wichtig beim Öffnen eines bestehenden
-         * Drafts nur zum Lesen.
+         * Wenn Autosave den aktuellen Stand bereits sicher
+         * gespeichert hat und seitdem nichts geändert wurde,
+         * darf das Fenster ohne unnötige Rückfrage schließen.
          */
         if (!HasUnsavedChanges())
         {
@@ -799,30 +1113,12 @@ public partial class ComposeWindow : Window
         switch (result)
         {
             case MessageBoxResult.No:
-                /*
-                 * Verwerfen bedeutet ausdrücklich:
-                 *
-                 * Bei einem bereits vorhandenen Draft bleibt
-                 * die unveränderte Serverversion erhalten.
-                 *
-                 * Nur die noch nicht gespeicherten lokalen
-                 * Änderungen werden verworfen.
-                 */
                 _allowClose =
                     true;
 
                 return;
 
             case MessageBoxResult.Yes:
-                /*
-                 * Closing selbst kann nicht sauber awaited
-                 * werden.
-                 *
-                 * Deshalb wird der aktuelle Close-Vorgang
-                 * zunächst abgebrochen und der bestehende,
-                 * getestete Draft-Save-Workflow asynchron
-                 * ausgeführt.
-                 */
                 e.Cancel =
                     true;
 
@@ -857,10 +1153,6 @@ public partial class ComposeWindow : Window
 
             if (!saved)
             {
-                /*
-                 * Bei jedem Fehler bleibt das Compose-Fenster
-                 * geöffnet und der Inhalt unverändert.
-                 */
                 return;
             }
 
@@ -878,4 +1170,11 @@ public partial class ComposeWindow : Window
                 false;
         }
     }
+
+    private sealed record ComposeSnapshot(
+        string RecipientAddress,
+        string CcAddress,
+        string Subject,
+        string Body,
+        IReadOnlyList<MailSendAttachmentData> Attachments);
 }

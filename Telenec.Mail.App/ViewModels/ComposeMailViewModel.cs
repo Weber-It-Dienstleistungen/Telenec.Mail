@@ -32,14 +32,12 @@ public sealed class ComposeMailViewModel : BaseViewModel
         Array.Empty<string>();
 
     /*
-     * Identität eines bereits vorhandenen Server-Entwurfs.
+     * Identität derjenigen Server-Draft-Version, die aktuell
+     * als Quelle des geöffneten Compose-Fensters gilt.
      *
-     * Diese Werte werden beim sicheren Replace benötigt:
-     *
-     * 1. neue Version speichern bzw. Mail versenden
-     * 2. Erfolg abwarten
-     * 3. alten Draft anhand UID + Message-ID verifizieren
-     * 4. erst dann alten Draft entfernen
+     * Nach jedem erfolgreichen Save mit bekannter neuer UID
+     * wird diese Identität auf die frisch gespeicherte
+     * Version umgestellt.
      */
     private string? _editingDraftSourceFolderId;
     private uint _editingDraftSourceUniqueId;
@@ -513,13 +511,6 @@ public sealed class ComposeMailViewModel : BaseViewModel
                 "Die Server-ID der weitergeleiteten Nachricht ist ungültig.");
         }
 
-        /*
-         * Erst die komplette Liste validieren und erzeugen.
-         *
-         * Damit entsteht auch hier kein halbfertiger Zustand,
-         * wenn ein einzelner MIME-Part unerwartet ungültig
-         * sein sollte.
-         */
         var forwardedAttachments =
             new List<
                 MailSendAttachmentData>();
@@ -626,14 +617,6 @@ public sealed class ComposeMailViewModel : BaseViewModel
                 fullPath);
         }
 
-        /*
-         * Bereits beim Hinzufügen prüfen wir, ob die Datei
-         * tatsächlich lesbar ist.
-         *
-         * Der Stream wird sofort wieder geschlossen.
-         * Der eigentliche Versand oder die Draft-Speicherung
-         * öffnet die Datei später erneut.
-         */
         using var validationStream =
             new FileStream(
                 fullPath,
@@ -694,10 +677,6 @@ public sealed class ComposeMailViewModel : BaseViewModel
 
         /*
          * Weiterleiten ist ausdrücklich KEIN Reply.
-         *
-         * Deshalb darf beim späteren Versand weder
-         * In-Reply-To noch References aus der
-         * Ursprungsnachricht übernommen werden.
          */
         _replySourceMessage =
             null;
@@ -734,10 +713,6 @@ public sealed class ComposeMailViewModel : BaseViewModel
             CreateForwardBody(
                 message);
 
-        /*
-         * Beim Weiterleiten muss der Benutzer zuerst einen
-         * neuen Empfänger bestimmen.
-         */
         FocusBodyOnLoad =
             false;
     }
@@ -822,12 +797,6 @@ public sealed class ComposeMailViewModel : BaseViewModel
                     expectedMessageId,
                     cancellationToken);
 
-        /*
-         * Ab hier wurde der Entwurf bereits frisch vom
-         * Server geladen und durch MailKitDraftEditService
-         * gegen die erwartete Message-ID geprüft.
-         */
-
         _replySourceMessage =
             null;
 
@@ -884,10 +853,41 @@ public sealed class ComposeMailViewModel : BaseViewModel
         FocusBodyOnLoad =
             true;
 
+        ReplaceAttachments(
+            draft.Attachments);
+    }
+
+    /*
+     * Nach einem Save wird die frisch gespeicherte Version
+     * erneut vom Server geladen.
+     *
+     * Dadurch übernehmen wir sowohl die neue Draft-Identität
+     * als auch neue MIME-Part-Referenzen der Anhänge.
+     */
+    private void AdoptSavedDraft(
+        MailDraftEditData draft)
+    {
+        ArgumentNullException.ThrowIfNull(
+            draft);
+
+        SetEditingDraftSource(
+            draft.SourceFolderId,
+            draft.SourceUniqueId,
+            draft.SourceMessageId);
+
+        ReplaceAttachments(
+            draft.Attachments);
+    }
+
+    private void ReplaceAttachments(
+        IEnumerable<MailSendAttachmentData> attachments)
+    {
+        ArgumentNullException.ThrowIfNull(
+            attachments);
+
         Attachments.Clear();
 
-        foreach (var attachment in
-                 draft.Attachments)
+        foreach (var attachment in attachments)
         {
             Attachments.Add(
                 attachment);
@@ -1462,10 +1462,6 @@ public sealed class ComposeMailViewModel : BaseViewModel
 
         /*
          * Draft-Identität VOR dem Versand einfrieren.
-         *
-         * Nach erfolgreichem SMTP-Versand ist dieser Zustand
-         * irreversibel. Erst danach darf der alte Entwurf
-         * entfernt werden.
          */
         var sourceFolderId =
             _editingDraftSourceFolderId;
@@ -1506,18 +1502,10 @@ public sealed class ComposeMailViewModel : BaseViewModel
             }
 
             /*
-             * Ab hier wurde die Nachricht bereits per SMTP
-             * versendet.
+             * SMTP ist bereits erfolgreich abgeschlossen.
              *
-             * Deshalb verwenden wir für den Cleanup bewusst
-             * NICHT mehr den ursprünglichen CancellationToken.
-             *
-             * Eine nachträgliche Cancellation darf nicht dazu
-             * führen, dass der bereits versendete Draft
-             * unnötig im Entwürfe-Ordner liegen bleibt.
-             *
-             * Der Cleanup-Dienst besitzt selbst einen
-             * begrenzten Timeout.
+             * Deshalb darf eine nachträgliche Cancellation
+             * den Draft-Cleanup nicht verhindern.
              */
             var previousDraftRemoved =
                 await _mailDraftCleanupService
@@ -1561,11 +1549,11 @@ public sealed class ComposeMailViewModel : BaseViewModel
         }
 
         /*
-         * Identität der bisherigen Draft-Version vor dem
-         * Append sichern.
+         * Identität der bisherigen Draft-Version VOR dem
+         * APPEND einfrieren.
          *
-         * Die neue Version wird IMMER zuerst vollständig
-         * gespeichert.
+         * Diese Version wird erst entfernt, nachdem die neue
+         * Version sicher gespeichert wurde.
          */
         var sourceFolderId =
             _editingDraftSourceFolderId;
@@ -1589,28 +1577,86 @@ public sealed class ComposeMailViewModel : BaseViewModel
                     requireRecipient: false);
 
             /*
-             * Erst die neue Version sicher auf den Server
-             * schreiben.
+             * APPEND zuerst.
              *
-             * Schlägt das fehl, wird die alte Version nicht
-             * angefasst.
+             * MailKitSendService gibt uns auf Servern mit
+             * UIDPLUS anschließend die neue Serveridentität
+             * zurück.
              */
-            await _mailSendService
-                .SaveDraftAsync(
-                    request,
-                    cancellationToken);
+            var savedIdentity =
+                await _mailSendService
+                    .SaveDraftAsync(
+                        request,
+                        cancellationToken);
+
+            MailDraftEditData? verifiedSavedDraft =
+                null;
 
             /*
-             * Bei einer komplett neuen Nachricht existiert
-             * kein alter Draft, den wir entfernen müssten.
+             * Wenn uns der Server eine neue UID genannt hat,
+             * lesen wir exakt diese Nachricht noch einmal.
+             *
+             * Erst danach betrachten wir die neue Version als
+             * sichere Bearbeitungsquelle.
+             *
+             * Das Re-Load liefert zugleich neue MIME-Part-
+             * Referenzen für Anhänge.
              */
-            if (!wasEditingDraft ||
-                string.IsNullOrWhiteSpace(
-                    sourceFolderId) ||
-                sourceUniqueId == 0 ||
-                string.IsNullOrWhiteSpace(
-                    sourceMessageId))
+            if (savedIdentity is not null)
             {
+                try
+                {
+                    verifiedSavedDraft =
+                        await _mailDraftEditService
+                            .LoadDraftAsync(
+                                savedIdentity.FolderId,
+                                savedIdentity.UniqueId,
+                                savedIdentity.MessageId,
+                                CancellationToken.None);
+                }
+                catch
+                {
+                    /*
+                     * Das APPEND selbst war bereits erfolgreich.
+                     *
+                     * Deshalb darf ein nachträglich
+                     * fehlgeschlagener Verify-Schritt NICHT als
+                     * "Draft wurde nicht gespeichert" nach oben
+                     * geworfen werden.
+                     *
+                     * Bei einem bereits vorhandenen Draft
+                     * lassen wir die alte Version in diesem
+                     * Sonderfall unangetastet. Damit besteht
+                     * schlimmstenfalls eine Dublette, aber kein
+                     * Datenverlust.
+                     */
+                    verifiedSavedDraft =
+                        null;
+                }
+            }
+
+            var hasPreviousDraft =
+                wasEditingDraft &&
+                !string.IsNullOrWhiteSpace(
+                    sourceFolderId) &&
+                sourceUniqueId > 0 &&
+                !string.IsNullOrWhiteSpace(
+                    sourceMessageId);
+
+            /*
+             * Komplett neuer Entwurf:
+             *
+             * Es existiert keine vorherige Version, die
+             * entfernt werden müsste.
+             */
+            if (!hasPreviousDraft)
+            {
+                if (verifiedSavedDraft is not null)
+                {
+                    AdoptSavedDraft(
+                        verifiedSavedDraft);
+                }
+
                 return new MailDraftSaveResult(
                     WasSaved:
                         true,
@@ -1620,40 +1666,77 @@ public sealed class ComposeMailViewModel : BaseViewModel
             }
 
             /*
-             * Die neue Version ist jetzt bereits sicher auf
-             * dem Server vorhanden.
+             * Der Server hat eine konkrete neue UID geliefert,
+             * aber diese neue Version konnte nicht noch einmal
+             * verifiziert werden.
              *
-             * Auch hier verwenden wir für den Cleanup
-             * CancellationToken.None.
+             * Deshalb löschen wir den bisherigen Draft NICHT.
              *
-             * Eine Cancellation NACH erfolgreichem Append
-             * darf nicht unnötig eine doppelte Draft-Version
-             * erzeugen.
+             * Die neue Version wurde gespeichert; der alte
+             * Draft bleibt als Sicherheitsnetz erhalten.
+             */
+            if (savedIdentity is not null &&
+                verifiedSavedDraft is null)
+            {
+                return new MailDraftSaveResult(
+                    WasSaved:
+                        true,
+
+                    PreviousDraftRemoved:
+                        false);
+            }
+
+            /*
+             * Jetzt darf die bisherige Draft-Version entfernt
+             * werden.
              *
-             * MailKitDraftCleanupService besitzt selbst einen
-             * festen Cleanup-Timeout.
+             * Bei einem Server ohne UIDPLUS kann
+             * savedIdentity null sein. Der manuelle
+             * Save-Workflow bleibt trotzdem wie bisher
+             * funktionsfähig: APPEND war erfolgreich und die
+             * alte Version wird anschließend sicher anhand
+             * ihrer bisherigen UID + Message-ID entfernt.
+             *
+             * Nur wiederholtes Autosave dürfte danach nicht
+             * blind fortgesetzt werden, weil uns dann keine
+             * neue Identität bekannt ist.
              */
             var previousDraftRemoved =
                 await _mailDraftCleanupService
                     .TryDeleteDraftAsync(
-                        sourceFolderId,
+                        sourceFolderId!,
                         sourceUniqueId,
-                        sourceMessageId,
+                        sourceMessageId!,
                         CancellationToken.None);
 
-            if (previousDraftRemoved)
+            /*
+             * Wenn die neue Version verifiziert wurde,
+             * übernehmen wir sie als aktuelle Quelle.
+             *
+             * Das geschieht auch dann, wenn der Cleanup der
+             * alten Version fehlschlug:
+             *
+             * - die neue Version ist eindeutig verifiziert
+             * - die alte Version bleibt lediglich als
+             *   mögliche Dublette zurück
+             *
+             * Der bestehende MailDraftSaveResult meldet diesen
+             * Cleanup-Fehler bereits als Warnung.
+             */
+            if (verifiedSavedDraft is not null)
+            {
+                AdoptSavedDraft(
+                    verifiedSavedDraft);
+            }
+            else if (previousDraftRemoved)
             {
                 /*
-                 * Die alte Draft-Quelle existiert jetzt nicht
-                 * mehr.
+                 * Server ohne sichere neue UID:
                  *
-                 * Für unseren aktuellen Workflow ist das
-                 * korrekt, weil das Compose-Fenster nach
-                 * erfolgreichem Speichern geschlossen wird.
-                 *
-                 * Ein späteres Autosave benötigt dafür einen
-                 * erweiterten Workflow, der anschließend die
-                 * neue UID/Message-ID übernimmt.
+                 * Die alte Quelle existiert nach erfolgreichem
+                 * Cleanup nicht mehr. Deshalb darf ihre
+                 * Identität keinesfalls weiterverwendet
+                 * werden.
                  */
                 ClearEditingDraftSource();
             }
