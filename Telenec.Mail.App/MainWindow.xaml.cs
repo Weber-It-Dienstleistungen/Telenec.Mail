@@ -1,15 +1,17 @@
 ﻿using Microsoft.Extensions.DependencyInjection;
-using Microsoft.Win32;
 using Microsoft.Web.WebView2.Core;
+using Microsoft.Win32;
 using System.ComponentModel;
 using System.Diagnostics;
 using System.IO;
 using System.Text.RegularExpressions;
+using System.Threading;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Controls.Primitives;
 using System.Windows.Input;
 using Telenec.Mail.App.Models;
+using Telenec.Mail.App.Services.Mail;
 using Telenec.Mail.App.Services.Security;
 using Telenec.Mail.App.Services.Storage;
 using Telenec.Mail.App.ViewModels;
@@ -21,10 +23,20 @@ public partial class MainWindow : Window
     private const string MailDragDataFormat =
         "Telenec.Mail.MessageSelection";
 
+    private static readonly TimeSpan
+        AutomaticSynchronizationInterval =
+            TimeSpan.FromSeconds(30);
+
     private readonly MainViewModel _viewModel;
     private readonly IMailAccountStore _mailAccountStore;
     private readonly ICredentialStore _credentialStore;
     private readonly IServiceProvider _serviceProvider;
+
+    private CancellationTokenSource?
+        _automaticSynchronizationCancellationSource;
+
+    private Task?
+        _automaticSynchronizationTask;
 
     private bool _isLoggingOut;
     private bool _isLoaded;
@@ -112,12 +124,16 @@ public partial class MainWindow : Window
             .InitializeAsync();
 
         await RenderSelectedMessageAsync();
+
+        StartAutomaticSynchronizationIfConnected();
     }
 
     private void MainWindow_OnClosed(
         object? sender,
         EventArgs e)
     {
+        StopAutomaticSynchronization();
+
         _renderVersion++;
 
         _viewModel.PropertyChanged -=
@@ -133,6 +149,76 @@ public partial class MainWindow : Window
         catch
         {
         }
+    }
+
+    private void StartAutomaticSynchronizationIfConnected()
+    {
+        if (_viewModel.ConnectionState !=
+                MailConnectionState.Connected ||
+            _automaticSynchronizationTask
+                is { IsCompleted: false })
+        {
+            return;
+        }
+
+        var cancellationSource =
+            new CancellationTokenSource();
+
+        _automaticSynchronizationCancellationSource =
+            cancellationSource;
+
+        _automaticSynchronizationTask =
+            RunAutomaticSynchronizationAsync(
+                cancellationSource);
+    }
+
+    private async Task RunAutomaticSynchronizationAsync(
+        CancellationTokenSource cancellationSource)
+    {
+        var cancellationToken =
+            cancellationSource.Token;
+
+        try
+        {
+            while (true)
+            {
+                await Task.Delay(
+                    AutomaticSynchronizationInterval,
+                    cancellationToken);
+
+                await _viewModel
+                    .SynchronizeAsync(
+                        cancellationToken);
+            }
+        }
+        catch (OperationCanceledException)
+            when (cancellationToken.IsCancellationRequested)
+        {
+        }
+        catch
+        {
+        }
+        finally
+        {
+            if (ReferenceEquals(
+                    _automaticSynchronizationCancellationSource,
+                    cancellationSource))
+            {
+                _automaticSynchronizationCancellationSource =
+                    null;
+
+                _automaticSynchronizationTask =
+                    null;
+            }
+
+            cancellationSource.Dispose();
+        }
+    }
+
+    private void StopAutomaticSynchronization()
+    {
+        _automaticSynchronizationCancellationSource?
+            .Cancel();
     }
 
     private void MessageListBox_OnPreviewMouseLeftButtonDown(
@@ -1588,6 +1674,8 @@ public partial class MainWindow : Window
 
         await _viewModel
             .ReloadAsync();
+
+        StartAutomaticSynchronizationIfConnected();
     }
 
     private async void RetryButton_OnClick(
@@ -1601,6 +1689,8 @@ public partial class MainWindow : Window
 
         await _viewModel
             .ReloadAsync();
+
+        StartAutomaticSynchronizationIfConnected();
     }
 
     private void AccountMenuButton_OnClick(
