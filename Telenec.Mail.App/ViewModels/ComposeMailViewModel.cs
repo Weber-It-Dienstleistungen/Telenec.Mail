@@ -275,6 +275,18 @@ public sealed class ComposeMailViewModel : BaseViewModel
         }
     }
 
+    public void ShowCc()
+    {
+        if (IsBusy ||
+            ShowCcField)
+        {
+            return;
+        }
+
+        ShowCcField =
+            true;
+    }
+
     public bool FocusBodyOnLoad
     {
         get =>

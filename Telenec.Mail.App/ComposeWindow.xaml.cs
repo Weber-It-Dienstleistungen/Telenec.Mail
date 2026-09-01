@@ -748,6 +748,23 @@ public partial class ComposeWindow : Window
                 attachment);
     }
 
+    private void ShowCcButton_OnClick(
+        object sender,
+        RoutedEventArgs e)
+    {
+        if (_viewModel.IsBusy)
+        {
+            return;
+        }
+
+        _viewModel.ShowCc();
+
+        CcTextBox.Focus();
+
+        CcTextBox.CaretIndex =
+            CcTextBox.Text.Length;
+    }
+
     private async void SendButton_OnClick(
         object sender,
         RoutedEventArgs e)
@@ -844,6 +861,20 @@ public partial class ComposeWindow : Window
                 "Empfänger prüfen",
                 MessageBoxButton.OK,
                 MessageBoxImage.Information);
+
+            if (string.Equals(
+                    ex.ParamName,
+                    nameof(MailSendRequest.CcAddress),
+                    StringComparison.Ordinal))
+            {
+                _viewModel.ShowCc();
+
+                CcTextBox.Focus();
+
+                CcTextBox.SelectAll();
+
+                return;
+            }
 
             RecipientTextBox.Focus();
 
@@ -969,6 +1000,8 @@ public partial class ComposeWindow : Window
                     nameof(MailSendRequest.CcAddress),
                     StringComparison.Ordinal))
             {
+                _viewModel.ShowCc();
+
                 CcTextBox.Focus();
 
                 CcTextBox.SelectAll();

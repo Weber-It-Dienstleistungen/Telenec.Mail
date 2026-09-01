@@ -115,22 +115,93 @@
                     Foreground="{StaticResource Text.Secondary}"
                     VerticalAlignment="Center" />
 
-                <TextBox
-                    x:Name="RecipientTextBox"
+                <Grid
                     Grid.Row="0"
                     Grid.Column="1"
-                    Height="38"
-                    Margin="0,0,0,16"
-                    Padding="10,7"
-                    Text="{Binding RecipientAddress,
-                        UpdateSourceTrigger=PropertyChanged}"
-                    IsReadOnly="{Binding IsBusy}"
-                    FontSize="13"
-                    VerticalContentAlignment="Center"
-                    Background="{StaticResource Surface.Background}"
-                    Foreground="{StaticResource Text.Primary}"
-                    BorderBrush="{StaticResource Border.Default}"
-                    BorderThickness="1" />
+                    Margin="0,0,0,16">
+
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="Auto" />
+                    </Grid.ColumnDefinitions>
+
+                    <TextBox
+                        x:Name="RecipientTextBox"
+                        Grid.Column="0"
+                        Height="38"
+                        Padding="10,7"
+                        Text="{Binding RecipientAddress,
+                            UpdateSourceTrigger=PropertyChanged}"
+                        IsReadOnly="{Binding IsBusy}"
+                        FontSize="13"
+                        VerticalContentAlignment="Center"
+                        Background="{StaticResource Surface.Background}"
+                        Foreground="{StaticResource Text.Primary}"
+                        BorderBrush="{StaticResource Border.Default}"
+                        BorderThickness="1" />
+
+                    <Button
+                        Grid.Column="1"
+                        Width="46"
+                        Height="30"
+                        Margin="10,4,0,4"
+                        Padding="0"
+                        Content="Cc"
+                        Cursor="Hand"
+                        ToolTip="Cc-Empfänger hinzufügen"
+                        Click="ShowCcButton_OnClick">
+
+                        <Button.Style>
+
+                            <Style TargetType="Button">
+
+                                <Setter
+                                    Property="Background"
+                                    Value="{StaticResource Surface.Background}" />
+
+                                <Setter
+                                    Property="Foreground"
+                                    Value="{StaticResource Text.Secondary}" />
+
+                                <Setter
+                                    Property="BorderBrush"
+                                    Value="{StaticResource Border.Default}" />
+
+                                <Setter
+                                    Property="BorderThickness"
+                                    Value="1" />
+
+                                <Style.Triggers>
+
+                                    <DataTrigger
+                                        Binding="{Binding ShowCcField}"
+                                        Value="True">
+
+                                        <Setter
+                                            Property="Visibility"
+                                            Value="Collapsed" />
+
+                                    </DataTrigger>
+
+                                    <DataTrigger
+                                        Binding="{Binding IsBusy}"
+                                        Value="True">
+
+                                        <Setter
+                                            Property="IsEnabled"
+                                            Value="False" />
+
+                                    </DataTrigger>
+
+                                </Style.Triggers>
+
+                            </Style>
+
+                        </Button.Style>
+
+                    </Button>
+
+                </Grid>
 
                 <TextBlock
                     Grid.Row="1"
