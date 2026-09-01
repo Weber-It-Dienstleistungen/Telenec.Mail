@@ -17,6 +17,48 @@ public partial class ComposeWindow : Window
         _forwardSourceMessage;
 
     /*
+     * Baseline des Compose-Inhalts unmittelbar nachdem das
+     * Fenster vollständig vorbereitet wurde.
+     *
+     * Dadurch können wir später unterscheiden zwischen:
+     *
+     * - vorhandener, unveränderter Inhalt
+     * - tatsächlich ungespeicherten Änderungen
+     */
+    private bool _hasComposeBaseline;
+
+    private string _baselineRecipientAddress =
+        string.Empty;
+
+    private string _baselineCcAddress =
+        string.Empty;
+
+    private string _baselineSubject =
+        string.Empty;
+
+    private string _baselineBody =
+        string.Empty;
+
+    private IReadOnlyList<MailSendAttachmentData>
+        _baselineAttachments =
+            Array.Empty<MailSendAttachmentData>();
+
+    /*
+     * Wird nur gesetzt, wenn das Fenster nach einem
+     * erfolgreichen Versand, Draft-Speichern oder einem
+     * ausdrücklich bestätigten Verwerfen wirklich schließen
+     * darf.
+     */
+    private bool _allowClose;
+
+    /*
+     * Verhindert, dass während eines durch den Closing-Dialog
+     * gestarteten asynchronen Speichervorgangs ein zweiter
+     * Closing-Workflow parallel beginnt.
+     */
+    private bool _isProcessingCloseSave;
+
+    /*
      * MainWindow kann nach dem Schließen erkennen, ob sich
      * der serverseitige Draft-Bestand geändert hat.
      *
@@ -117,6 +159,16 @@ public partial class ComposeWindow : Window
                 MessageBoxImage.Warning);
         }
 
+        /*
+         * Erst NACH der vollständigen Vorbereitung wird der
+         * aktuelle Zustand zur Baseline.
+         *
+         * Dadurch gelten z.B. automatisch erzeugter
+         * Reply-Text, Reply-Empfänger oder bereits vorhandene
+         * Draft-Anhänge nicht fälschlich als Benutzeränderung.
+         */
+        CaptureComposeBaseline();
+
         if (_viewModel.FocusBodyOnLoad)
         {
             BodyTextBox.Focus();
@@ -128,6 +180,78 @@ public partial class ComposeWindow : Window
         }
 
         RecipientTextBox.Focus();
+    }
+
+    private void CaptureComposeBaseline()
+    {
+        _baselineRecipientAddress =
+            _viewModel.RecipientAddress;
+
+        _baselineCcAddress =
+            _viewModel.CcAddress;
+
+        _baselineSubject =
+            _viewModel.Subject;
+
+        _baselineBody =
+            _viewModel.Body;
+
+        _baselineAttachments =
+            _viewModel
+                .Attachments
+                .ToArray();
+
+        _hasComposeBaseline =
+            true;
+    }
+
+    private bool HasUnsavedChanges()
+    {
+        if (!_hasComposeBaseline)
+        {
+            return false;
+        }
+
+        if (!string.Equals(
+                _baselineRecipientAddress,
+                _viewModel.RecipientAddress,
+                StringComparison.Ordinal))
+        {
+            return true;
+        }
+
+        if (!string.Equals(
+                _baselineCcAddress,
+                _viewModel.CcAddress,
+                StringComparison.Ordinal))
+        {
+            return true;
+        }
+
+        if (!string.Equals(
+                _baselineSubject,
+                _viewModel.Subject,
+                StringComparison.Ordinal))
+        {
+            return true;
+        }
+
+        if (!string.Equals(
+                _baselineBody,
+                _viewModel.Body,
+                StringComparison.Ordinal))
+        {
+            return true;
+        }
+
+        if (!_baselineAttachments
+                .SequenceEqual(
+                    _viewModel.Attachments))
+        {
+            return true;
+        }
+
+        return false;
     }
 
     private bool TryPrepareForwardAttachments()
@@ -164,6 +288,9 @@ public partial class ComposeWindow : Window
                 MessageBoxButton.OK,
                 MessageBoxImage.Warning);
 
+            _allowClose =
+                true;
+
             Close();
 
             return false;
@@ -188,6 +315,9 @@ public partial class ComposeWindow : Window
                 "Weiterleiten nicht möglich",
                 MessageBoxButton.OK,
                 MessageBoxImage.Warning);
+
+            _allowClose =
+                true;
 
             Close();
 
@@ -276,7 +406,7 @@ public partial class ComposeWindow : Window
         object sender,
         RoutedEventArgs e)
     {
-        await SaveDraftAsync();
+        await SaveDraftAndCloseAsync();
     }
 
     private async Task SendMessageAsync()
@@ -336,6 +466,15 @@ public partial class ComposeWindow : Window
                     MessageBoxButton.OK,
                     MessageBoxImage.Warning);
             }
+
+            /*
+             * Der Versand ist abgeschlossen.
+             *
+             * OnClosing darf jetzt keine Rückfrage wegen des
+             * zuvor bearbeiteten Inhalts mehr anzeigen.
+             */
+            _allowClose =
+                true;
 
             DialogResult =
                 true;
@@ -401,11 +540,52 @@ public partial class ComposeWindow : Window
         }
     }
 
-    private async Task SaveDraftAsync()
+    private async Task SaveDraftAndCloseAsync()
+    {
+        var saved =
+            await TrySaveDraftAsync();
+
+        if (!saved)
+        {
+            return;
+        }
+
+        _allowClose =
+            true;
+
+        /*
+         * False ist weiterhin absichtlich korrekt:
+         *
+         * MainWindow wertet true ausschließlich als
+         * erfolgreich versendete Nachricht.
+         */
+        DialogResult =
+            false;
+
+        Close();
+    }
+
+    private async Task<bool> TrySaveDraftAsync()
     {
         if (!_viewModel.CanSaveDraft)
         {
-            return;
+            /*
+             * Dieser Fall kann beim normalen Save-Button kaum
+             * auftreten, weil der Button dann deaktiviert ist.
+             *
+             * Er ist jedoch relevant, wenn der Benutzer das
+             * Fenster schließen und im Dialog "Ja" wählen
+             * sollte, obwohl kein speicherbarer Draft-Inhalt
+             * mehr vorhanden ist.
+             */
+            MessageBox.Show(
+                "Der aktuelle Inhalt kann nicht als Entwurf gespeichert werden.\n\n" +
+                "Bitte ergänzen Sie den Entwurf oder schließen Sie ihn erneut und wählen Sie „Nein“, um die Änderungen zu verwerfen.",
+                "Entwurf kann nicht gespeichert werden",
+                MessageBoxButton.OK,
+                MessageBoxImage.Information);
+
+            return false;
         }
 
         try
@@ -441,16 +621,8 @@ public partial class ComposeWindow : Window
                     MessageBoxImage.Warning);
             }
 
-            /*
-             * False ist hier weiterhin absichtlich korrekt:
-             *
-             * MainWindow wertet true ausschließlich als
-             * erfolgreich versendete Nachricht.
-             */
-            DialogResult =
-                false;
-
-            Close();
+            return
+                result.WasSaved;
         }
         catch (MailSendAttachmentException ex)
         {
@@ -478,7 +650,7 @@ public partial class ComposeWindow : Window
 
                 CcTextBox.SelectAll();
 
-                return;
+                return false;
             }
 
             RecipientTextBox.Focus();
@@ -530,20 +702,26 @@ public partial class ComposeWindow : Window
                 MessageBoxButton.OK,
                 MessageBoxImage.Error);
         }
+
+        return false;
     }
 
     private void CancelButton_OnClick(
         object sender,
         RoutedEventArgs e)
     {
-        if (_viewModel.IsBusy)
+        if (_viewModel.IsBusy ||
+            _isProcessingCloseSave)
         {
             return;
         }
 
-        DialogResult =
-            false;
-
+        /*
+         * Nicht mehr direkt DialogResult=false setzen.
+         *
+         * Close() führt jetzt kontrolliert durch denselben
+         * Unsaved-Changes-Workflow wie X oder Alt+F4.
+         */
         Close();
     }
 
@@ -573,15 +751,131 @@ public partial class ComposeWindow : Window
         object? sender,
         CancelEventArgs e)
     {
+        if (_allowClose)
+        {
+            return;
+        }
+
         /*
          * Weder SMTP-Versand noch IMAP-Draft-Append dürfen
          * durch Schließen des Fensters in einen undefinierten
          * Zwischenzustand gebracht werden.
          */
-        if (_viewModel.IsBusy)
+        if (_viewModel.IsBusy ||
+            _isProcessingCloseSave)
         {
             e.Cancel =
                 true;
+
+            return;
+        }
+
+        /*
+         * Kein Baseline-Zustand oder keinerlei tatsächliche
+         * Änderung:
+         *
+         * Das Fenster darf ohne Rückfrage schließen.
+         *
+         * Besonders wichtig beim Öffnen eines bestehenden
+         * Drafts nur zum Lesen.
+         */
+        if (!HasUnsavedChanges())
+        {
+            return;
+        }
+
+        var result =
+            MessageBox.Show(
+                "Die Nachricht enthält ungespeicherte Änderungen.\n\n" +
+                "Möchten Sie die Änderungen als Entwurf speichern?\n\n" +
+                "Ja = Entwurf speichern\n" +
+                "Nein = Änderungen verwerfen\n" +
+                "Abbrechen = Weiter bearbeiten",
+                "Ungespeicherte Änderungen",
+                MessageBoxButton.YesNoCancel,
+                MessageBoxImage.Question,
+                MessageBoxResult.Cancel);
+
+        switch (result)
+        {
+            case MessageBoxResult.No:
+                /*
+                 * Verwerfen bedeutet ausdrücklich:
+                 *
+                 * Bei einem bereits vorhandenen Draft bleibt
+                 * die unveränderte Serverversion erhalten.
+                 *
+                 * Nur die noch nicht gespeicherten lokalen
+                 * Änderungen werden verworfen.
+                 */
+                _allowClose =
+                    true;
+
+                return;
+
+            case MessageBoxResult.Yes:
+                /*
+                 * Closing selbst kann nicht sauber awaited
+                 * werden.
+                 *
+                 * Deshalb wird der aktuelle Close-Vorgang
+                 * zunächst abgebrochen und der bestehende,
+                 * getestete Draft-Save-Workflow asynchron
+                 * ausgeführt.
+                 */
+                e.Cancel =
+                    true;
+
+                _ =
+                    SaveDraftFromCloseRequestAsync();
+
+                return;
+
+            case MessageBoxResult.Cancel:
+            default:
+                e.Cancel =
+                    true;
+
+                return;
+        }
+    }
+
+    private async Task SaveDraftFromCloseRequestAsync()
+    {
+        if (_isProcessingCloseSave)
+        {
+            return;
+        }
+
+        _isProcessingCloseSave =
+            true;
+
+        try
+        {
+            var saved =
+                await TrySaveDraftAsync();
+
+            if (!saved)
+            {
+                /*
+                 * Bei jedem Fehler bleibt das Compose-Fenster
+                 * geöffnet und der Inhalt unverändert.
+                 */
+                return;
+            }
+
+            _allowClose =
+                true;
+
+            DialogResult =
+                false;
+
+            Close();
+        }
+        finally
+        {
+            _isProcessingCloseSave =
+                false;
         }
     }
 }
