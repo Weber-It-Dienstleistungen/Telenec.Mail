@@ -8,6 +8,7 @@ public sealed record MailDraftEditData(
     string SourceMessageId,
     IReadOnlyList<string> ToAddresses,
     IReadOnlyList<string> CcAddresses,
+    IReadOnlyList<string> BccAddresses,
     string Subject,
     string Body,
     string? ParentMessageId,

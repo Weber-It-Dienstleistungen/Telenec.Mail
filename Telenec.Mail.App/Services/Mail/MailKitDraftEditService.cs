@@ -242,6 +242,10 @@ public sealed class MailKitDraftEditService :
                 GetMailboxAddresses(
                     message.Cc);
 
+            var bccAddresses =
+                GetMailboxAddresses(
+                    message.Bcc);
+
             var references =
                 message.References
                     .Where(
@@ -274,6 +278,9 @@ public sealed class MailKitDraftEditService :
 
                 CcAddresses:
                     ccAddresses,
+
+                BccAddresses:
+                    bccAddresses,
 
                 Subject:
                     message.Subject
@@ -369,21 +376,6 @@ public sealed class MailKitDraftEditService :
             throw new MailDraftEditException(
                 "Dieser Entwurf enthält HTML-Formatierungen.\n\n" +
                 "Telenec Mail bearbeitet HTML-Entwürfe derzeit noch nicht, damit keine Formatierungen verloren gehen.");
-        }
-
-        /*
-         * Bcc wird im aktuellen Compose-Fenster noch nicht
-         * unterstützt.
-         *
-         * Würden wir einen fremden Draft mit Bcc öffnen und
-         * erneut speichern, würden diese Empfänger verloren
-         * gehen.
-         */
-        if (message.Bcc.Mailboxes.Any())
-        {
-            throw new MailDraftEditException(
-                "Dieser Entwurf enthält Bcc-Empfänger.\n\n" +
-                "Telenec Mail bearbeitet solche Entwürfe derzeit noch nicht, damit keine Empfänger verloren gehen.");
         }
     }
 

@@ -11,17 +11,6 @@ namespace Telenec.Mail.App;
 
 public partial class ComposeWindow : Window
 {
-    /*
-     * Autosave läuft nur in geöffneten Compose-Fenstern und
-     * ausschließlich dann, wenn sich tatsächlich etwas
-     * geändert hat.
-     *
-     * 30 Sekunden sind zunächst bewusst konservativ:
-     *
-     * - ausreichend schneller Schutz gegen Datenverlust
-     * - gleichzeitig keine unnötige IMAP-Last bei jedem
-     *   einzelnen Tastendruck
-     */
     private static readonly TimeSpan AutoSaveInterval =
         TimeSpan.FromSeconds(30);
 
@@ -30,22 +19,15 @@ public partial class ComposeWindow : Window
     private MailMessageItemViewModel?
         _forwardSourceMessage;
 
-    /*
-     * Baseline des zuletzt sicher gespeicherten Zustands.
-     *
-     * Bei einem frisch geöffneten Compose-Fenster ist das
-     * zunächst der Ausgangszustand.
-     *
-     * Nach erfolgreichem Autosave wird diese Baseline auf
-     * genau den Zustand gesetzt, der tatsächlich gespeichert
-     * wurde.
-     */
     private bool _hasComposeBaseline;
 
     private string _baselineRecipientAddress =
         string.Empty;
 
     private string _baselineCcAddress =
+        string.Empty;
+
+    private string _baselineBccAddress =
         string.Empty;
 
     private string _baselineSubject =
@@ -58,49 +40,14 @@ public partial class ComposeWindow : Window
         _baselineAttachments =
             Array.Empty<MailSendAttachmentData>();
 
-    /*
-     * Der Autosave-Loop besitzt einen eigenen Lebenszyklus.
-     *
-     * Er startet nach vollständigem Laden des Compose-
-     * Fensters und wird beim endgültigen Schließen beendet.
-     */
     private CancellationTokenSource?
         _autoSaveCancellationTokenSource;
 
-    /*
-     * Autosave kann für das aktuelle Fenster bewusst
-     * angehalten werden.
-     *
-     * Das passiert insbesondere dann, wenn die vorherige
-     * Draft-Version nach einem erfolgreichen APPEND nicht
-     * sicher entfernt werden konnte.
-     *
-     * Damit verhindern wir, dass alle 30 Sekunden weitere
-     * Dubletten entstehen.
-     */
     private bool _autoSaveSuspended;
-
     private bool _autoSaveWarningShown;
-
-    /*
-     * Wird nur gesetzt, wenn das Fenster nach einem
-     * erfolgreichen Versand, Draft-Speichern oder einem
-     * ausdrücklich bestätigten Verwerfen wirklich schließen
-     * darf.
-     */
     private bool _allowClose;
-
-    /*
-     * Verhindert, dass während eines durch den Closing-Dialog
-     * gestarteten asynchronen Speichervorgangs ein zweiter
-     * Closing-Workflow parallel beginnt.
-     */
     private bool _isProcessingCloseSave;
 
-    /*
-     * MainWindow kann nach dem Schließen erkennen, ob sich
-     * der serverseitige Draft-Bestand geändert hat.
-     */
     public bool DraftMailboxChanged
     {
         get;
@@ -131,9 +78,8 @@ public partial class ComposeWindow : Window
         ArgumentNullException.ThrowIfNull(
             message);
 
-        _viewModel
-            .PrepareReply(
-                message);
+        _viewModel.PrepareReply(
+            message);
     }
 
     public void PrepareReplyAll(
@@ -142,9 +88,8 @@ public partial class ComposeWindow : Window
         ArgumentNullException.ThrowIfNull(
             message);
 
-        _viewModel
-            .PrepareReplyAll(
-                message);
+        _viewModel.PrepareReplyAll(
+            message);
     }
 
     public void PrepareForward(
@@ -156,9 +101,8 @@ public partial class ComposeWindow : Window
         _forwardSourceMessage =
             message;
 
-        _viewModel
-            .PrepareForward(
-                message);
+        _viewModel.PrepareForward(
+            message);
     }
 
     public async Task PrepareDraftEditAsync(
@@ -186,8 +130,7 @@ public partial class ComposeWindow : Window
 
         try
         {
-            await _viewModel
-                .InitializeAsync();
+            await _viewModel.InitializeAsync();
         }
         catch
         {
@@ -198,10 +141,6 @@ public partial class ComposeWindow : Window
                 MessageBoxImage.Warning);
         }
 
-        /*
-         * Erst NACH der vollständigen Vorbereitung wird der
-         * Ausgangszustand zur Baseline.
-         */
         CaptureComposeBaseline();
 
         StartAutoSaveLoop();
@@ -305,21 +244,9 @@ public partial class ComposeWindow : Window
         catch (OperationCanceledException)
             when (cancellationToken.IsCancellationRequested)
         {
-            /*
-             * Normales Ende beim Schließen des Fensters.
-             */
         }
         catch
         {
-            /*
-             * Ein unerwarteter Fehler im Hintergrundloop darf
-             * niemals das Compose-Fenster oder den geschriebenen
-             * Inhalt zerstören.
-             *
-             * Autosave wird deshalb für dieses Fenster beendet.
-             * Manuelles Speichern und der Closing-Workflow
-             * bleiben weiterhin vollständig verfügbar.
-             */
             _autoSaveSuspended =
                 true;
         }
@@ -338,18 +265,6 @@ public partial class ComposeWindow : Window
             return;
         }
 
-        /*
-         * Ganz entscheidend:
-         *
-         * Dies ist exakt der Zustand, den wir jetzt speichern
-         * wollen.
-         *
-         * Während der Netzwerkoperation darf der Benutzer
-         * theoretisch bereits weiter tippen.
-         *
-         * Deshalb dürfen wir nach Abschluss nicht einfach den
-         * dann sichtbaren Zustand zur Baseline erklären.
-         */
         var savedSnapshot =
             CreateComposeSnapshot();
 
@@ -368,31 +283,9 @@ public partial class ComposeWindow : Window
             DraftMailboxChanged =
                 true;
 
-            /*
-             * Der gespeicherte Textzustand stammt aus dem
-             * Snapshot vom START der Operation.
-             *
-             * Die Anhänge hingegen können nach dem Save neue
-             * serverseitige UID/MIME-Part-Referenzen besitzen.
-             *
-             * Deshalb übernehmen wir für die Attachment-
-             * Baseline bewusst die nun aktuellen Attachment-
-             * Objekte aus dem ViewModel.
-             */
             ApplyAutoSaveBaseline(
                 savedSnapshot);
 
-            /*
-             * Ein wiederholbarer Autosave benötigt weiterhin
-             * eine gültige Draft-Identität.
-             *
-             * Auf unserem Telenec-Server sollte diese nach dem
-             * erfolgreichen Save vorhanden sein.
-             *
-             * Falls ein anderer Server keine sichere neue UID
-             * liefern kann, stoppen wir lieber als später blind
-             * neue Draft-Dubletten zu erzeugen.
-             */
             if (!_viewModel.IsEditingDraft)
             {
                 SuspendAutoSaveWithWarning(
@@ -418,35 +311,12 @@ public partial class ComposeWindow : Window
         catch (OperationCanceledException)
             when (cancellationToken.IsCancellationRequested)
         {
-            /*
-             * Fenster wird geschlossen.
-             */
         }
         catch (ArgumentException)
         {
-            /*
-             * Typischer Fall während der Eingabe:
-             *
-             * Der Benutzer tippt gerade eine noch nicht
-             * vollständige Mailadresse.
-             *
-             * Autosave bleibt still und versucht es beim
-             * nächsten Intervall erneut.
-             */
         }
         catch
         {
-            /*
-             * Netzwerkfehler, temporärer IMAP-Fehler,
-             * nicht erreichbarer Server usw.
-             *
-             * Keine modalen Fehlermeldungen aus einem
-             * Hintergrund-Autosave.
-             *
-             * Der Inhalt bleibt lokal im geöffneten Fenster
-             * erhalten und der nächste 30-Sekunden-Zyklus
-             * versucht es erneut.
-             */
         }
     }
 
@@ -480,6 +350,9 @@ public partial class ComposeWindow : Window
             CcAddress:
                 _viewModel.CcAddress,
 
+            BccAddress:
+                _viewModel.BccAddress,
+
             Subject:
                 _viewModel.Subject,
 
@@ -487,9 +360,7 @@ public partial class ComposeWindow : Window
                 _viewModel.Body,
 
             Attachments:
-                _viewModel
-                    .Attachments
-                    .ToArray());
+                _viewModel.Attachments.ToArray());
     }
 
     private void CaptureComposeBaseline()
@@ -510,6 +381,9 @@ public partial class ComposeWindow : Window
         _baselineCcAddress =
             snapshot.CcAddress;
 
+        _baselineBccAddress =
+            snapshot.BccAddress;
+
         _baselineSubject =
             snapshot.Subject;
 
@@ -517,8 +391,7 @@ public partial class ComposeWindow : Window
             snapshot.Body;
 
         _baselineAttachments =
-            snapshot.Attachments
-                .ToArray();
+            snapshot.Attachments.ToArray();
 
         _hasComposeBaseline =
             true;
@@ -530,17 +403,14 @@ public partial class ComposeWindow : Window
         ArgumentNullException.ThrowIfNull(
             savedSnapshot);
 
-        /*
-         * Textfelder:
-         *
-         * exakt der Zustand, der beim Start des Autosaves
-         * gespeichert wurde.
-         */
         _baselineRecipientAddress =
             savedSnapshot.RecipientAddress;
 
         _baselineCcAddress =
             savedSnapshot.CcAddress;
+
+        _baselineBccAddress =
+            savedSnapshot.BccAddress;
 
         _baselineSubject =
             savedSnapshot.Subject;
@@ -548,19 +418,8 @@ public partial class ComposeWindow : Window
         _baselineBody =
             savedSnapshot.Body;
 
-        /*
-         * Anhänge:
-         *
-         * Nach SaveDraftAsync kann ComposeMailViewModel die
-         * Serverreferenzen bereits auf die neue Draft-UID
-         * umgestellt haben.
-         *
-         * Deshalb ist hier der aktuelle Zustand korrekt.
-         */
         _baselineAttachments =
-            _viewModel
-                .Attachments
-                .ToArray();
+            _viewModel.Attachments.ToArray();
 
         _hasComposeBaseline =
             true;
@@ -584,6 +443,14 @@ public partial class ComposeWindow : Window
         if (!string.Equals(
                 _baselineCcAddress,
                 _viewModel.CcAddress,
+                StringComparison.Ordinal))
+        {
+            return true;
+        }
+
+        if (!string.Equals(
+                _baselineBccAddress,
+                _viewModel.BccAddress,
                 StringComparison.Ordinal))
         {
             return true;
@@ -654,9 +521,7 @@ public partial class ComposeWindow : Window
             _viewModel
                 .AddForwardedAttachments(
                     sourceMessage,
-                    mainViewModel
-                        .SelectedFolder
-                        .FolderId);
+                    mainViewModel.SelectedFolder.FolderId);
 
             return true;
         }
@@ -717,9 +582,8 @@ public partial class ComposeWindow : Window
 
         try
         {
-            _viewModel
-                .AddAttachmentFiles(
-                    fileDialog.FileNames);
+            _viewModel.AddAttachmentFiles(
+                fileDialog.FileNames);
         }
         catch
         {
@@ -743,9 +607,8 @@ public partial class ComposeWindow : Window
             return;
         }
 
-        _viewModel
-            .RemoveAttachment(
-                attachment);
+        _viewModel.RemoveAttachment(
+            attachment);
     }
 
     private void ShowCcButton_OnClick(
@@ -763,6 +626,23 @@ public partial class ComposeWindow : Window
 
         CcTextBox.CaretIndex =
             CcTextBox.Text.Length;
+    }
+
+    private void ShowBccButton_OnClick(
+        object sender,
+        RoutedEventArgs e)
+    {
+        if (_viewModel.IsBusy)
+        {
+            return;
+        }
+
+        _viewModel.ShowBcc();
+
+        BccTextBox.Focus();
+
+        BccTextBox.CaretIndex =
+            BccTextBox.Text.Length;
     }
 
     private async void SendButton_OnClick(
@@ -792,8 +672,7 @@ public partial class ComposeWindow : Window
         try
         {
             var result =
-                await _viewModel
-                    .SendAsync();
+                await _viewModel.SendAsync();
 
             if (wasEditingDraft &&
                 result.WasSent)
@@ -870,14 +749,25 @@ public partial class ComposeWindow : Window
                 _viewModel.ShowCc();
 
                 CcTextBox.Focus();
-
                 CcTextBox.SelectAll();
 
                 return;
             }
 
-            RecipientTextBox.Focus();
+            if (string.Equals(
+                    ex.ParamName,
+                    nameof(MailSendRequest.BccAddress),
+                    StringComparison.Ordinal))
+            {
+                _viewModel.ShowBcc();
 
+                BccTextBox.Focus();
+                BccTextBox.SelectAll();
+
+                return;
+            }
+
+            RecipientTextBox.Focus();
             RecipientTextBox.SelectAll();
         }
         catch (MailKit.Security.AuthenticationException)
@@ -954,8 +844,7 @@ public partial class ComposeWindow : Window
         try
         {
             var result =
-                await _viewModel
-                    .SaveDraftAsync();
+                await _viewModel.SaveDraftAsync();
 
             if (result.WasSaved)
             {
@@ -975,8 +864,7 @@ public partial class ComposeWindow : Window
                     MessageBoxImage.Warning);
             }
 
-            return
-                result.WasSaved;
+            return result.WasSaved;
         }
         catch (MailSendAttachmentException ex)
         {
@@ -1003,14 +891,25 @@ public partial class ComposeWindow : Window
                 _viewModel.ShowCc();
 
                 CcTextBox.Focus();
-
                 CcTextBox.SelectAll();
 
                 return false;
             }
 
-            RecipientTextBox.Focus();
+            if (string.Equals(
+                    ex.ParamName,
+                    nameof(MailSendRequest.BccAddress),
+                    StringComparison.Ordinal))
+            {
+                _viewModel.ShowBcc();
 
+                BccTextBox.Focus();
+                BccTextBox.SelectAll();
+
+                return false;
+            }
+
+            RecipientTextBox.Focus();
             RecipientTextBox.SelectAll();
         }
         catch (MailKit.Security.AuthenticationException)
@@ -1106,12 +1005,6 @@ public partial class ComposeWindow : Window
             return;
         }
 
-        /*
-         * Ein laufender SMTP-/IMAP-Vorgang darf niemals durch
-         * das Schließen des Fensters unterbrochen werden.
-         *
-         * Das gilt jetzt auch für Autosave.
-         */
         if (_viewModel.IsBusy ||
             _isProcessingCloseSave)
         {
@@ -1121,11 +1014,6 @@ public partial class ComposeWindow : Window
             return;
         }
 
-        /*
-         * Wenn Autosave den aktuellen Stand bereits sicher
-         * gespeichert hat und seitdem nichts geändert wurde,
-         * darf das Fenster ohne unnötige Rückfrage schließen.
-         */
         if (!HasUnsavedChanges())
         {
             return;
@@ -1207,6 +1095,7 @@ public partial class ComposeWindow : Window
     private sealed record ComposeSnapshot(
         string RecipientAddress,
         string CcAddress,
+        string BccAddress,
         string Subject,
         string Body,
         IReadOnlyList<MailSendAttachmentData> Attachments);

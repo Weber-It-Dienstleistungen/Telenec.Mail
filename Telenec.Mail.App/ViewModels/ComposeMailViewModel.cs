@@ -31,14 +31,6 @@ public sealed class ComposeMailViewModel : BaseViewModel
     private IReadOnlyList<string> _parentReferences =
         Array.Empty<string>();
 
-    /*
-     * Identität derjenigen Server-Draft-Version, die aktuell
-     * als Quelle des geöffneten Compose-Fensters gilt.
-     *
-     * Nach jedem erfolgreichen Save mit bekannter neuer UID
-     * wird diese Identität auf die frisch gespeicherte
-     * Version umgestellt.
-     */
     private string? _editingDraftSourceFolderId;
     private uint _editingDraftSourceUniqueId;
     private string? _editingDraftSourceMessageId;
@@ -58,6 +50,9 @@ public sealed class ComposeMailViewModel : BaseViewModel
     private string _ccAddress =
         string.Empty;
 
+    private string _bccAddress =
+        string.Empty;
+
     private string _subject =
         string.Empty;
 
@@ -65,6 +60,7 @@ public sealed class ComposeMailViewModel : BaseViewModel
         string.Empty;
 
     private bool _showCcField;
+    private bool _showBccField;
     private bool _focusBodyOnLoad;
     private bool _isSending;
     private bool _isSavingDraft;
@@ -110,8 +106,7 @@ public sealed class ComposeMailViewModel : BaseViewModel
 
     public string WindowTitle
     {
-        get =>
-            _windowTitle;
+        get => _windowTitle;
 
         private set
         {
@@ -120,17 +115,14 @@ public sealed class ComposeMailViewModel : BaseViewModel
                 return;
             }
 
-            _windowTitle =
-                value;
-
+            _windowTitle = value;
             OnPropertyChanged();
         }
     }
 
     public string HeaderTitle
     {
-        get =>
-            _headerTitle;
+        get => _headerTitle;
 
         private set
         {
@@ -139,17 +131,14 @@ public sealed class ComposeMailViewModel : BaseViewModel
                 return;
             }
 
-            _headerTitle =
-                value;
-
+            _headerTitle = value;
             OnPropertyChanged();
         }
     }
 
     public string FromAddress
     {
-        get =>
-            _fromAddress;
+        get => _fromAddress;
 
         private set
         {
@@ -158,17 +147,14 @@ public sealed class ComposeMailViewModel : BaseViewModel
                 return;
             }
 
-            _fromAddress =
-                value;
-
+            _fromAddress = value;
             OnPropertyChanged();
         }
     }
 
     public string RecipientAddress
     {
-        get =>
-            _recipientAddress;
+        get => _recipientAddress;
 
         set
         {
@@ -177,23 +163,17 @@ public sealed class ComposeMailViewModel : BaseViewModel
                 return;
             }
 
-            _recipientAddress =
-                value;
+            _recipientAddress = value;
 
             OnPropertyChanged();
-
-            OnPropertyChanged(
-                nameof(CanSend));
-
-            OnPropertyChanged(
-                nameof(CanSaveDraft));
+            OnPropertyChanged(nameof(CanSend));
+            OnPropertyChanged(nameof(CanSaveDraft));
         }
     }
 
     public string CcAddress
     {
-        get =>
-            _ccAddress;
+        get => _ccAddress;
 
         set
         {
@@ -202,20 +182,34 @@ public sealed class ComposeMailViewModel : BaseViewModel
                 return;
             }
 
-            _ccAddress =
-                value;
+            _ccAddress = value;
 
             OnPropertyChanged();
+            OnPropertyChanged(nameof(CanSaveDraft));
+        }
+    }
 
-            OnPropertyChanged(
-                nameof(CanSaveDraft));
+    public string BccAddress
+    {
+        get => _bccAddress;
+
+        set
+        {
+            if (_bccAddress == value)
+            {
+                return;
+            }
+
+            _bccAddress = value;
+
+            OnPropertyChanged();
+            OnPropertyChanged(nameof(CanSaveDraft));
         }
     }
 
     public string Subject
     {
-        get =>
-            _subject;
+        get => _subject;
 
         set
         {
@@ -224,20 +218,16 @@ public sealed class ComposeMailViewModel : BaseViewModel
                 return;
             }
 
-            _subject =
-                value;
+            _subject = value;
 
             OnPropertyChanged();
-
-            OnPropertyChanged(
-                nameof(CanSaveDraft));
+            OnPropertyChanged(nameof(CanSaveDraft));
         }
     }
 
     public string Body
     {
-        get =>
-            _body;
+        get => _body;
 
         set
         {
@@ -246,20 +236,16 @@ public sealed class ComposeMailViewModel : BaseViewModel
                 return;
             }
 
-            _body =
-                value;
+            _body = value;
 
             OnPropertyChanged();
-
-            OnPropertyChanged(
-                nameof(CanSaveDraft));
+            OnPropertyChanged(nameof(CanSaveDraft));
         }
     }
 
     public bool ShowCcField
     {
-        get =>
-            _showCcField;
+        get => _showCcField;
 
         private set
         {
@@ -268,9 +254,23 @@ public sealed class ComposeMailViewModel : BaseViewModel
                 return;
             }
 
-            _showCcField =
-                value;
+            _showCcField = value;
+            OnPropertyChanged();
+        }
+    }
 
+    public bool ShowBccField
+    {
+        get => _showBccField;
+
+        private set
+        {
+            if (_showBccField == value)
+            {
+                return;
+            }
+
+            _showBccField = value;
             OnPropertyChanged();
         }
     }
@@ -283,14 +283,23 @@ public sealed class ComposeMailViewModel : BaseViewModel
             return;
         }
 
-        ShowCcField =
-            true;
+        ShowCcField = true;
+    }
+
+    public void ShowBcc()
+    {
+        if (IsBusy ||
+            ShowBccField)
+        {
+            return;
+        }
+
+        ShowBccField = true;
     }
 
     public bool FocusBodyOnLoad
     {
-        get =>
-            _focusBodyOnLoad;
+        get => _focusBodyOnLoad;
 
         private set
         {
@@ -299,17 +308,14 @@ public sealed class ComposeMailViewModel : BaseViewModel
                 return;
             }
 
-            _focusBodyOnLoad =
-                value;
-
+            _focusBodyOnLoad = value;
             OnPropertyChanged();
         }
     }
 
     public bool IsSending
     {
-        get =>
-            _isSending;
+        get => _isSending;
 
         private set
         {
@@ -318,29 +324,19 @@ public sealed class ComposeMailViewModel : BaseViewModel
                 return;
             }
 
-            _isSending =
-                value;
+            _isSending = value;
 
             OnPropertyChanged();
-
-            OnPropertyChanged(
-                nameof(IsBusy));
-
-            OnPropertyChanged(
-                nameof(CanSend));
-
-            OnPropertyChanged(
-                nameof(CanSaveDraft));
-
-            OnPropertyChanged(
-                nameof(CanModifyAttachments));
+            OnPropertyChanged(nameof(IsBusy));
+            OnPropertyChanged(nameof(CanSend));
+            OnPropertyChanged(nameof(CanSaveDraft));
+            OnPropertyChanged(nameof(CanModifyAttachments));
         }
     }
 
     public bool IsSavingDraft
     {
-        get =>
-            _isSavingDraft;
+        get => _isSavingDraft;
 
         private set
         {
@@ -349,22 +345,13 @@ public sealed class ComposeMailViewModel : BaseViewModel
                 return;
             }
 
-            _isSavingDraft =
-                value;
+            _isSavingDraft = value;
 
             OnPropertyChanged();
-
-            OnPropertyChanged(
-                nameof(IsBusy));
-
-            OnPropertyChanged(
-                nameof(CanSend));
-
-            OnPropertyChanged(
-                nameof(CanSaveDraft));
-
-            OnPropertyChanged(
-                nameof(CanModifyAttachments));
+            OnPropertyChanged(nameof(IsBusy));
+            OnPropertyChanged(nameof(CanSend));
+            OnPropertyChanged(nameof(CanSaveDraft));
+            OnPropertyChanged(nameof(CanModifyAttachments));
         }
     }
 
@@ -409,6 +396,8 @@ public sealed class ComposeMailViewModel : BaseViewModel
         !string.IsNullOrWhiteSpace(
             CcAddress) ||
         !string.IsNullOrWhiteSpace(
+            BccAddress) ||
+        !string.IsNullOrWhiteSpace(
             Subject) ||
         !string.IsNullOrWhiteSpace(
             Body) ||
@@ -417,14 +406,9 @@ public sealed class ComposeMailViewModel : BaseViewModel
     public string AttachmentSummary =>
         Attachments.Count switch
         {
-            0 =>
-                string.Empty,
-
-            1 =>
-                "1 Anhang",
-
-            _ =>
-                $"{Attachments.Count} Anhänge"
+            0 => string.Empty,
+            1 => "1 Anhang",
+            _ => $"{Attachments.Count} Anhänge"
         };
 
     public void AddAttachmentFiles(
@@ -438,13 +422,6 @@ public sealed class ComposeMailViewModel : BaseViewModel
             return;
         }
 
-        /*
-         * Server-Anhänge besitzen absichtlich keinen
-         * lokalen Dateipfad.
-         *
-         * Für die Dublettenprüfung lokaler Dateien werden
-         * deshalb ausschließlich lokale Anhänge betrachtet.
-         */
         var knownPaths =
             Attachments
                 .Where(
@@ -457,8 +434,7 @@ public sealed class ComposeMailViewModel : BaseViewModel
                     StringComparer.OrdinalIgnoreCase);
 
         var newAttachments =
-            new List<
-                MailSendAttachmentData>();
+            new List<MailSendAttachmentData>();
 
         foreach (var filePath in filePaths)
         {
@@ -524,8 +500,7 @@ public sealed class ComposeMailViewModel : BaseViewModel
         }
 
         var forwardedAttachments =
-            new List<
-                MailSendAttachmentData>();
+            new List<MailSendAttachmentData>();
 
         foreach (var attachment in
                  message.Attachments)
@@ -546,24 +521,12 @@ public sealed class ComposeMailViewModel : BaseViewModel
 
             forwardedAttachments.Add(
                 new MailSendAttachmentData(
-                    FilePath:
-                        string.Empty,
-
-                    FileName:
-                        attachment.FileName,
-
-                    SizeBytes:
-                        attachment.EncodedSizeBytes,
-
-                    SourceFolderId:
-                        sourceFolderId.Trim(),
-
-                    SourceUniqueId:
-                        message.UniqueId,
-
-                    SourcePartSpecifier:
-                        attachment.PartSpecifier,
-
+                    FilePath: string.Empty,
+                    FileName: attachment.FileName,
+                    SizeBytes: attachment.EncodedSizeBytes,
+                    SourceFolderId: sourceFolderId.Trim(),
+                    SourceUniqueId: message.UniqueId,
+                    SourcePartSpecifier: attachment.PartSpecifier,
                     SourceMessageId:
                         string.IsNullOrWhiteSpace(
                             message.MessageId)
@@ -641,26 +604,16 @@ public sealed class ComposeMailViewModel : BaseViewModel
             validationStream.Length;
 
         return new MailSendAttachmentData(
-            FilePath:
-                fullPath,
-
-            FileName:
-                fileName,
-
-            SizeBytes:
-                sizeBytes);
+            FilePath: fullPath,
+            FileName: fileName,
+            SizeBytes: sizeBytes);
     }
 
     private void NotifyAttachmentStateChanged()
     {
-        OnPropertyChanged(
-            nameof(HasAttachments));
-
-        OnPropertyChanged(
-            nameof(AttachmentSummary));
-
-        OnPropertyChanged(
-            nameof(CanSaveDraft));
+        OnPropertyChanged(nameof(HasAttachments));
+        OnPropertyChanged(nameof(AttachmentSummary));
+        OnPropertyChanged(nameof(CanSaveDraft));
     }
 
     public void PrepareReply(
@@ -687,18 +640,9 @@ public sealed class ComposeMailViewModel : BaseViewModel
 
         ClearEditingDraftSource();
 
-        /*
-         * Weiterleiten ist ausdrücklich KEIN Reply.
-         */
-        _replySourceMessage =
-            null;
-
-        _isReplyAll =
-            false;
-
-        _parentMessageId =
-            null;
-
+        _replySourceMessage = null;
+        _isReplyAll = false;
+        _parentMessageId = null;
         _parentReferences =
             Array.Empty<string>();
 
@@ -714,7 +658,13 @@ public sealed class ComposeMailViewModel : BaseViewModel
         CcAddress =
             string.Empty;
 
+        BccAddress =
+            string.Empty;
+
         ShowCcField =
+            false;
+
+        ShowBccField =
             false;
 
         Subject =
@@ -774,7 +724,17 @@ public sealed class ComposeMailViewModel : BaseViewModel
         ShowCcField =
             replyAll;
 
+        ShowBccField =
+            false;
+
         CcAddress =
+            string.Empty;
+
+        /*
+         * Bcc wird bei Antworten niemals aus der
+         * Ursprungsnachricht rekonstruiert.
+         */
+        BccAddress =
             string.Empty;
 
         Subject =
@@ -853,8 +813,15 @@ public sealed class ComposeMailViewModel : BaseViewModel
             JoinAddresses(
                 draft.CcAddresses);
 
+        BccAddress =
+            JoinAddresses(
+                draft.BccAddresses);
+
         ShowCcField =
             draft.CcAddresses.Count > 0;
+
+        ShowBccField =
+            draft.BccAddresses.Count > 0;
 
         Subject =
             draft.Subject;
@@ -869,13 +836,6 @@ public sealed class ComposeMailViewModel : BaseViewModel
             draft.Attachments);
     }
 
-    /*
-     * Nach einem Save wird die frisch gespeicherte Version
-     * erneut vom Server geladen.
-     *
-     * Dadurch übernehmen wir sowohl die neue Draft-Identität
-     * als auch neue MIME-Part-Referenzen der Anhänge.
-     */
     private void AdoptSavedDraft(
         MailDraftEditData draft)
     {
@@ -944,17 +904,10 @@ public sealed class ComposeMailViewModel : BaseViewModel
         _editingDraftSourceMessageId =
             sourceMessageId.Trim();
 
-        OnPropertyChanged(
-            nameof(IsEditingDraft));
-
-        OnPropertyChanged(
-            nameof(EditingDraftSourceFolderId));
-
-        OnPropertyChanged(
-            nameof(EditingDraftSourceUniqueId));
-
-        OnPropertyChanged(
-            nameof(EditingDraftSourceMessageId));
+        OnPropertyChanged(nameof(IsEditingDraft));
+        OnPropertyChanged(nameof(EditingDraftSourceFolderId));
+        OnPropertyChanged(nameof(EditingDraftSourceUniqueId));
+        OnPropertyChanged(nameof(EditingDraftSourceMessageId));
     }
 
     private void ClearEditingDraftSource()
@@ -976,17 +929,10 @@ public sealed class ComposeMailViewModel : BaseViewModel
             return;
         }
 
-        OnPropertyChanged(
-            nameof(IsEditingDraft));
-
-        OnPropertyChanged(
-            nameof(EditingDraftSourceFolderId));
-
-        OnPropertyChanged(
-            nameof(EditingDraftSourceUniqueId));
-
-        OnPropertyChanged(
-            nameof(EditingDraftSourceMessageId));
+        OnPropertyChanged(nameof(IsEditingDraft));
+        OnPropertyChanged(nameof(EditingDraftSourceFolderId));
+        OnPropertyChanged(nameof(EditingDraftSourceUniqueId));
+        OnPropertyChanged(nameof(EditingDraftSourceMessageId));
     }
 
     public async Task InitializeAsync(
@@ -1472,9 +1418,6 @@ public sealed class ComposeMailViewModel : BaseViewModel
                 "Bitte geben Sie einen Empfänger an.");
         }
 
-        /*
-         * Draft-Identität VOR dem Versand einfrieren.
-         */
         var sourceFolderId =
             _editingDraftSourceFolderId;
 
@@ -1513,12 +1456,6 @@ public sealed class ComposeMailViewModel : BaseViewModel
                 return result;
             }
 
-            /*
-             * SMTP ist bereits erfolgreich abgeschlossen.
-             *
-             * Deshalb darf eine nachträgliche Cancellation
-             * den Draft-Cleanup nicht verhindern.
-             */
             var previousDraftRemoved =
                 await _mailDraftCleanupService
                     .TryDeleteDraftAsync(
@@ -1560,13 +1497,6 @@ public sealed class ComposeMailViewModel : BaseViewModel
                 "Der Entwurf enthält noch keinen Inhalt.");
         }
 
-        /*
-         * Identität der bisherigen Draft-Version VOR dem
-         * APPEND einfrieren.
-         *
-         * Diese Version wird erst entfernt, nachdem die neue
-         * Version sicher gespeichert wurde.
-         */
         var sourceFolderId =
             _editingDraftSourceFolderId;
 
@@ -1588,13 +1518,6 @@ public sealed class ComposeMailViewModel : BaseViewModel
                 CreateMailRequest(
                     requireRecipient: false);
 
-            /*
-             * APPEND zuerst.
-             *
-             * MailKitSendService gibt uns auf Servern mit
-             * UIDPLUS anschließend die neue Serveridentität
-             * zurück.
-             */
             var savedIdentity =
                 await _mailSendService
                     .SaveDraftAsync(
@@ -1604,16 +1527,6 @@ public sealed class ComposeMailViewModel : BaseViewModel
             MailDraftEditData? verifiedSavedDraft =
                 null;
 
-            /*
-             * Wenn uns der Server eine neue UID genannt hat,
-             * lesen wir exakt diese Nachricht noch einmal.
-             *
-             * Erst danach betrachten wir die neue Version als
-             * sichere Bearbeitungsquelle.
-             *
-             * Das Re-Load liefert zugleich neue MIME-Part-
-             * Referenzen für Anhänge.
-             */
             if (savedIdentity is not null)
             {
                 try
@@ -1628,20 +1541,6 @@ public sealed class ComposeMailViewModel : BaseViewModel
                 }
                 catch
                 {
-                    /*
-                     * Das APPEND selbst war bereits erfolgreich.
-                     *
-                     * Deshalb darf ein nachträglich
-                     * fehlgeschlagener Verify-Schritt NICHT als
-                     * "Draft wurde nicht gespeichert" nach oben
-                     * geworfen werden.
-                     *
-                     * Bei einem bereits vorhandenen Draft
-                     * lassen wir die alte Version in diesem
-                     * Sonderfall unangetastet. Damit besteht
-                     * schlimmstenfalls eine Dublette, aber kein
-                     * Datenverlust.
-                     */
                     verifiedSavedDraft =
                         null;
                 }
@@ -1655,12 +1554,6 @@ public sealed class ComposeMailViewModel : BaseViewModel
                 !string.IsNullOrWhiteSpace(
                     sourceMessageId);
 
-            /*
-             * Komplett neuer Entwurf:
-             *
-             * Es existiert keine vorherige Version, die
-             * entfernt werden müsste.
-             */
             if (!hasPreviousDraft)
             {
                 if (verifiedSavedDraft is not null)
@@ -1670,49 +1563,18 @@ public sealed class ComposeMailViewModel : BaseViewModel
                 }
 
                 return new MailDraftSaveResult(
-                    WasSaved:
-                        true,
-
-                    PreviousDraftRemoved:
-                        true);
+                    WasSaved: true,
+                    PreviousDraftRemoved: true);
             }
 
-            /*
-             * Der Server hat eine konkrete neue UID geliefert,
-             * aber diese neue Version konnte nicht noch einmal
-             * verifiziert werden.
-             *
-             * Deshalb löschen wir den bisherigen Draft NICHT.
-             *
-             * Die neue Version wurde gespeichert; der alte
-             * Draft bleibt als Sicherheitsnetz erhalten.
-             */
             if (savedIdentity is not null &&
                 verifiedSavedDraft is null)
             {
                 return new MailDraftSaveResult(
-                    WasSaved:
-                        true,
-
-                    PreviousDraftRemoved:
-                        false);
+                    WasSaved: true,
+                    PreviousDraftRemoved: false);
             }
 
-            /*
-             * Jetzt darf die bisherige Draft-Version entfernt
-             * werden.
-             *
-             * Bei einem Server ohne UIDPLUS kann
-             * savedIdentity null sein. Der manuelle
-             * Save-Workflow bleibt trotzdem wie bisher
-             * funktionsfähig: APPEND war erfolgreich und die
-             * alte Version wird anschließend sicher anhand
-             * ihrer bisherigen UID + Message-ID entfernt.
-             *
-             * Nur wiederholtes Autosave dürfte danach nicht
-             * blind fortgesetzt werden, weil uns dann keine
-             * neue Identität bekannt ist.
-             */
             var previousDraftRemoved =
                 await _mailDraftCleanupService
                     .TryDeleteDraftAsync(
@@ -1721,20 +1583,6 @@ public sealed class ComposeMailViewModel : BaseViewModel
                         sourceMessageId!,
                         CancellationToken.None);
 
-            /*
-             * Wenn die neue Version verifiziert wurde,
-             * übernehmen wir sie als aktuelle Quelle.
-             *
-             * Das geschieht auch dann, wenn der Cleanup der
-             * alten Version fehlschlug:
-             *
-             * - die neue Version ist eindeutig verifiziert
-             * - die alte Version bleibt lediglich als
-             *   mögliche Dublette zurück
-             *
-             * Der bestehende MailDraftSaveResult meldet diesen
-             * Cleanup-Fehler bereits als Warnung.
-             */
             if (verifiedSavedDraft is not null)
             {
                 AdoptSavedDraft(
@@ -1742,21 +1590,11 @@ public sealed class ComposeMailViewModel : BaseViewModel
             }
             else if (previousDraftRemoved)
             {
-                /*
-                 * Server ohne sichere neue UID:
-                 *
-                 * Die alte Quelle existiert nach erfolgreichem
-                 * Cleanup nicht mehr. Deshalb darf ihre
-                 * Identität keinesfalls weiterverwendet
-                 * werden.
-                 */
                 ClearEditingDraftSource();
             }
 
             return new MailDraftSaveResult(
-                WasSaved:
-                    true,
-
+                WasSaved: true,
                 PreviousDraftRemoved:
                     previousDraftRemoved);
         }
@@ -1799,6 +1637,12 @@ public sealed class ComposeMailViewModel : BaseViewModel
                     CcAddress)
                     ? null
                     : CcAddress.Trim(),
+
+            BccAddress:
+                string.IsNullOrWhiteSpace(
+                    BccAddress)
+                    ? null
+                    : BccAddress.Trim(),
 
             ParentMessageId:
                 _parentMessageId,

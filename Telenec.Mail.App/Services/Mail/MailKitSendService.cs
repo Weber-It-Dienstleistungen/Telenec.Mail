@@ -82,10 +82,35 @@ public sealed class MailKitSendService :
                 "Cc-Adresse",
                 required: false);
 
+        var bccRecipients =
+            ParseRecipientList(
+                request.BccAddress,
+                nameof(request.BccAddress),
+                "Bcc-Adresse",
+                required: false);
+
+        /*
+         * Empfänger-Priorität:
+         *
+         * An -> Cc -> Bcc
+         *
+         * Eine Adresse, die bereits sichtbar unter "An"
+         * geführt wird, darf nicht zusätzlich als Cc oder Bcc
+         * versendet werden.
+         *
+         * Ebenso darf ein sichtbarer Cc-Empfänger nicht
+         * zusätzlich als Bcc-Empfänger auftreten.
+         */
         ccRecipients =
             RemoveDuplicateCcRecipients(
                 recipients,
                 ccRecipients);
+
+        bccRecipients =
+            RemoveDuplicateBccRecipients(
+                recipients,
+                ccRecipients,
+                bccRecipients);
 
         var account =
             await _mailAccountStore
@@ -132,6 +157,7 @@ public sealed class MailKitSendService :
                 sender,
                 recipients,
                 ccRecipients,
+                bccRecipients,
                 request.Subject,
                 request.Body,
                 request.Attachments,
@@ -144,6 +170,17 @@ public sealed class MailKitSendService :
             request.ParentMessageId,
             request.ParentReferences);
 
+        /*
+         * MailKit verwendet die Bcc-Adressen als SMTP-
+         * Envelope-Empfänger, schreibt den Bcc-Header beim
+         * normalen SMTP-Versand jedoch nicht in die für die
+         * Empfänger übertragene Nachricht.
+         *
+         * Das MimeMessage selbst behält die Bcc-Information.
+         * Dadurch kann unsere anschließend per IMAP
+         * gespeicherte eigene "Gesendet"-Kopie weiterhin
+         * anzeigen, an wen blind kopiert wurde.
+         */
         await SendViaSmtpAsync(
             account.EmailAddress,
             credential.Password,
@@ -193,10 +230,23 @@ public sealed class MailKitSendService :
                 "Cc-Adresse",
                 required: false);
 
+        var bccRecipients =
+            ParseRecipientList(
+                request.BccAddress,
+                nameof(request.BccAddress),
+                "Bcc-Adresse",
+                required: false);
+
         ccRecipients =
             RemoveDuplicateCcRecipients(
                 recipients,
                 ccRecipients);
+
+        bccRecipients =
+            RemoveDuplicateBccRecipients(
+                recipients,
+                ccRecipients,
+                bccRecipients);
 
         var account =
             await _mailAccountStore
@@ -235,12 +285,18 @@ public sealed class MailKitSendService :
          * dieselbe MIME-Erzeugung. Dadurch gelten auch für
          * lokale und weitergeleitete Anhänge dieselben
          * Prüfungen und Sicherheitsregeln.
+         *
+         * Bcc bleibt beim IMAP-APPEND eines Entwurfs im
+         * MimeMessage erhalten. Das ist zwingend notwendig,
+         * damit ein später erneut geöffneter Entwurf seine
+         * Blindkopie-Empfänger nicht verliert.
          */
         using var message =
             await CreateMessageAsync(
                 sender,
                 recipients,
                 ccRecipients,
+                bccRecipients,
                 request.Subject,
                 request.Body,
                 request.Attachments,
@@ -353,6 +409,37 @@ public sealed class MailKitSendService :
             .ToList();
     }
 
+    private static IReadOnlyList<MailboxAddress>
+        RemoveDuplicateBccRecipients(
+            IReadOnlyList<MailboxAddress> recipients,
+            IReadOnlyList<MailboxAddress> ccRecipients,
+            IReadOnlyList<MailboxAddress> bccRecipients)
+    {
+        if (bccRecipients.Count == 0)
+        {
+            return bccRecipients;
+        }
+
+        var existingAddresses =
+            recipients
+                .Select(
+                    recipient =>
+                        recipient.Address)
+                .Concat(
+                    ccRecipients.Select(
+                        recipient =>
+                            recipient.Address))
+                .ToHashSet(
+                    StringComparer.OrdinalIgnoreCase);
+
+        return bccRecipients
+            .Where(
+                recipient =>
+                    existingAddresses.Add(
+                        recipient.Address))
+            .ToList();
+    }
+
     private static MailboxAddress CreateSenderAddress(
         string emailAddress,
         string? displayName)
@@ -389,6 +476,7 @@ public sealed class MailKitSendService :
             MailboxAddress sender,
             IReadOnlyList<MailboxAddress> recipients,
             IReadOnlyList<MailboxAddress> ccRecipients,
+            IReadOnlyList<MailboxAddress> bccRecipients,
             string? subject,
             string? body,
             IReadOnlyList<MailSendAttachmentData>? attachments,
@@ -422,6 +510,13 @@ public sealed class MailKitSendService :
             {
                 message.Cc.Add(
                     ccRecipient);
+            }
+
+            foreach (var bccRecipient in
+                     bccRecipients)
+            {
+                message.Bcc.Add(
+                    bccRecipient);
             }
 
             message.Subject =
