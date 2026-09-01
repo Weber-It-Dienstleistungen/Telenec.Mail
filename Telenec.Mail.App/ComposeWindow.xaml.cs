@@ -16,6 +16,19 @@ public partial class ComposeWindow : Window
     private MailMessageItemViewModel?
         _forwardSourceMessage;
 
+    /*
+     * MainWindow kann nach dem Schließen erkennen, ob sich
+     * der serverseitige Draft-Bestand geändert hat.
+     *
+     * Dadurch wird der Entwürfe-Ordner nach Speichern oder
+     * Senden eines geöffneten Drafts sofort aktualisiert.
+     */
+    public bool DraftMailboxChanged
+    {
+        get;
+        private set;
+    }
+
     public ComposeWindow(
         ComposeMailViewModel viewModel)
     {
@@ -65,6 +78,20 @@ public partial class ComposeWindow : Window
         _viewModel
             .PrepareForward(
                 message);
+    }
+
+    public async Task PrepareDraftEditAsync(
+        string sourceFolderId,
+        uint sourceUniqueId,
+        string? expectedMessageId,
+        CancellationToken cancellationToken = default)
+    {
+        await _viewModel
+            .PrepareDraftEditAsync(
+                sourceFolderId,
+                sourceUniqueId,
+                expectedMessageId,
+                cancellationToken);
     }
 
     private async void ComposeWindow_OnLoaded(
@@ -259,19 +286,53 @@ public partial class ComposeWindow : Window
             return;
         }
 
+        var wasEditingDraft =
+            _viewModel.IsEditingDraft;
+
         try
         {
             var result =
                 await _viewModel
                     .SendAsync();
 
-            if (result.HasWarning)
+            if (wasEditingDraft &&
+                result.WasSent)
+            {
+                DraftMailboxChanged =
+                    true;
+            }
+
+            if (result.HasWarning &&
+                result.HasDraftCleanupWarning)
+            {
+                MessageBox.Show(
+                    "Die E-Mail wurde erfolgreich versendet.\n\n" +
+                    "Die Kopie konnte jedoch nicht im Ordner „Gesendet“ gespeichert werden.\n\n" +
+                    "Zusätzlich konnte der bisherige Entwurf nicht automatisch entfernt werden.\n\n" +
+                    "Bitte senden Sie die Nachricht NICHT erneut. " +
+                    "Prüfen Sie lediglich den Ordner „Entwürfe“ und entfernen Sie dort gegebenenfalls die alte Version manuell.",
+                    "E-Mail versendet – Hinweise",
+                    MessageBoxButton.OK,
+                    MessageBoxImage.Warning);
+            }
+            else if (result.HasWarning)
             {
                 MessageBox.Show(
                     "Die E-Mail wurde erfolgreich versendet.\n\n" +
                     "Die Kopie konnte jedoch nicht im Ordner „Gesendet“ gespeichert werden.\n\n" +
                     "Bitte senden Sie die Nachricht nicht erneut.",
                     "E-Mail versendet",
+                    MessageBoxButton.OK,
+                    MessageBoxImage.Warning);
+            }
+            else if (result.HasDraftCleanupWarning)
+            {
+                MessageBox.Show(
+                    "Die E-Mail wurde erfolgreich versendet.\n\n" +
+                    "Der bisherige Entwurf konnte jedoch nicht automatisch entfernt werden.\n\n" +
+                    "Bitte senden Sie die Nachricht NICHT erneut. " +
+                    "Prüfen Sie lediglich den Ordner „Entwürfe“ und entfernen Sie dort gegebenenfalls die alte Version manuell.",
+                    "E-Mail versendet – Entwurf noch vorhanden",
                     MessageBoxButton.OK,
                     MessageBoxImage.Warning);
             }
@@ -349,17 +410,42 @@ public partial class ComposeWindow : Window
 
         try
         {
-            await _viewModel
-                .SaveDraftAsync();
+            var result =
+                await _viewModel
+                    .SaveDraftAsync();
+
+            if (result.WasSaved)
+            {
+                DraftMailboxChanged =
+                    true;
+            }
+
+            if (result.HasWarning)
+            {
+                /*
+                 * Wichtig:
+                 *
+                 * Die NEUE Version ist bereits sicher
+                 * gespeichert.
+                 *
+                 * Nur das Entfernen der alten Version ist
+                 * fehlgeschlagen.
+                 */
+                MessageBox.Show(
+                    "Die neue Version des Entwurfs wurde erfolgreich gespeichert.\n\n" +
+                    "Die vorherige Version konnte jedoch nicht automatisch entfernt werden.\n\n" +
+                    "Im Ordner „Entwürfe“ können deshalb vorübergehend beide Versionen vorhanden sein. " +
+                    "Bitte entfernen Sie dort gegebenenfalls die ältere Version manuell.",
+                    "Entwurf gespeichert – alte Version noch vorhanden",
+                    MessageBoxButton.OK,
+                    MessageBoxImage.Warning);
+            }
 
             /*
-             * False ist hier absichtlich korrekt:
+             * False ist hier weiterhin absichtlich korrekt:
              *
-             * MainWindow wertet ausschließlich true als
+             * MainWindow wertet true ausschließlich als
              * erfolgreich versendete Nachricht.
-             *
-             * Ein gespeicherter Entwurf darf deshalb nicht
-             * den Versand-Workflow auslösen.
              */
             DialogResult =
                 false;

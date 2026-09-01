@@ -34,6 +34,14 @@ public partial class App : Application
                     MailKitSendService>();
 
                 services.AddSingleton<
+                    IMailDraftEditService,
+                    MailKitDraftEditService>();
+
+                services.AddSingleton<
+                    IMailDraftCleanupService,
+                    MailKitDraftCleanupService>();
+
+                services.AddSingleton<
                     IMailAuthenticationService,
                     MailKitAuthenticationService>();
 

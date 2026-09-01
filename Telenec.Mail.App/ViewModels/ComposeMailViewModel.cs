@@ -9,11 +9,41 @@ namespace Telenec.Mail.App.ViewModels;
 public sealed class ComposeMailViewModel : BaseViewModel
 {
     private readonly IMailSendService _mailSendService;
+    private readonly IMailDraftEditService _mailDraftEditService;
+    private readonly IMailDraftCleanupService _mailDraftCleanupService;
     private readonly IMailAccountStore _mailAccountStore;
 
     private MailMessageItemViewModel? _replySourceMessage;
 
     private bool _isReplyAll;
+
+    /*
+     * Reply-Threading wird bewusst unabhängig vom
+     * aktuell sichtbaren MailMessageItemViewModel gehalten.
+     *
+     * Das ist für gespeicherte Antwort-Entwürfe notwendig:
+     * Dort kennen wir In-Reply-To und References, besitzen
+     * aber nicht zwingend noch das ursprüngliche
+     * MailMessageItemViewModel.
+     */
+    private string? _parentMessageId;
+
+    private IReadOnlyList<string> _parentReferences =
+        Array.Empty<string>();
+
+    /*
+     * Identität eines bereits vorhandenen Server-Entwurfs.
+     *
+     * Diese Werte werden beim sicheren Replace benötigt:
+     *
+     * 1. neue Version speichern bzw. Mail versenden
+     * 2. Erfolg abwarten
+     * 3. alten Draft anhand UID + Message-ID verifizieren
+     * 4. erst dann alten Draft entfernen
+     */
+    private string? _editingDraftSourceFolderId;
+    private uint _editingDraftSourceUniqueId;
+    private string? _editingDraftSourceMessageId;
 
     private string _windowTitle =
         "Neue E-Mail";
@@ -43,16 +73,30 @@ public sealed class ComposeMailViewModel : BaseViewModel
 
     public ComposeMailViewModel(
         IMailSendService mailSendService,
+        IMailDraftEditService mailDraftEditService,
+        IMailDraftCleanupService mailDraftCleanupService,
         IMailAccountStore mailAccountStore)
     {
         ArgumentNullException.ThrowIfNull(
             mailSendService);
 
         ArgumentNullException.ThrowIfNull(
+            mailDraftEditService);
+
+        ArgumentNullException.ThrowIfNull(
+            mailDraftCleanupService);
+
+        ArgumentNullException.ThrowIfNull(
             mailAccountStore);
 
         _mailSendService =
             mailSendService;
+
+        _mailDraftEditService =
+            mailDraftEditService;
+
+        _mailDraftCleanupService =
+            mailDraftCleanupService;
 
         _mailAccountStore =
             mailAccountStore;
@@ -332,6 +376,22 @@ public sealed class ComposeMailViewModel : BaseViewModel
 
     public bool HasAttachments =>
         Attachments.Count > 0;
+
+    public bool IsEditingDraft =>
+        !string.IsNullOrWhiteSpace(
+            _editingDraftSourceFolderId) &&
+        _editingDraftSourceUniqueId > 0 &&
+        !string.IsNullOrWhiteSpace(
+            _editingDraftSourceMessageId);
+
+    public string? EditingDraftSourceFolderId =>
+        _editingDraftSourceFolderId;
+
+    public uint EditingDraftSourceUniqueId =>
+        _editingDraftSourceUniqueId;
+
+    public string? EditingDraftSourceMessageId =>
+        _editingDraftSourceMessageId;
 
     private bool HasDraftContent =>
         !string.IsNullOrWhiteSpace(
@@ -630,6 +690,8 @@ public sealed class ComposeMailViewModel : BaseViewModel
         ArgumentNullException.ThrowIfNull(
             message);
 
+        ClearEditingDraftSource();
+
         /*
          * Weiterleiten ist ausdrücklich KEIN Reply.
          *
@@ -642,6 +704,12 @@ public sealed class ComposeMailViewModel : BaseViewModel
 
         _isReplyAll =
             false;
+
+        _parentMessageId =
+            null;
+
+        _parentReferences =
+            Array.Empty<string>();
 
         WindowTitle =
             "Weiterleiten";
@@ -681,11 +749,32 @@ public sealed class ComposeMailViewModel : BaseViewModel
         ArgumentNullException.ThrowIfNull(
             message);
 
+        ClearEditingDraftSource();
+
         _replySourceMessage =
             message;
 
         _isReplyAll =
             replyAll;
+
+        _parentMessageId =
+            string.IsNullOrWhiteSpace(
+                message.MessageId)
+                ? null
+                : message.MessageId.Trim();
+
+        _parentReferences =
+            message.References
+                .Where(
+                    reference =>
+                        !string.IsNullOrWhiteSpace(
+                            reference))
+                .Select(
+                    reference =>
+                        reference.Trim())
+                .Distinct(
+                    StringComparer.Ordinal)
+                .ToArray();
 
         WindowTitle =
             replyAll
@@ -711,6 +800,181 @@ public sealed class ComposeMailViewModel : BaseViewModel
 
         FocusBodyOnLoad =
             true;
+    }
+
+    public async Task PrepareDraftEditAsync(
+        string sourceFolderId,
+        uint sourceUniqueId,
+        string? expectedMessageId,
+        CancellationToken cancellationToken = default)
+    {
+        if (IsBusy)
+        {
+            throw new InvalidOperationException(
+                "Es läuft bereits ein Vorgang.");
+        }
+
+        var draft =
+            await _mailDraftEditService
+                .LoadDraftAsync(
+                    sourceFolderId,
+                    sourceUniqueId,
+                    expectedMessageId,
+                    cancellationToken);
+
+        /*
+         * Ab hier wurde der Entwurf bereits frisch vom
+         * Server geladen und durch MailKitDraftEditService
+         * gegen die erwartete Message-ID geprüft.
+         */
+
+        _replySourceMessage =
+            null;
+
+        _isReplyAll =
+            false;
+
+        _parentMessageId =
+            string.IsNullOrWhiteSpace(
+                draft.ParentMessageId)
+                ? null
+                : draft.ParentMessageId.Trim();
+
+        _parentReferences =
+            draft.ParentReferences
+                .Where(
+                    reference =>
+                        !string.IsNullOrWhiteSpace(
+                            reference))
+                .Select(
+                    reference =>
+                        reference.Trim())
+                .Distinct(
+                    StringComparer.Ordinal)
+                .ToArray();
+
+        SetEditingDraftSource(
+            draft.SourceFolderId,
+            draft.SourceUniqueId,
+            draft.SourceMessageId);
+
+        WindowTitle =
+            "Entwurf bearbeiten";
+
+        HeaderTitle =
+            "Entwurf bearbeiten";
+
+        RecipientAddress =
+            JoinAddresses(
+                draft.ToAddresses);
+
+        CcAddress =
+            JoinAddresses(
+                draft.CcAddresses);
+
+        ShowCcField =
+            draft.CcAddresses.Count > 0;
+
+        Subject =
+            draft.Subject;
+
+        Body =
+            draft.Body;
+
+        FocusBodyOnLoad =
+            true;
+
+        Attachments.Clear();
+
+        foreach (var attachment in
+                 draft.Attachments)
+        {
+            Attachments.Add(
+                attachment);
+        }
+
+        NotifyAttachmentStateChanged();
+    }
+
+    private void SetEditingDraftSource(
+        string sourceFolderId,
+        uint sourceUniqueId,
+        string sourceMessageId)
+    {
+        if (string.IsNullOrWhiteSpace(
+                sourceFolderId))
+        {
+            throw new ArgumentException(
+                "Der Entwürfe-Ordner darf nicht leer sein.",
+                nameof(sourceFolderId));
+        }
+
+        if (sourceUniqueId == 0)
+        {
+            throw new ArgumentOutOfRangeException(
+                nameof(sourceUniqueId));
+        }
+
+        if (string.IsNullOrWhiteSpace(
+                sourceMessageId))
+        {
+            throw new ArgumentException(
+                "Die Message-ID des Entwurfs darf nicht leer sein.",
+                nameof(sourceMessageId));
+        }
+
+        _editingDraftSourceFolderId =
+            sourceFolderId.Trim();
+
+        _editingDraftSourceUniqueId =
+            sourceUniqueId;
+
+        _editingDraftSourceMessageId =
+            sourceMessageId.Trim();
+
+        OnPropertyChanged(
+            nameof(IsEditingDraft));
+
+        OnPropertyChanged(
+            nameof(EditingDraftSourceFolderId));
+
+        OnPropertyChanged(
+            nameof(EditingDraftSourceUniqueId));
+
+        OnPropertyChanged(
+            nameof(EditingDraftSourceMessageId));
+    }
+
+    private void ClearEditingDraftSource()
+    {
+        var hadEditingDraft =
+            IsEditingDraft;
+
+        _editingDraftSourceFolderId =
+            null;
+
+        _editingDraftSourceUniqueId =
+            0;
+
+        _editingDraftSourceMessageId =
+            null;
+
+        if (!hadEditingDraft)
+        {
+            return;
+        }
+
+        OnPropertyChanged(
+            nameof(IsEditingDraft));
+
+        OnPropertyChanged(
+            nameof(EditingDraftSourceFolderId));
+
+        OnPropertyChanged(
+            nameof(EditingDraftSourceUniqueId));
+
+        OnPropertyChanged(
+            nameof(EditingDraftSourceMessageId));
     }
 
     public async Task InitializeAsync(
@@ -1196,6 +1460,25 @@ public sealed class ComposeMailViewModel : BaseViewModel
                 "Bitte geben Sie einen Empfänger an.");
         }
 
+        /*
+         * Draft-Identität VOR dem Versand einfrieren.
+         *
+         * Nach erfolgreichem SMTP-Versand ist dieser Zustand
+         * irreversibel. Erst danach darf der alte Entwurf
+         * entfernt werden.
+         */
+        var sourceFolderId =
+            _editingDraftSourceFolderId;
+
+        var sourceUniqueId =
+            _editingDraftSourceUniqueId;
+
+        var sourceMessageId =
+            _editingDraftSourceMessageId;
+
+        var wasEditingDraft =
+            IsEditingDraft;
+
         IsSending =
             true;
 
@@ -1205,10 +1488,55 @@ public sealed class ComposeMailViewModel : BaseViewModel
                 CreateMailRequest(
                     requireRecipient: true);
 
-            return await _mailSendService
-                .SendAsync(
-                    request,
-                    cancellationToken);
+            var result =
+                await _mailSendService
+                    .SendAsync(
+                        request,
+                        cancellationToken);
+
+            if (!result.WasSent ||
+                !wasEditingDraft ||
+                string.IsNullOrWhiteSpace(
+                    sourceFolderId) ||
+                sourceUniqueId == 0 ||
+                string.IsNullOrWhiteSpace(
+                    sourceMessageId))
+            {
+                return result;
+            }
+
+            /*
+             * Ab hier wurde die Nachricht bereits per SMTP
+             * versendet.
+             *
+             * Deshalb verwenden wir für den Cleanup bewusst
+             * NICHT mehr den ursprünglichen CancellationToken.
+             *
+             * Eine nachträgliche Cancellation darf nicht dazu
+             * führen, dass der bereits versendete Draft
+             * unnötig im Entwürfe-Ordner liegen bleibt.
+             *
+             * Der Cleanup-Dienst besitzt selbst einen
+             * begrenzten Timeout.
+             */
+            var previousDraftRemoved =
+                await _mailDraftCleanupService
+                    .TryDeleteDraftAsync(
+                        sourceFolderId,
+                        sourceUniqueId,
+                        sourceMessageId,
+                        CancellationToken.None);
+
+            if (previousDraftRemoved)
+            {
+                ClearEditingDraftSource();
+            }
+
+            return result with
+            {
+                PreviousDraftRemoved =
+                    previousDraftRemoved
+            };
         }
         finally
         {
@@ -1217,7 +1545,7 @@ public sealed class ComposeMailViewModel : BaseViewModel
         }
     }
 
-    public async Task SaveDraftAsync(
+    public async Task<MailDraftSaveResult> SaveDraftAsync(
         CancellationToken cancellationToken = default)
     {
         if (IsBusy)
@@ -1232,6 +1560,25 @@ public sealed class ComposeMailViewModel : BaseViewModel
                 "Der Entwurf enthält noch keinen Inhalt.");
         }
 
+        /*
+         * Identität der bisherigen Draft-Version vor dem
+         * Append sichern.
+         *
+         * Die neue Version wird IMMER zuerst vollständig
+         * gespeichert.
+         */
+        var sourceFolderId =
+            _editingDraftSourceFolderId;
+
+        var sourceUniqueId =
+            _editingDraftSourceUniqueId;
+
+        var sourceMessageId =
+            _editingDraftSourceMessageId;
+
+        var wasEditingDraft =
+            IsEditingDraft;
+
         IsSavingDraft =
             true;
 
@@ -1241,10 +1588,82 @@ public sealed class ComposeMailViewModel : BaseViewModel
                 CreateMailRequest(
                     requireRecipient: false);
 
+            /*
+             * Erst die neue Version sicher auf den Server
+             * schreiben.
+             *
+             * Schlägt das fehl, wird die alte Version nicht
+             * angefasst.
+             */
             await _mailSendService
                 .SaveDraftAsync(
                     request,
                     cancellationToken);
+
+            /*
+             * Bei einer komplett neuen Nachricht existiert
+             * kein alter Draft, den wir entfernen müssten.
+             */
+            if (!wasEditingDraft ||
+                string.IsNullOrWhiteSpace(
+                    sourceFolderId) ||
+                sourceUniqueId == 0 ||
+                string.IsNullOrWhiteSpace(
+                    sourceMessageId))
+            {
+                return new MailDraftSaveResult(
+                    WasSaved:
+                        true,
+
+                    PreviousDraftRemoved:
+                        true);
+            }
+
+            /*
+             * Die neue Version ist jetzt bereits sicher auf
+             * dem Server vorhanden.
+             *
+             * Auch hier verwenden wir für den Cleanup
+             * CancellationToken.None.
+             *
+             * Eine Cancellation NACH erfolgreichem Append
+             * darf nicht unnötig eine doppelte Draft-Version
+             * erzeugen.
+             *
+             * MailKitDraftCleanupService besitzt selbst einen
+             * festen Cleanup-Timeout.
+             */
+            var previousDraftRemoved =
+                await _mailDraftCleanupService
+                    .TryDeleteDraftAsync(
+                        sourceFolderId,
+                        sourceUniqueId,
+                        sourceMessageId,
+                        CancellationToken.None);
+
+            if (previousDraftRemoved)
+            {
+                /*
+                 * Die alte Draft-Quelle existiert jetzt nicht
+                 * mehr.
+                 *
+                 * Für unseren aktuellen Workflow ist das
+                 * korrekt, weil das Compose-Fenster nach
+                 * erfolgreichem Speichern geschlossen wird.
+                 *
+                 * Ein späteres Autosave benötigt dafür einen
+                 * erweiterten Workflow, der anschließend die
+                 * neue UID/Message-ID übernimmt.
+                 */
+                ClearEditingDraftSource();
+            }
+
+            return new MailDraftSaveResult(
+                WasSaved:
+                    true,
+
+                PreviousDraftRemoved:
+                    previousDraftRemoved);
         }
         finally
         {
@@ -1287,10 +1706,10 @@ public sealed class ComposeMailViewModel : BaseViewModel
                     : CcAddress.Trim(),
 
             ParentMessageId:
-                _replySourceMessage?.MessageId,
+                _parentMessageId,
 
             ParentReferences:
-                _replySourceMessage?.References,
+                _parentReferences,
 
             Attachments:
                 Attachments.ToArray());
