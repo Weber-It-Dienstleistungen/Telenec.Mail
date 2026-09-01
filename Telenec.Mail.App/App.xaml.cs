@@ -30,6 +30,10 @@ public partial class App : Application
                     ImapMailMessageStateSource>();
 
                 services.AddSingleton<
+                    IMailPermanentDeleteService,
+                    MailKitPermanentDeleteService>();
+
+                services.AddSingleton<
                     IMailSendService,
                     MailKitSendService>();
 
