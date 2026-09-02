@@ -15,6 +15,9 @@ public sealed class MainViewModel : BaseViewModel
     private readonly IMailMessageStateSource
         _mailMessageStateSource;
 
+    private readonly IMailPermanentDeleteService
+        _mailPermanentDeleteService;
+
     private readonly Dictionary<string, uint>
         _uidValidityByFolder =
             new(
@@ -52,7 +55,8 @@ public sealed class MainViewModel : BaseViewModel
 
     public MainViewModel(
         IMailDataSource mailDataSource,
-        IMailMessageStateSource mailMessageStateSource)
+        IMailMessageStateSource mailMessageStateSource,
+        IMailPermanentDeleteService mailPermanentDeleteService)
     {
         ArgumentNullException.ThrowIfNull(
             mailDataSource);
@@ -60,11 +64,17 @@ public sealed class MainViewModel : BaseViewModel
         ArgumentNullException.ThrowIfNull(
             mailMessageStateSource);
 
+        ArgumentNullException.ThrowIfNull(
+            mailPermanentDeleteService);
+
         _mailDataSource =
             mailDataSource;
 
         _mailMessageStateSource =
             mailMessageStateSource;
+
+        _mailPermanentDeleteService =
+            mailPermanentDeleteService;
 
         MailFolders =
             new ObservableCollection<
@@ -693,6 +703,156 @@ public sealed class MainViewModel : BaseViewModel
                 cancellationToken);
 
             return true;
+        }
+        finally
+        {
+            EndMailMoveOperation();
+        }
+    }
+
+    public Task<bool> DeleteMessagePermanentlyAsync(
+        MailMessageItemViewModel message,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(
+            message);
+
+        return DeleteMessagesPermanentlyAsync(
+            new[] { message },
+            cancellationToken);
+    }
+
+    public async Task<bool> DeleteMessagesPermanentlyAsync(
+        IReadOnlyList<MailMessageItemViewModel> messages,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(
+            messages);
+
+        var trashFolder =
+            _selectedFolder;
+
+        /*
+         * Permanentes Löschen darf ausschließlich aus dem
+         * aktuell ausgewählten Papierkorb ausgelöst werden.
+         *
+         * Außerdem führen wir während eines Ordnerlade- oder
+         * Synchronisierungsvorgangs keine irreversible
+         * Operation aus.
+         */
+        if (trashFolder is null ||
+            !IsTrashFolderSelected ||
+            IsLoading ||
+            IsMailSynchronizationRunning ||
+            messages.Count == 0)
+        {
+            return false;
+        }
+
+        /*
+         * Für jede irreversible Operation muss die zum
+         * aktuell geladenen Ordner gehörende UIDVALIDITY
+         * bekannt sein.
+         *
+         * Ohne diese Information wird nicht gelöscht.
+         */
+        if (!_uidValidityByFolder.TryGetValue(
+                trashFolder.FolderId,
+                out var expectedUidValidity) ||
+            expectedUidValidity == 0)
+        {
+            return false;
+        }
+
+        var messagesToDelete =
+            NormalizeMessages(
+                messages);
+
+        if (messagesToDelete.Count == 0)
+        {
+            return false;
+        }
+
+        var uniqueIds =
+            messagesToDelete
+                .Select(
+                    message =>
+                        message.UniqueId)
+                .ToList();
+
+        /*
+         * Wir verwenden denselben Operationsschutz wie für
+         * Move/Undo/Restore.
+         *
+         * Dadurch kann innerhalb dieses ViewModels nicht
+         * gleichzeitig eine zweite Nachrichtenmutation
+         * gestartet werden.
+         */
+        if (!TryBeginMailMoveOperation())
+        {
+            return false;
+        }
+
+        try
+        {
+            await _mailPermanentDeleteService
+                .DeletePermanentlyAsync(
+                    trashFolder.FolderId,
+                    expectedUidValidity,
+                    uniqueIds,
+                    cancellationToken);
+
+            /*
+             * Nach erfolgreichem Permanent Delete existiert
+             * bewusst kein Undo.
+             *
+             * Auch ein eventuell älterer Move-Zustand wird
+             * verworfen, damit kein Undo mehr auf inzwischen
+             * endgültig entfernte UIDs zeigen kann.
+             */
+            SetLastMoveOperation(
+                null);
+
+            await ReloadAsync(
+                cancellationToken);
+
+            return true;
+        }
+        catch
+        {
+            /*
+             * Bei einem Verbindungsabbruch kann eine
+             * irreversible Serveroperation bereits erfolgreich
+             * gewesen sein, obwohl die Clientseite keine
+             * eindeutige Bestätigung mehr erhalten hat.
+             *
+             * Deshalb behalten wir in diesem Fall ebenfalls
+             * keinen alten Undo-Zustand.
+             */
+            SetLastMoveOperation(
+                null);
+
+            /*
+             * Best effort: Nach einem Fehler versuchen wir,
+             * den tatsächlichen Serverzustand neu einzulesen.
+             *
+             * Wir wiederholen die Löschoperation ausdrücklich
+             * NICHT automatisch.
+             */
+            try
+            {
+                await ReloadAsync(
+                    CancellationToken.None);
+            }
+            catch
+            {
+                /*
+                 * Der ursprüngliche Fehler der
+                 * Permanent-Delete-Operation bleibt maßgeblich.
+                 */
+            }
+
+            throw;
         }
         finally
         {
