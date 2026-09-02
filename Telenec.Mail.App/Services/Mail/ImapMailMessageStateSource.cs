@@ -112,18 +112,54 @@ public sealed class ImapMailMessageStateSource
                         Array.Empty<MailMessageStateData>());
             }
 
+            /*
+             * Envelope wird hier zusätzlich benötigt, damit die
+             * leichte State-Liste exakt dieselbe deterministische
+             * Sortierreihenfolge verwenden kann wie
+             * ImapMailDataSource.
+             *
+             * Es werden weiterhin ausdrücklich keine Bodies,
+             * Attachments oder MIME-Inhalte geladen.
+             */
             var summaries =
                 await folder.FetchAsync(
                     uniqueIds,
                     MessageSummaryItems.UniqueId |
-                    MessageSummaryItems.Flags,
+                    MessageSummaryItems.Flags |
+                    MessageSummaryItems.Envelope,
                     cancellationToken);
 
-            var states =
+            /*
+             * Wichtig für Paging:
+             *
+             * MailKit garantiert bei einem Fetch über eine
+             * UID-Liste nicht, dass die zurückgegebenen
+             * IMessageSummary-Objekte in derselben Reihenfolge
+             * wie die angeforderten UIDs stehen.
+             *
+             * Die eigentliche Nachrichten-Datenquelle sortiert
+             * ihre Summaries ebenfalls nach Datum und danach
+             * nach Index.
+             *
+             * Der State-Source muss dieselbe Reihenfolge
+             * verwenden, weil das ViewModel damit prüft, ob die
+             * bereits sichtbaren Nachrichten noch exakt den
+             * aktuellen Anfang des Serverordners bilden.
+             */
+            var orderedSummaries =
                 summaries
                     .Where(
                         summary =>
                             summary.UniqueId.IsValid)
+                    .OrderByDescending(
+                        GetMessageSortDate)
+                    .ThenByDescending(
+                        summary =>
+                            summary.Index)
+                    .ToList();
+
+            var states =
+                orderedSummaries
                     .Select(
                         summary =>
                             new MailMessageStateData(

@@ -10,6 +10,9 @@ namespace Telenec.Mail.App.ViewModels;
 
 public sealed class MainViewModel : BaseViewModel
 {
+    private const int MessagePageSize =
+        20;
+
     private readonly IMailDataSource _mailDataSource;
 
     private readonly IMailMessageStateSource
@@ -25,6 +28,10 @@ public sealed class MainViewModel : BaseViewModel
 
     private int _mailMoveOperationState;
     private int _mailSynchronizationOperationState;
+    private int _messagePageLoadOperationState;
+
+    private int _loadedMessageLimit =
+        MessagePageSize;
 
     private MailFolderItemViewModel? _selectedFolder;
     private MailMessageItemViewModel? _selectedMessage;
@@ -38,6 +45,7 @@ public sealed class MainViewModel : BaseViewModel
     private bool _isLoading;
     private bool _hasLoadError;
     private bool _isEmptyFolder;
+    private bool _hasMoreMessages;
 
     private bool _suppressAutomaticReadMarking;
 
@@ -99,6 +107,7 @@ public sealed class MainViewModel : BaseViewModel
     public bool CanUndoLastMove =>
         _lastMoveOperation?.CanUndo == true &&
         !IsLoading &&
+        !IsLoadingMoreMessages &&
         !IsMailMoveOperationRunning;
 
     public bool IsTrashFolderSelected =>
@@ -117,6 +126,51 @@ public sealed class MainViewModel : BaseViewModel
         IsTrashFolderSelected
             ? "\uE72B"
             : "\uE74D";
+
+    /*
+     * Diese Eigenschaft wird später direkt für den sichtbaren
+     * "Weitere 20 Nachrichten laden"-Button verwendet.
+     */
+    public bool HasMoreMessages
+    {
+        get =>
+            _hasMoreMessages;
+
+        private set
+        {
+            if (_hasMoreMessages ==
+                value)
+            {
+                return;
+            }
+
+            _hasMoreMessages =
+                value;
+
+            OnPropertyChanged();
+
+            OnPropertyChanged(
+                nameof(CanLoadMoreMessages));
+        }
+    }
+
+    /*
+     * Load-More verwendet bewusst einen eigenen Ladezustand.
+     *
+     * Der normale IsLoading-Zustand steuert die große
+     * Ordner-Ladeoberfläche. Beim Nachladen älterer Nachrichten
+     * soll die bereits sichtbare Liste dagegen stehen bleiben.
+     */
+    public bool IsLoadingMoreMessages =>
+        Volatile.Read(
+            ref _messagePageLoadOperationState) != 0;
+
+    public bool CanLoadMoreMessages =>
+        HasMoreMessages &&
+        !IsLoading &&
+        !IsLoadingMoreMessages &&
+        !IsMailSynchronizationRunning &&
+        !IsMailMoveOperationRunning;
 
     private bool IsMailMoveOperationRunning =>
         Volatile.Read(
@@ -142,6 +196,16 @@ public sealed class MainViewModel : BaseViewModel
 
             _selectedFolder =
                 value;
+
+            /*
+             * Ein Ordnerwechsel beginnt bewusst wieder bei
+             * der ersten Seite.
+             *
+             * Dadurch halten wir nicht unnötig hunderte
+             * vollständige Nachrichten verschiedener Ordner
+             * gleichzeitig im Speicher.
+             */
+            ResetMessagePagingState();
 
             OnPropertyChanged();
 
@@ -200,7 +264,8 @@ public sealed class MainViewModel : BaseViewModel
 
         private set
         {
-            if (_isLoading == value)
+            if (_isLoading ==
+                value)
             {
                 return;
             }
@@ -212,6 +277,9 @@ public sealed class MainViewModel : BaseViewModel
 
             OnPropertyChanged(
                 nameof(CanUndoLastMove));
+
+            OnPropertyChanged(
+                nameof(CanLoadMoreMessages));
         }
     }
 
@@ -222,7 +290,8 @@ public sealed class MainViewModel : BaseViewModel
 
         private set
         {
-            if (_loadingMessage == value)
+            if (_loadingMessage ==
+                value)
             {
                 return;
             }
@@ -241,7 +310,8 @@ public sealed class MainViewModel : BaseViewModel
 
         private set
         {
-            if (_hasLoadError == value)
+            if (_hasLoadError ==
+                value)
             {
                 return;
             }
@@ -260,7 +330,8 @@ public sealed class MainViewModel : BaseViewModel
 
         private set
         {
-            if (_loadErrorMessage == value)
+            if (_loadErrorMessage ==
+                value)
             {
                 return;
             }
@@ -279,7 +350,8 @@ public sealed class MainViewModel : BaseViewModel
 
         private set
         {
-            if (_isEmptyFolder == value)
+            if (_isEmptyFolder ==
+                value)
             {
                 return;
             }
@@ -298,7 +370,8 @@ public sealed class MainViewModel : BaseViewModel
 
         private set
         {
-            if (_connectionState == value)
+            if (_connectionState ==
+                value)
             {
                 return;
             }
@@ -317,7 +390,8 @@ public sealed class MainViewModel : BaseViewModel
 
         private set
         {
-            if (_connectionStatusText == value)
+            if (_connectionStatusText ==
+                value)
             {
                 return;
             }
@@ -382,11 +456,314 @@ public sealed class MainViewModel : BaseViewModel
             cancellationToken);
     }
 
+    /*
+     * Lädt exakt die nächste Nachrichtenseite.
+     *
+     * Bestehende Bodies werden dabei nicht erneut über
+     * GetMessagePageAsync heruntergeladen.
+     *
+     * Vor und nach dem eigentlichen Seitenabruf prüfen wir
+     * jedoch den leichten UID-/Flag-Zustand der bereits
+     * sichtbaren Nachrichten.
+     *
+     * Dadurch erkennen wir, ob beispielsweise zwischenzeitlich
+     * eine neue Nachricht am Anfang des Ordners angekommen ist
+     * und das Offset dadurch nicht mehr zu unserer sichtbaren
+     * Liste passt.
+     */
+    public async Task<bool> LoadMoreMessagesAsync(
+        CancellationToken cancellationToken = default)
+    {
+        var folder =
+            _selectedFolder;
+
+        if (folder is null ||
+            IsLoading ||
+            !HasMoreMessages ||
+            Messages.Count == 0 ||
+            IsMailSynchronizationRunning ||
+            IsMailMoveOperationRunning ||
+            !TryBeginMessagePageLoad())
+        {
+            return false;
+        }
+
+        var synchronizeAfterOperation =
+            false;
+
+        var pageLoaded =
+            false;
+
+        try
+        {
+            if (!_uidValidityByFolder.TryGetValue(
+                    folder.FolderId,
+                    out var expectedUidValidity) ||
+                expectedUidValidity == 0)
+            {
+                synchronizeAfterOperation =
+                    true;
+
+                return false;
+            }
+
+            var currentlyLoadedCount =
+                Messages.Count;
+
+            /*
+             * Vorprüfung:
+             *
+             * Sind die aktuell sichtbaren Nachrichten noch
+             * exakt der aktuelle Anfang des Serverordners?
+             *
+             * Bei einer neu eingegangenen oder von einem
+             * anderen Client gelöschten Mail wäre das nicht
+             * mehr der Fall.
+             */
+            var stateBeforePage =
+                await _mailMessageStateSource
+                    .GetMessageStatesAsync(
+                        folder.FolderId,
+                        maximumMessageCount:
+                            currentlyLoadedCount,
+                        cancellationToken:
+                            cancellationToken);
+
+            cancellationToken
+                .ThrowIfCancellationRequested();
+
+            if (!ReferenceEquals(
+                    _selectedFolder,
+                    folder))
+            {
+                return false;
+            }
+
+            ValidateStateSnapshot(
+                folder,
+                stateBeforePage);
+
+            if (stateBeforePage.UidValidity !=
+                    expectedUidValidity ||
+                !DoesStateSnapshotMatchLoadedPrefix(
+                    stateBeforePage))
+            {
+                synchronizeAfterOperation =
+                    true;
+
+                return false;
+            }
+
+            /*
+             * Erst nachdem der aktuelle Präfix bestätigt wurde,
+             * werden exakt die nächsten 20 vollständigen
+             * Nachrichten geladen.
+             */
+            var page =
+                await _mailDataSource
+                    .GetMessagePageAsync(
+                        folder.FolderId,
+                        skipMessageCount:
+                            currentlyLoadedCount,
+                        maximumMessageCount:
+                            MessagePageSize,
+                        cancellationToken:
+                            cancellationToken);
+
+            cancellationToken
+                .ThrowIfCancellationRequested();
+
+            if (!ReferenceEquals(
+                    _selectedFolder,
+                    folder))
+            {
+                return false;
+            }
+
+            /*
+             * Nachprüfung:
+             *
+             * Während des Abrufs der nächsten Bodies könnte
+             * sich der Ordner erneut verändert haben.
+             *
+             * In diesem Fall wird die geladene Seite verworfen
+             * und zuerst der echte Serverzustand synchronisiert.
+             */
+            var stateAfterPage =
+                await _mailMessageStateSource
+                    .GetMessageStatesAsync(
+                        folder.FolderId,
+                        maximumMessageCount:
+                            currentlyLoadedCount,
+                        cancellationToken:
+                            cancellationToken);
+
+            cancellationToken
+                .ThrowIfCancellationRequested();
+
+            if (!ReferenceEquals(
+                    _selectedFolder,
+                    folder))
+            {
+                return false;
+            }
+
+            ValidateStateSnapshot(
+                folder,
+                stateAfterPage);
+
+            if (stateAfterPage.UidValidity !=
+                    expectedUidValidity ||
+                !DoesStateSnapshotMatchLoadedPrefix(
+                    stateAfterPage))
+            {
+                synchronizeAfterOperation =
+                    true;
+
+                return false;
+            }
+
+            var existingUniqueIds =
+                Messages
+                    .Select(
+                        message =>
+                            message.UniqueId)
+                    .ToHashSet();
+
+            /*
+             * Eine Überschneidung sollte nach den beiden
+             * Präfixprüfungen nicht vorkommen.
+             *
+             * Falls der Serverzustand genau zwischen den
+             * Prüfungen verschoben wurde, behandeln wir eine
+             * Überschneidung trotzdem defensiv als Hinweis
+             * auf einen veralteten Paging-Zustand.
+             */
+            if (page.Any(
+                    message =>
+                        existingUniqueIds.Contains(
+                            message.UniqueId)))
+            {
+                synchronizeAfterOperation =
+                    true;
+
+                return false;
+            }
+
+            foreach (var message in page)
+            {
+                if (message.UniqueId == 0 ||
+                    existingUniqueIds.Contains(
+                        message.UniqueId))
+                {
+                    continue;
+                }
+
+                Messages.Add(
+                    CreateMessageViewModel(
+                        message));
+
+                existingUniqueIds.Add(
+                    message.UniqueId);
+            }
+
+            /*
+             * Die gewünschte sichtbare Tiefe steigt immer um
+             * genau eine Seite.
+             *
+             * Diese Tiefe wird bei einer späteren normalen
+             * Synchronisation beibehalten.
+             */
+            _loadedMessageLimit =
+                checked(
+                    _loadedMessageLimit +
+                    MessagePageSize);
+
+            IsEmptyFolder =
+                Messages.Count == 0;
+
+            if (page.Count <
+                MessagePageSize)
+            {
+                /*
+                 * Eine unvollständige Seite bedeutet:
+                 * Zum Zeitpunkt des Serverabrufs war das Ende
+                 * des Ordners erreicht.
+                 */
+                HasMoreMessages =
+                    false;
+            }
+            else
+            {
+                UpdateHasMoreMessages();
+            }
+
+            SetConnected();
+
+            pageLoaded =
+                page.Count > 0;
+
+            return pageLoaded;
+        }
+        catch (OperationCanceledException)
+            when (cancellationToken.IsCancellationRequested)
+        {
+            return false;
+        }
+        catch (OverflowException)
+        {
+            /*
+             * Praktisch nicht erreichbar, verhindert aber,
+             * dass ein theoretischer Integerüberlauf einen
+             * falschen Paging-Zustand erzeugt.
+             */
+            HasMoreMessages =
+                false;
+
+            return false;
+        }
+        catch (Exception ex)
+        {
+            /*
+             * Ein Fehler beim Nachladen darf die bereits
+             * sichtbaren Nachrichten nicht durch eine große
+             * Load-Error-Ansicht ersetzen.
+             */
+            SetSynchronizationErrorState(
+                ex);
+
+            return false;
+        }
+        finally
+        {
+            EndMessagePageLoad();
+
+            if (synchronizeAfterOperation &&
+                ReferenceEquals(
+                    _selectedFolder,
+                    folder) &&
+                !cancellationToken.IsCancellationRequested)
+            {
+                /*
+                 * Die eigentliche Paging-Operation ist bereits
+                 * beendet, bevor SynchronizeCoreAsync startet.
+                 *
+                 * Dadurch blockieren sich die beiden
+                 * Operationsguards nicht gegenseitig.
+                 */
+                await SynchronizeCoreAsync(
+                    showUserFeedback: false,
+                    cancellationToken);
+            }
+        }
+    }
+
     private async Task SynchronizeCoreAsync(
         bool showUserFeedback,
         CancellationToken cancellationToken)
     {
         if (IsLoading ||
+            IsLoadingMoreMessages ||
             !TryBeginSynchronization())
         {
             return;
@@ -435,6 +812,9 @@ public sealed class MainViewModel : BaseViewModel
 
                 Messages.Clear();
 
+                HasMoreMessages =
+                    false;
+
                 IsEmptyFolder =
                     true;
 
@@ -443,11 +823,29 @@ public sealed class MainViewModel : BaseViewModel
                 return;
             }
 
+            /*
+             * Anders als bisher synchronisieren wir nicht
+             * pauschal nur die ersten 20 Nachrichten.
+             *
+             * Hat der Benutzer beispielsweise bereits 60
+             * Nachrichten sichtbar gemacht, werden auch diese
+             * 60 UID-/Flag-Zustände geprüft.
+             *
+             * Bodies werden nur dann erneut geladen, wenn sich
+             * der sichtbare Serverzustand tatsächlich geändert
+             * hat.
+             */
+            var synchronizationMessageLimit =
+                Math.Max(
+                    _loadedMessageLimit,
+                    MessagePageSize);
+
             var stateSnapshot =
                 await _mailMessageStateSource
                     .GetMessageStatesAsync(
                         folderToSynchronize.FolderId,
-                        maximumMessageCount: 20,
+                        maximumMessageCount:
+                            synchronizationMessageLimit,
                         cancellationToken:
                             cancellationToken);
 
@@ -484,6 +882,16 @@ public sealed class MainViewModel : BaseViewModel
 
                 Messages.Clear();
 
+                /*
+                 * Eine neue Ordneridentität beginnt bewusst
+                 * wieder mit der ersten Seite.
+                 */
+                _loadedMessageLimit =
+                    MessagePageSize;
+
+                HasMoreMessages =
+                    false;
+
                 InvalidateLastMoveForFolderIdentityChange(
                     folderToSynchronize.FolderId);
             }
@@ -500,7 +908,8 @@ public sealed class MainViewModel : BaseViewModel
                     await _mailDataSource
                         .GetMessagesAsync(
                             folderToSynchronize.FolderId,
-                            maximumMessageCount: 20,
+                            maximumMessageCount:
+                                _loadedMessageLimit,
                             cancellationToken:
                                 cancellationToken);
 
@@ -529,6 +938,8 @@ public sealed class MainViewModel : BaseViewModel
 
             IsEmptyFolder =
                 Messages.Count == 0;
+
+            UpdateHasMoreMessages();
 
             SetConnected();
         }
@@ -661,6 +1072,7 @@ public sealed class MainViewModel : BaseViewModel
 
         if (folder is null ||
             IsLoading ||
+            IsLoadingMoreMessages ||
             messages.Count == 0)
         {
             return false;
@@ -736,13 +1148,14 @@ public sealed class MainViewModel : BaseViewModel
          * Permanentes Löschen darf ausschließlich aus dem
          * aktuell ausgewählten Papierkorb ausgelöst werden.
          *
-         * Außerdem führen wir während eines Ordnerlade- oder
-         * Synchronisierungsvorgangs keine irreversible
-         * Operation aus.
+         * Außerdem führen wir während eines Ordnerlade-,
+         * Paging- oder Synchronisierungsvorgangs keine
+         * irreversible Operation aus.
          */
         if (trashFolder is null ||
             !IsTrashFolderSelected ||
             IsLoading ||
+            IsLoadingMoreMessages ||
             IsMailSynchronizationRunning ||
             messages.Count == 0)
         {
@@ -876,6 +1289,7 @@ public sealed class MainViewModel : BaseViewModel
 
         if (sourceFolder is null ||
             IsLoading ||
+            IsLoadingMoreMessages ||
             messages.Count == 0 ||
             !MailFolders.Contains(
                 targetFolder))
@@ -944,7 +1358,8 @@ public sealed class MainViewModel : BaseViewModel
 
         if (operation is null ||
             !operation.CanUndo ||
-            IsLoading)
+            IsLoading ||
+            IsLoadingMoreMessages)
         {
             return false;
         }
@@ -998,6 +1413,7 @@ public sealed class MainViewModel : BaseViewModel
         if (trashFolder is null ||
             !IsTrashFolderSelected ||
             IsLoading ||
+            IsLoadingMoreMessages ||
             messages.Count == 0)
         {
             return false;
@@ -1061,6 +1477,11 @@ public sealed class MainViewModel : BaseViewModel
 
     private bool TryBeginMailMoveOperation()
     {
+        if (IsLoadingMoreMessages)
+        {
+            return false;
+        }
+
         var previousState =
             Interlocked.CompareExchange(
                 ref _mailMoveOperationState,
@@ -1075,6 +1496,9 @@ public sealed class MainViewModel : BaseViewModel
         OnPropertyChanged(
             nameof(CanUndoLastMove));
 
+        OnPropertyChanged(
+            nameof(CanLoadMoreMessages));
+
         return true;
     }
 
@@ -1086,17 +1510,33 @@ public sealed class MainViewModel : BaseViewModel
 
         OnPropertyChanged(
             nameof(CanUndoLastMove));
+
+        OnPropertyChanged(
+            nameof(CanLoadMoreMessages));
     }
 
     private bool TryBeginSynchronization()
     {
+        if (IsLoadingMoreMessages)
+        {
+            return false;
+        }
+
         var previousState =
             Interlocked.CompareExchange(
                 ref _mailSynchronizationOperationState,
                 1,
                 0);
 
-        return previousState == 0;
+        if (previousState == 0)
+        {
+            OnPropertyChanged(
+                nameof(CanLoadMoreMessages));
+
+            return true;
+        }
+
+        return false;
     }
 
     private void EndSynchronization()
@@ -1104,6 +1544,56 @@ public sealed class MainViewModel : BaseViewModel
         Interlocked.Exchange(
             ref _mailSynchronizationOperationState,
             0);
+
+        OnPropertyChanged(
+            nameof(CanLoadMoreMessages));
+    }
+
+    private bool TryBeginMessagePageLoad()
+    {
+        if (IsMailSynchronizationRunning ||
+            IsMailMoveOperationRunning)
+        {
+            return false;
+        }
+
+        var previousState =
+            Interlocked.CompareExchange(
+                ref _messagePageLoadOperationState,
+                1,
+                0);
+
+        if (previousState != 0)
+        {
+            return false;
+        }
+
+        OnPropertyChanged(
+            nameof(IsLoadingMoreMessages));
+
+        OnPropertyChanged(
+            nameof(CanLoadMoreMessages));
+
+        OnPropertyChanged(
+            nameof(CanUndoLastMove));
+
+        return true;
+    }
+
+    private void EndMessagePageLoad()
+    {
+        Interlocked.Exchange(
+            ref _messagePageLoadOperationState,
+            0);
+
+        OnPropertyChanged(
+            nameof(IsLoadingMoreMessages));
+
+        OnPropertyChanged(
+            nameof(CanLoadMoreMessages));
+
+        OnPropertyChanged(
+            nameof(CanUndoLastMove));
     }
 
     private string? GetRestoreTargetFolderId(
@@ -1301,6 +1791,8 @@ public sealed class MainViewModel : BaseViewModel
 
         _uidValidityByFolder.Clear();
 
+        ResetMessagePagingState();
+
         _selectedFolder =
             null;
 
@@ -1340,6 +1832,8 @@ public sealed class MainViewModel : BaseViewModel
             _selectedFolder ??=
                 MailFolders.FirstOrDefault();
 
+            ResetMessagePagingState();
+
             OnPropertyChanged(
                 nameof(SelectedFolder));
 
@@ -1353,6 +1847,9 @@ public sealed class MainViewModel : BaseViewModel
                 SetConnected();
 
                 IsLoading =
+                    false;
+
+                HasMoreMessages =
                     false;
 
                 IsEmptyFolder =
@@ -1379,6 +1876,9 @@ public sealed class MainViewModel : BaseViewModel
                 false;
 
             IsLoading =
+                false;
+
+            HasMoreMessages =
                 false;
 
             SetErrorState(
@@ -1410,6 +1910,12 @@ public sealed class MainViewModel : BaseViewModel
         var token =
             loadSource.Token;
 
+        /*
+         * Jeder vollständige Ordnerwechsel beginnt wieder mit
+         * einer Seite.
+         */
+        ResetMessagePagingState();
+
         BeginLoading(
             $"E-Mails aus „{folder.DisplayName}“ werden geladen …",
             "Synchronisieren …");
@@ -1433,7 +1939,8 @@ public sealed class MainViewModel : BaseViewModel
                 await _mailMessageStateSource
                     .GetMessageStatesAsync(
                         folder.FolderId,
-                        maximumMessageCount: 20,
+                        maximumMessageCount:
+                            MessagePageSize,
                         cancellationToken:
                             token);
 
@@ -1462,7 +1969,8 @@ public sealed class MainViewModel : BaseViewModel
                 await _mailDataSource
                     .GetMessagesAsync(
                         folder.FolderId,
-                        maximumMessageCount: 20,
+                        maximumMessageCount:
+                            MessagePageSize,
                         cancellationToken:
                             token);
 
@@ -1503,6 +2011,8 @@ public sealed class MainViewModel : BaseViewModel
             IsEmptyFolder =
                 Messages.Count == 0;
 
+            UpdateHasMoreMessages();
+
             SetConnected();
         }
         catch (OperationCanceledException)
@@ -1515,6 +2025,9 @@ public sealed class MainViewModel : BaseViewModel
                     _folderLoadCancellationSource,
                     loadSource))
             {
+                HasMoreMessages =
+                    false;
+
                 SetErrorState(
                     ex);
             }
@@ -1568,6 +2081,37 @@ public sealed class MainViewModel : BaseViewModel
                    out var previousUidValidity) &&
                previousUidValidity !=
                    currentUidValidity;
+    }
+
+    /*
+     * Prüft nicht nur die Menge, sondern bewusst auch die
+     * Reihenfolge.
+     *
+     * Paging mit Offset ist nur dann sinnvoll, wenn die
+     * sichtbaren Nachrichten noch exakt den Anfang der
+     * aktuellen serverseitigen Sortierreihenfolge bilden.
+     */
+    private bool DoesStateSnapshotMatchLoadedPrefix(
+        MailFolderMessageStateSnapshot snapshot)
+    {
+        if (snapshot.Messages.Count !=
+            Messages.Count)
+        {
+            return false;
+        }
+
+        for (var index = 0;
+             index < Messages.Count;
+             index++)
+        {
+            if (snapshot.Messages[index].UniqueId !=
+                Messages[index].UniqueId)
+            {
+                return false;
+            }
+        }
+
+        return true;
     }
 
     private bool RequiresFullMessageReload(
@@ -1747,9 +2291,11 @@ public sealed class MainViewModel : BaseViewModel
                     MailFolders.IndexOf(
                         existingFolder);
 
-                if (currentIndex != targetIndex &&
+                if (currentIndex !=
+                        targetIndex &&
                     currentIndex >= 0 &&
-                    targetIndex < MailFolders.Count)
+                    targetIndex <
+                        MailFolders.Count)
                 {
                     MailFolders.Move(
                         currentIndex,
@@ -1778,6 +2324,14 @@ public sealed class MainViewModel : BaseViewModel
         {
             return;
         }
+
+        /*
+         * Wenn der bisherige ausgewählte Ordner serverseitig
+         * verschwunden ist und wir auf einen anderen Ordner
+         * wechseln müssen, beginnt auch dessen Paging wieder
+         * bei der ersten Seite.
+         */
+        ResetMessagePagingState();
 
         _selectedFolder =
             synchronizedSelectedFolder;
@@ -1856,9 +2410,11 @@ public sealed class MainViewModel : BaseViewModel
                     Messages.IndexOf(
                         existingMessage);
 
-                if (currentIndex != targetIndex &&
+                if (currentIndex !=
+                        targetIndex &&
                     currentIndex >= 0 &&
-                    targetIndex < Messages.Count)
+                    targetIndex <
+                        Messages.Count)
                 {
                     Messages.Move(
                         currentIndex,
@@ -2114,6 +2670,26 @@ public sealed class MainViewModel : BaseViewModel
         catch
         {
         }
+    }
+
+    private void ResetMessagePagingState()
+    {
+        _loadedMessageLimit =
+            MessagePageSize;
+
+        HasMoreMessages =
+            false;
+    }
+
+    private void UpdateHasMoreMessages()
+    {
+        var folder =
+            _selectedFolder;
+
+        HasMoreMessages =
+            folder is not null &&
+            folder.MessageCount >
+                Messages.Count;
     }
 
     private void BeginLoading(
