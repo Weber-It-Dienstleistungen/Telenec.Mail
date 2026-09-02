@@ -1,6 +1,7 @@
 ﻿using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Controls.Primitives;
+using System.Windows.Data;
 using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Media.Media3D;
@@ -18,6 +19,12 @@ public partial class MainWindow
 
     private const string PermanentDeleteSeparatorTag =
         "PermanentDeleteSeparator";
+
+    private Button?
+        _permanentDeleteSelectedMessageButton;
+
+    private bool
+        _permanentDeleteVisibleActionInitialized;
 
     /*
      * Der bestehende MainWindow-Keyhandler bleibt absichtlich
@@ -65,6 +72,246 @@ public partial class MainWindow
 
         base.OnPreviewKeyDown(
             e);
+    }
+
+    /*
+     * MainWindow.DraftEditing.cs verwendet bereits
+     * OnContentRendered.
+     *
+     * Deshalb verwenden wir für diese unabhängige UI-Erweiterung
+     * bewusst OnActivated.
+     *
+     * Der Guard stellt sicher, dass die Erweiterung trotz späterer
+     * erneuter Aktivierungen des Fensters nur einmal installiert
+     * wird.
+     */
+    protected override void OnActivated(
+        EventArgs e)
+    {
+        base.OnActivated(
+            e);
+
+        InitializePermanentDeleteVisibleAction();
+    }
+
+    /*
+     * Der vorhandene Löschen-/Wiederherstellen-Button ist bereits
+     * Bestandteil des stabilen MainWindow-XAML.
+     *
+     * Für die Permanent-Delete-Funktion setzen wir ihn lediglich
+     * in eine kleine horizontale Aktionsgruppe und ergänzen dort
+     * einen zweiten Button.
+     *
+     * Dadurch muss das große stabile MainWindow-XAML für diesen
+     * kleinen Erweiterungsschritt nicht verändert werden.
+     */
+    private void InitializePermanentDeleteVisibleAction()
+    {
+        if (_permanentDeleteVisibleActionInitialized)
+        {
+            return;
+        }
+
+        if (DeleteSelectedMessageButton.Parent
+            is not Grid headerGrid)
+        {
+            /*
+             * Falls das Fenster wider Erwarten noch nicht weit
+             * genug aufgebaut ist, bleibt der Guard auf false.
+             *
+             * Beim nächsten Activated-Ereignis wird dann erneut
+             * versucht zu initialisieren.
+             */
+            return;
+        }
+
+        _permanentDeleteVisibleActionInitialized =
+            true;
+
+        /*
+         * Der bestehende Button lag bisher direkt in
+         * Grid.Row 0 / Grid.Column 1.
+         *
+         * Wir ersetzen nur seine direkte Positionierung durch
+         * ein StackPanel an exakt derselben Stelle.
+         */
+        headerGrid.Children.Remove(
+            DeleteSelectedMessageButton);
+
+        var actionPanel =
+            new StackPanel
+            {
+                Orientation =
+                    Orientation.Horizontal,
+
+                HorizontalAlignment =
+                    HorizontalAlignment.Right,
+
+                VerticalAlignment =
+                    VerticalAlignment.Top
+            };
+
+        Grid.SetRow(
+            actionPanel,
+            0);
+
+        Grid.SetColumn(
+            actionPanel,
+            1);
+
+        actionPanel.Children.Add(
+            DeleteSelectedMessageButton);
+
+        var permanentDeleteButton =
+            CreatePermanentDeleteSelectedMessageButton();
+
+        _permanentDeleteSelectedMessageButton =
+            permanentDeleteButton;
+
+        actionPanel.Children.Add(
+            permanentDeleteButton);
+
+        headerGrid.Children.Add(
+            actionPanel);
+    }
+
+    private Button
+        CreatePermanentDeleteSelectedMessageButton()
+    {
+        var button =
+            new Button
+            {
+                Width =
+                    36,
+
+                Height =
+                    36,
+
+                Margin =
+                    new Thickness(
+                        6,
+                        0,
+                        0,
+                        0),
+
+                Padding =
+                    new Thickness(0),
+
+                HorizontalAlignment =
+                    HorizontalAlignment.Right,
+
+                VerticalAlignment =
+                    VerticalAlignment.Top,
+
+                Background =
+                    Brushes.Transparent,
+
+                BorderThickness =
+                    new Thickness(0),
+
+                Cursor =
+                    Cursors.Hand,
+
+                ToolTip =
+                    "Ausgewählte Nachricht endgültig löschen"
+            };
+
+        /*
+         * Der Button ist ausschließlich im Papierkorb sichtbar.
+         */
+        button.SetBinding(
+            VisibilityProperty,
+            new Binding(
+                nameof(
+                    MainViewModel.IsTrashFolderSelected))
+            {
+                Converter =
+                    new BooleanToVisibilityConverter()
+            });
+
+        /*
+         * Der vorhandene Wiederherstellen-/Löschen-Button besitzt
+         * bereits die korrekten Enable-Regeln:
+         *
+         * - keine Nachricht ausgewählt -> deaktiviert
+         * - Ordner wird geladen -> deaktiviert
+         *
+         * Der Permanent-Delete-Button übernimmt exakt diesen
+         * Zustand.
+         */
+        button.SetBinding(
+            IsEnabledProperty,
+            new Binding(
+                nameof(Button.IsEnabled))
+            {
+                Source =
+                    DeleteSelectedMessageButton
+            });
+
+        var glyph =
+            new TextBlock
+            {
+                Text =
+                    "\uE74D",
+
+                FontFamily =
+                    new FontFamily(
+                        "Segoe Fluent Icons"),
+
+                FontSize =
+                    18,
+
+                HorizontalAlignment =
+                    HorizontalAlignment.Center,
+
+                VerticalAlignment =
+                    VerticalAlignment.Center
+            };
+
+        /*
+         * Irreversible Aktion bewusst farblich vom
+         * Wiederherstellen-Button unterscheiden.
+         */
+        glyph.SetResourceReference(
+            TextBlock.ForegroundProperty,
+            "Status.Error");
+
+        button.Content =
+            glyph;
+
+        button.Click +=
+            PermanentDeleteSelectedMessageButton_OnClick;
+
+        return button;
+    }
+
+    private async void
+        PermanentDeleteSelectedMessageButton_OnClick(
+            object sender,
+            RoutedEventArgs e)
+    {
+        if (_viewModel.IsLoading ||
+            !_viewModel.IsTrashFolderSelected)
+        {
+            return;
+        }
+
+        var messages =
+            GetSelectedMessages();
+
+        if (messages.Count == 0)
+        {
+            return;
+        }
+
+        /*
+         * Auch der sichtbare Button führt ausschließlich in
+         * denselben bereits getesteten Permanent-Delete-Workflow.
+         *
+         * Es gibt keinen zweiten Löschmechanismus.
+         */
+        await DeleteMessagesPermanentlyFromUiAsync(
+            messages);
     }
 
     /*
