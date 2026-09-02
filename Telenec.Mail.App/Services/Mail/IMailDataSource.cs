@@ -13,6 +13,12 @@ public interface IMailDataSource
         int maximumMessageCount = 20,
         CancellationToken cancellationToken = default);
 
+    Task<IReadOnlyList<MailMessageData>> GetMessagePageAsync(
+        string folderId,
+        int skipMessageCount,
+        int maximumMessageCount,
+        CancellationToken cancellationToken = default);
+
     Task DownloadAttachmentAsync(
         string folderId,
         uint uniqueId,

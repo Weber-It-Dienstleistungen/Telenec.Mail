@@ -46,7 +46,8 @@ public sealed class DemoMailDataSource : IMailDataSource
                 HeaderSubtitle: "Gelöschte Nachrichten")
         ];
 
-        return Task.FromResult(folders);
+        return Task.FromResult(
+            folders);
     }
 
     public Task<IReadOnlyList<MailMessageData>> GetMessagesAsync(
@@ -54,7 +55,34 @@ public sealed class DemoMailDataSource : IMailDataSource
         int maximumMessageCount = 20,
         CancellationToken cancellationToken = default)
     {
+        return GetMessagePageAsync(
+            folderId,
+            skipMessageCount: 0,
+            maximumMessageCount,
+            cancellationToken);
+    }
+
+    public Task<IReadOnlyList<MailMessageData>> GetMessagePageAsync(
+        string folderId,
+        int skipMessageCount,
+        int maximumMessageCount,
+        CancellationToken cancellationToken = default)
+    {
         cancellationToken.ThrowIfCancellationRequested();
+
+        if (skipMessageCount < 0)
+        {
+            throw new ArgumentOutOfRangeException(
+                nameof(skipMessageCount),
+                "Die Anzahl der zu überspringenden Nachrichten darf nicht negativ sein.");
+        }
+
+        if (maximumMessageCount <= 0)
+        {
+            return Task.FromResult<
+                IReadOnlyList<MailMessageData>>(
+                    Array.Empty<MailMessageData>());
+        }
 
         IReadOnlyList<MailMessageData> messages =
         [
@@ -122,7 +150,16 @@ public sealed class DemoMailDataSource : IMailDataSource
                 UniqueId: 3)
         ];
 
-        return Task.FromResult(messages);
+        IReadOnlyList<MailMessageData> page =
+            messages
+                .Skip(
+                    skipMessageCount)
+                .Take(
+                    maximumMessageCount)
+                .ToList();
+
+        return Task.FromResult(
+            page);
     }
 
     public Task DownloadAttachmentAsync(

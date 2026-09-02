@@ -158,14 +158,51 @@ public sealed class ImapMailDataSource : IMailDataSource
         }
     }
 
-    public async Task<IReadOnlyList<MailMessageData>> GetMessagesAsync(
+    /*
+     * Der bestehende Aufruf bleibt vollständig kompatibel.
+     *
+     * Er entspricht schlicht der ersten Seite:
+     *
+     * Skip 0 / Take maximumMessageCount.
+     */
+    public Task<IReadOnlyList<MailMessageData>> GetMessagesAsync(
         string folderId,
         int maximumMessageCount = 20,
+        CancellationToken cancellationToken = default)
+    {
+        return GetMessagePageAsync(
+            folderId,
+            skipMessageCount: 0,
+            maximumMessageCount,
+            cancellationToken);
+    }
+
+    /*
+     * Echtes serverseitiges Paging der Nachrichtenansicht.
+     *
+     * Wichtig:
+     *
+     * Bei Skip 20 / Take 20 werden nur die Nachrichten der
+     * zweiten Seite vollständig geladen.
+     *
+     * Die ersten 20 Bodies werden dabei nicht erneut abgerufen.
+     */
+    public async Task<IReadOnlyList<MailMessageData>> GetMessagePageAsync(
+        string folderId,
+        int skipMessageCount,
+        int maximumMessageCount,
         CancellationToken cancellationToken = default)
     {
         ValidateFolderId(
             folderId,
             nameof(folderId));
+
+        if (skipMessageCount < 0)
+        {
+            throw new ArgumentOutOfRangeException(
+                nameof(skipMessageCount),
+                "Die Anzahl der zu überspringenden Nachrichten darf nicht negativ sein.");
+        }
 
         if (maximumMessageCount <= 0)
         {
@@ -188,15 +225,17 @@ public sealed class ImapMailDataSource : IMailDataSource
                 FolderAccess.ReadOnly,
                 cancellationToken);
 
-            if (folder.Count == 0)
+            if (folder.Count == 0 ||
+                skipMessageCount >= folder.Count)
             {
                 return Array.Empty<
                     MailMessageData>();
             }
 
             var uniqueIds =
-                await GetNewestMessageUniqueIdsAsync(
+                await GetMessagePageUniqueIdsAsync(
                     folder,
+                    skipMessageCount,
                     maximumMessageCount,
                     cancellationToken);
 
@@ -206,6 +245,11 @@ public sealed class ImapMailDataSource : IMailDataSource
                     MailMessageData>();
             }
 
+            /*
+             * Erst für die UIDs der tatsächlich angeforderten
+             * Seite werden Envelope, BodyStructure und später
+             * die konkreten Body-Parts geladen.
+             */
             var summaries =
                 await folder.FetchAsync(
                     uniqueIds,
@@ -363,9 +407,22 @@ public sealed class ImapMailDataSource : IMailDataSource
         }
     }
 
+    /*
+     * Es wird weiterhin die serverseitige Sortierreihenfolge
+     * verwendet.
+     *
+     * Der entscheidende Unterschied zum bisherigen Verfahren:
+     *
+     * Statt nur Take(...) können wir jetzt gezielt eine
+     * Seitenposition mit Skip(...).Take(...) bestimmen.
+     *
+     * SORT liefert dabei lediglich die UID-Reihenfolge.
+     * Nachrichteninhalte werden dadurch noch nicht geladen.
+     */
     private static async Task<IList<UniqueId>>
-        GetNewestMessageUniqueIdsAsync(
+        GetMessagePageUniqueIdsAsync(
             IMailFolder folder,
+            int skipMessageCount,
             int maximumMessageCount,
             CancellationToken cancellationToken)
     {
@@ -381,12 +438,21 @@ public sealed class ImapMailDataSource : IMailDataSource
                     cancellationToken);
 
             return sortedUniqueIds
+                .Skip(
+                    skipMessageCount)
                 .Take(
                     maximumMessageCount)
                 .ToList();
         }
         catch (NotSupportedException)
         {
+            /*
+             * Falls der Server SORT nicht unterstützt, müssen
+             * wir für die Sortierung leichte Metadaten lesen.
+             *
+             * Auch hier werden aber ausdrücklich keine
+             * Nachrichten-Bodies geladen.
+             */
             var lightweightSummaries =
                 await folder.FetchAsync(
                     0,
@@ -401,6 +467,8 @@ public sealed class ImapMailDataSource : IMailDataSource
                 .ThenByDescending(
                     summary =>
                         summary.Index)
+                .Skip(
+                    skipMessageCount)
                 .Take(
                     maximumMessageCount)
                 .Select(
