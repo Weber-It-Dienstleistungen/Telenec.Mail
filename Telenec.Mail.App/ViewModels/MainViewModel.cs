@@ -451,7 +451,35 @@ public sealed class MainViewModel : BaseViewModel
                 return;
             }
 
+            ValidateStateSnapshot(
+                folderToSynchronize,
+                stateSnapshot);
+
+            var uidValidityChanged =
+                HasUidValidityChanged(
+                    folderToSynchronize.FolderId,
+                    stateSnapshot.UidValidity);
+
+            if (uidValidityChanged)
+            {
+                /*
+                 * Wenn UIDVALIDITY wechselt, sind alle bisher
+                 * bekannten UIDs dieses Ordners ungültig.
+                 *
+                 * Alte Nachrichtenobjekte dürfen daher nicht
+                 * weiterverwendet werden.
+                 */
+                SetSelectedMessageWithoutReadMarking(
+                    null);
+
+                Messages.Clear();
+
+                InvalidateLastMoveForFolderIdentityChange(
+                    folderToSynchronize.FolderId);
+            }
+
             var requiresFullMessageReload =
+                uidValidityChanged ||
                 RequiresFullMessageReload(
                     folderToSynchronize.FolderId,
                     stateSnapshot);
@@ -1018,6 +1046,43 @@ public sealed class MainViewModel : BaseViewModel
                     remainingMappings));
     }
 
+    private void InvalidateLastMoveForFolderIdentityChange(
+        string folderId)
+    {
+        var operation =
+            _lastMoveOperation;
+
+        if (operation is null)
+        {
+            return;
+        }
+
+        var sourceFolderChanged =
+            string.Equals(
+                operation.SourceFolderId,
+                folderId,
+                StringComparison.OrdinalIgnoreCase);
+
+        var targetFolderChanged =
+            string.Equals(
+                operation.TargetFolderId,
+                folderId,
+                StringComparison.OrdinalIgnoreCase);
+
+        if (!sourceFolderChanged &&
+            !targetFolderChanged)
+        {
+            return;
+        }
+
+        /*
+         * Die gespeicherten Undo-UIDs sind nach einem
+         * UIDVALIDITY-Wechsel nicht mehr vertrauenswürdig.
+         */
+        SetLastMoveOperation(
+            null);
+    }
+
     private void NotifySelectedFolderActionStateChanged()
     {
         OnPropertyChanged(
@@ -1196,6 +1261,43 @@ public sealed class MainViewModel : BaseViewModel
 
         try
         {
+            /*
+             * UIDVALIDITY wird bewusst bereits beim normalen
+             * Laden des Ordners erfasst.
+             *
+             * Für spätere irreversible Aktionen dürfen wir
+             * niemals mit UIDs arbeiten, deren UIDVALIDITY
+             * unbekannt ist.
+             */
+            var stateSnapshot =
+                await _mailMessageStateSource
+                    .GetMessageStatesAsync(
+                        folder.FolderId,
+                        maximumMessageCount: 20,
+                        cancellationToken:
+                            token);
+
+            token.ThrowIfCancellationRequested();
+
+            ValidateStateSnapshot(
+                folder,
+                stateSnapshot);
+
+            var uidValidityChanged =
+                HasUidValidityChanged(
+                    folder.FolderId,
+                    stateSnapshot.UidValidity);
+
+            if (uidValidityChanged)
+            {
+                InvalidateLastMoveForFolderIdentityChange(
+                    folder.FolderId);
+            }
+
+            _uidValidityByFolder[
+                folder.FolderId] =
+                    stateSnapshot.UidValidity;
+
             var messages =
                 await _mailDataSource
                     .GetMessagesAsync(
@@ -1216,7 +1318,8 @@ public sealed class MainViewModel : BaseViewModel
             MailMessageItemViewModel?
                 preferredMessage = null;
 
-            if (preferredMessageUniqueId.HasValue)
+            if (preferredMessageUniqueId.HasValue &&
+                !uidValidityChanged)
             {
                 preferredMessage =
                     Messages.FirstOrDefault(
@@ -1227,6 +1330,13 @@ public sealed class MainViewModel : BaseViewModel
                                 preferredMessageId));
             }
 
+            /*
+             * Nach einem UIDVALIDITY-Wechsel wird absichtlich
+             * keine zuvor ausgewählte Nachricht rekonstruiert.
+             *
+             * Eine numerisch gleiche UID könnte jetzt eine
+             * andere Nachricht bezeichnen.
+             */
             SetSelectedMessageWithoutReadMarking(
                 preferredMessage);
 
@@ -1267,6 +1377,37 @@ public sealed class MainViewModel : BaseViewModel
 
             loadSource.Dispose();
         }
+    }
+
+    private static void ValidateStateSnapshot(
+        MailFolderItemViewModel folder,
+        MailFolderMessageStateSnapshot snapshot)
+    {
+        if (!string.Equals(
+                folder.FolderId,
+                snapshot.FolderId,
+                StringComparison.OrdinalIgnoreCase))
+        {
+            throw new InvalidOperationException(
+                "Der serverseitige Ordnerzustand konnte nicht eindeutig zugeordnet werden.");
+        }
+
+        if (snapshot.UidValidity == 0)
+        {
+            throw new InvalidOperationException(
+                "Der Mailserver hat keine gültige UIDVALIDITY für den Ordner geliefert.");
+        }
+    }
+
+    private bool HasUidValidityChanged(
+        string folderId,
+        uint currentUidValidity)
+    {
+        return _uidValidityByFolder.TryGetValue(
+                   folderId,
+                   out var previousUidValidity) &&
+               previousUidValidity !=
+                   currentUidValidity;
     }
 
     private bool RequiresFullMessageReload(
