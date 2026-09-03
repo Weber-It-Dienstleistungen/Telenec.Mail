@@ -6,7 +6,6 @@ using Telenec.Mail.App.Services.Security;
 using Telenec.Mail.App.Services.Startup;
 using Telenec.Mail.App.Services.Storage;
 using Telenec.Mail.App.ViewModels;
-using Velopack;
 
 namespace Telenec.Mail.App;
 
@@ -19,17 +18,6 @@ public partial class App : Application
 
     public App()
     {
-        /*
-         * Velopack wird bewusst ausgeführt, bevor irgendein
-         * eigener Telenec-Mail-Dienst initialisiert wird.
-         *
-         * Der normale WPF-Programmeinstieg bleibt dadurch
-         * vollständig erhalten.
-         */
-        VelopackApp
-            .Build()
-            .Run();
-
         _host = Host.CreateDefaultBuilder()
             .ConfigureServices(services =>
             {
