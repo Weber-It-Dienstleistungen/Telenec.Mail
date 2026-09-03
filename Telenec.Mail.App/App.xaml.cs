@@ -1,5 +1,6 @@
 ﻿using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
+using System.Diagnostics;
 using System.Windows;
 using Telenec.Mail.App.Services.Mail;
 using Telenec.Mail.App.Services.Security;
@@ -54,6 +55,9 @@ public partial class App : Application
                     IApplicationUpdateService,
                     VelopackApplicationUpdateService>();
 
+                services.AddSingleton<
+                    ReleaseNotesService>();
+
                 services.AddSingleton<AppDataPaths>();
                 services.AddSingleton<DatabaseInitializer>();
 
@@ -88,6 +92,9 @@ public partial class App : Application
 
                 services.AddTransient<
                     ComposeWindow>();
+
+                services.AddTransient<
+                    WhatsNewWindow>();
             })
             .Build();
     }
@@ -220,6 +227,64 @@ public partial class App : Application
 
         ShutdownMode =
             ShutdownMode.OnMainWindowClose;
+
+        ShowPendingReleaseNotes(
+            mainWindow);
+    }
+
+    private void ShowPendingReleaseNotes(
+        Window owner)
+    {
+        var releaseNotesService =
+            _host.Services
+                .GetRequiredService<
+                    ReleaseNotesService>();
+
+        var releaseNotes =
+            releaseNotesService
+                .TryGetPendingReleaseNotes();
+
+        if (releaseNotes is null)
+        {
+            return;
+        }
+
+        try
+        {
+            var whatsNewWindow =
+                _host.Services
+                    .GetRequiredService<
+                        WhatsNewWindow>();
+
+            whatsNewWindow.Owner =
+                owner;
+
+            whatsNewWindow
+                .ShowReleaseNotes(
+                    releaseNotes);
+
+            whatsNewWindow.ShowDialog();
+
+            /*
+             * Erst nachdem das Fenster tatsächlich angezeigt
+             * und geschlossen wurde, gilt diese Version als gesehen.
+             */
+            releaseNotesService
+                .MarkAsShown();
+        }
+        catch (Exception exception)
+        {
+            /*
+             * Ein Fehler in der Komfortfunktion
+             * darf Telenec Mail nicht beeinträchtigen.
+             *
+             * Der Marker bleibt erhalten, damit beim nächsten
+             * Programmstart erneut versucht werden kann,
+             * die Hinweise anzuzeigen.
+             */
+            Trace.WriteLine(
+                $"Could not show release notes: {exception}");
+        }
     }
 
     private async Task HandleStartupFailureAsync(

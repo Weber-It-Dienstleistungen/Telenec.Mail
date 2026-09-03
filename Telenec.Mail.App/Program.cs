@@ -1,4 +1,5 @@
-﻿using Velopack;
+﻿using Telenec.Mail.App.Services.Updates;
+using Velopack;
 
 namespace Telenec.Mail.App;
 
@@ -10,6 +11,11 @@ internal static class Program
     {
         VelopackApp
             .Build()
+            .OnAfterUpdateFastCallback(
+                version =>
+                    ReleaseNotesUpdateMarker
+                        .MarkPending(
+                            version.ToString()))
             .Run();
 
         var application =
