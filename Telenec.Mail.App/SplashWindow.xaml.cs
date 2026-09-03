@@ -1,4 +1,5 @@
-﻿using System.Windows;
+﻿using System.Reflection;
+using System.Windows;
 using System.Windows.Media.Animation;
 
 namespace Telenec.Mail.App;
@@ -15,7 +16,45 @@ public partial class SplashWindow : Window
     {
         InitializeComponent();
 
+        VersionTextBlock.Text =
+            $"Version {GetApplicationVersion()}";
+
         Loaded += OnLoaded;
+    }
+
+    private static string GetApplicationVersion()
+    {
+        var assembly =
+            Assembly.GetEntryAssembly();
+
+        var informationalVersion =
+            assembly?
+                .GetCustomAttribute<
+                    AssemblyInformationalVersionAttribute>()?
+                .InformationalVersion;
+
+        if (!string.IsNullOrWhiteSpace(
+                informationalVersion))
+        {
+            var metadataSeparatorIndex =
+                informationalVersion.IndexOf(
+                    '+');
+
+            if (metadataSeparatorIndex >= 0)
+            {
+                informationalVersion =
+                    informationalVersion[
+                        ..metadataSeparatorIndex];
+            }
+
+            return informationalVersion;
+        }
+
+        return assembly?
+                   .GetName()
+                   .Version?
+                   .ToString()
+               ?? "unbekannt";
     }
 
     private void OnLoaded(
