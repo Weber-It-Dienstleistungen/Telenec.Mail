@@ -18,37 +18,77 @@ public partial class SplashWindow : Window
         Loaded += OnLoaded;
     }
 
-    private void OnLoaded(object sender, RoutedEventArgs e)
+    private void OnLoaded(
+        object sender,
+        RoutedEventArgs e)
     {
-        var fadeInAnimation = new DoubleAnimation
-        {
-            From = 0,
-            To = 1,
-            Duration = FadeInDuration,
-            FillBehavior = FillBehavior.HoldEnd
-        };
+        var fadeInAnimation =
+            new DoubleAnimation
+            {
+                From = 0,
+                To = 1,
+                Duration = FadeInDuration,
+                FillBehavior = FillBehavior.HoldEnd
+            };
 
-        BeginAnimation(OpacityProperty, fadeInAnimation);
+        BeginAnimation(
+            OpacityProperty,
+            fadeInAnimation);
+    }
+
+    public void SetStatus(
+        string? status)
+    {
+        if (!Dispatcher.CheckAccess())
+        {
+            Dispatcher.Invoke(
+                () => SetStatus(status));
+
+            return;
+        }
+
+        if (string.IsNullOrWhiteSpace(status))
+        {
+            StatusTextBlock.Text =
+                string.Empty;
+
+            StatusTextBlock.Visibility =
+                Visibility.Collapsed;
+
+            return;
+        }
+
+        StatusTextBlock.Text =
+            status;
+
+        StatusTextBlock.Visibility =
+            Visibility.Visible;
     }
 
     public Task FadeOutAsync()
     {
         var completionSource =
             new TaskCompletionSource<bool>(
-                TaskCreationOptions.RunContinuationsAsynchronously);
+                TaskCreationOptions
+                    .RunContinuationsAsynchronously);
 
-        var fadeOutAnimation = new DoubleAnimation
-        {
-            From = Opacity,
-            To = 0,
-            Duration = FadeOutDuration,
-            FillBehavior = FillBehavior.HoldEnd
-        };
+        var fadeOutAnimation =
+            new DoubleAnimation
+            {
+                From = Opacity,
+                To = 0,
+                Duration = FadeOutDuration,
+                FillBehavior = FillBehavior.HoldEnd
+            };
 
-        fadeOutAnimation.Completed += (_, _) =>
-            completionSource.TrySetResult(true);
+        fadeOutAnimation.Completed +=
+            (_, _) =>
+                completionSource.TrySetResult(
+                    true);
 
-        BeginAnimation(OpacityProperty, fadeOutAnimation);
+        BeginAnimation(
+            OpacityProperty,
+            fadeOutAnimation);
 
         return completionSource.Task;
     }

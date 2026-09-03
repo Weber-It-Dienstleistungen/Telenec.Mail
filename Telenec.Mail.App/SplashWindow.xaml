@@ -23,6 +23,18 @@
             VerticalAlignment="Center"
             Stretch="Uniform" />
 
+        <TextBlock
+            x:Name="StatusTextBlock"
+            Margin="30,0,30,18"
+            HorizontalAlignment="Center"
+            VerticalAlignment="Bottom"
+            FontSize="13"
+            FontWeight="Medium"
+            Foreground="#6B7280"
+            TextAlignment="Center"
+            TextTrimming="CharacterEllipsis"
+            Visibility="Collapsed" />
+
     </Grid>
 
 </Window>

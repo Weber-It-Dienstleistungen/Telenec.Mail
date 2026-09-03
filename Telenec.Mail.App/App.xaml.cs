@@ -5,6 +5,7 @@ using Telenec.Mail.App.Services.Mail;
 using Telenec.Mail.App.Services.Security;
 using Telenec.Mail.App.Services.Startup;
 using Telenec.Mail.App.Services.Storage;
+using Telenec.Mail.App.Services.Updates;
 using Telenec.Mail.App.ViewModels;
 
 namespace Telenec.Mail.App;
@@ -48,6 +49,10 @@ public partial class App : Application
                 services.AddSingleton<
                     IMailAuthenticationService,
                     MailKitAuthenticationService>();
+
+                services.AddSingleton<
+                    IApplicationUpdateService,
+                    VelopackApplicationUpdateService>();
 
                 services.AddSingleton<AppDataPaths>();
                 services.AddSingleton<DatabaseInitializer>();
@@ -104,6 +109,26 @@ public partial class App : Application
         var minimumSplashDelay =
             Task.Delay(
                 MinimumSplashDuration);
+
+        var updateService =
+            _host.Services
+                .GetRequiredService<
+                    IApplicationUpdateService>();
+
+        var updateRestartInitiated =
+            await updateService
+                .TryApplyAvailableUpdateAsync(
+                    splashWindow.SetStatus);
+
+        /*
+         * ApplyUpdatesAndRestart beendet den Prozess normalerweise
+         * bereits selbst. Dieser Rücksprung verhindert defensiv,
+         * dass parallel noch der normale Mail-Startup beginnt.
+         */
+        if (updateRestartInitiated)
+        {
+            return;
+        }
 
         await _host.StartAsync();
 
