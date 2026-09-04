@@ -72,7 +72,7 @@
                 <TextBlock
                     Grid.Column="1"
                     Text="&#xE715;"
-                    FontFamily="Segoe Fluent Icons"
+                    FontFamily="Segoe MDL2 Assets"
                     FontSize="28"
                     Foreground="{StaticResource Brand.Primary}"
                     VerticalAlignment="Center" />
@@ -431,7 +431,7 @@
                             <TextBlock
                                 Text="&#xE723;"
                                 Margin="0,0,8,0"
-                                FontFamily="Segoe Fluent Icons"
+                                FontFamily="Segoe MDL2 Assets"
                                 FontSize="15"
                                 VerticalAlignment="Center" />
 
@@ -527,7 +527,7 @@
                                             Grid.Column="0"
                                             Text="&#xE8A5;"
                                             Margin="0,0,9,0"
-                                            FontFamily="Segoe Fluent Icons"
+                                            FontFamily="Segoe MDL2 Assets"
                                             FontSize="16"
                                             Foreground="{StaticResource Brand.Primary}"
                                             VerticalAlignment="Center" />
@@ -562,7 +562,7 @@
 
                                             <TextBlock
                                                 Text="&#xE711;"
-                                                FontFamily="Segoe Fluent Icons"
+                                                FontFamily="Segoe MDL2 Assets"
                                                 FontSize="12"
                                                 Foreground="{StaticResource Text.Secondary}"
                                                 HorizontalAlignment="Center"
@@ -799,7 +799,7 @@
                             <TextBlock
                                 Text="&#xE74E;"
                                 Margin="0,0,8,0"
-                                FontFamily="Segoe Fluent Icons"
+                                FontFamily="Segoe MDL2 Assets"
                                 FontSize="14"
                                 VerticalAlignment="Center" />
 
@@ -826,7 +826,7 @@
                             <TextBlock
                                 Text="&#xE724;"
                                 Margin="0,0,8,0"
-                                FontFamily="Segoe Fluent Icons"
+                                FontFamily="Segoe MDL2 Assets"
                                 FontSize="15"
                                 VerticalAlignment="Center" />
 

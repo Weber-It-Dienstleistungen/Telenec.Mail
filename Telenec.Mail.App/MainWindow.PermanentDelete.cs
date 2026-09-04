@@ -256,7 +256,7 @@ public partial class MainWindow
 
                 FontFamily =
                     new FontFamily(
-                        "Segoe Fluent Icons"),
+                        "Segoe MDL2 Assets"),
 
                 FontSize =
                     18,

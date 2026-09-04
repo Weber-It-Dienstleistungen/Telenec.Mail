@@ -2,9 +2,11 @@
 using MailKit.Net.Imap;
 using MailKit.Net.Smtp;
 using MailKit.Security;
+using Microsoft.Extensions.Logging;
 using MimeKit;
 using MimeKit.Utils;
 using System.IO;
+using System.Net.Sockets;
 using Telenec.Mail.App.Models;
 using Telenec.Mail.App.Services.Security;
 using Telenec.Mail.App.Services.Storage;
@@ -44,9 +46,13 @@ public sealed class MailKitSendService :
     private readonly IMailAccountStore _mailAccountStore;
     private readonly ICredentialStore _credentialStore;
 
+    private readonly ILogger<MailKitSendService>
+        _logger;
+
     public MailKitSendService(
         IMailAccountStore mailAccountStore,
-        ICredentialStore credentialStore)
+        ICredentialStore credentialStore,
+        ILogger<MailKitSendService> logger)
     {
         ArgumentNullException.ThrowIfNull(
             mailAccountStore);
@@ -54,11 +60,17 @@ public sealed class MailKitSendService :
         ArgumentNullException.ThrowIfNull(
             credentialStore);
 
+        ArgumentNullException.ThrowIfNull(
+            logger);
+
         _mailAccountStore =
             mailAccountStore;
 
         _credentialStore =
             credentialStore;
+
+        _logger =
+            logger;
     }
 
     public async Task<MailSendResult> SendAsync(
@@ -68,137 +80,181 @@ public sealed class MailKitSendService :
         ArgumentNullException.ThrowIfNull(
             request);
 
-        var recipients =
-            ParseRecipientList(
-                request.RecipientAddress,
-                nameof(request.RecipientAddress),
-                "Empfänger",
-                required: true);
+        _logger.LogInformation(
+            "Mail send started. Attachments={AttachmentCount}.",
+            request.Attachments?.Count ?? 0);
 
-        var ccRecipients =
-            ParseRecipientList(
-                request.CcAddress,
-                nameof(request.CcAddress),
-                "Cc-Adresse",
-                required: false);
+        try
+        {
+            var recipients =
+                ParseRecipientList(
+                    request.RecipientAddress,
+                    nameof(request.RecipientAddress),
+                    "Empfänger",
+                    required: true);
 
-        var bccRecipients =
-            ParseRecipientList(
-                request.BccAddress,
-                nameof(request.BccAddress),
-                "Bcc-Adresse",
-                required: false);
+            var ccRecipients =
+                ParseRecipientList(
+                    request.CcAddress,
+                    nameof(request.CcAddress),
+                    "Cc-Adresse",
+                    required: false);
 
-        /*
-         * Empfänger-Priorität:
-         *
-         * An -> Cc -> Bcc
-         *
-         * Eine Adresse, die bereits sichtbar unter "An"
-         * geführt wird, darf nicht zusätzlich als Cc oder Bcc
-         * versendet werden.
-         *
-         * Ebenso darf ein sichtbarer Cc-Empfänger nicht
-         * zusätzlich als Bcc-Empfänger auftreten.
-         */
-        ccRecipients =
-            RemoveDuplicateCcRecipients(
-                recipients,
-                ccRecipients);
+            var bccRecipients =
+                ParseRecipientList(
+                    request.BccAddress,
+                    nameof(request.BccAddress),
+                    "Bcc-Adresse",
+                    required: false);
 
-        bccRecipients =
-            RemoveDuplicateBccRecipients(
-                recipients,
-                ccRecipients,
-                bccRecipients);
+            /*
+             * Empfänger-Priorität:
+             *
+             * An -> Cc -> Bcc
+             *
+             * Eine Adresse, die bereits sichtbar unter "An"
+             * geführt wird, darf nicht zusätzlich als Cc oder Bcc
+             * versendet werden.
+             *
+             * Ebenso darf ein sichtbarer Cc-Empfänger nicht
+             * zusätzlich als Bcc-Empfänger auftreten.
+             */
+            ccRecipients =
+                RemoveDuplicateCcRecipients(
+                    recipients,
+                    ccRecipients);
 
-        var account =
-            await _mailAccountStore
-                .GetActiveAccountAsync(
+            bccRecipients =
+                RemoveDuplicateBccRecipients(
+                    recipients,
+                    ccRecipients,
+                    bccRecipients);
+
+            _logger.LogInformation(
+                "Mail send prepared. ToRecipients={ToRecipientCount}, CcRecipients={CcRecipientCount}, BccRecipients={BccRecipientCount}, Attachments={AttachmentCount}.",
+                recipients.Count,
+                ccRecipients.Count,
+                bccRecipients.Count,
+                request.Attachments?.Count ?? 0);
+
+            var account =
+                await _mailAccountStore
+                    .GetActiveAccountAsync(
+                        cancellationToken);
+
+            if (account is null)
+            {
+                throw new InvalidOperationException(
+                    "Es ist kein aktives Mailkonto eingerichtet.");
+            }
+
+            var credential =
+                await _credentialStore
+                    .ReadAsync(
+                        account.AccountId,
+                        cancellationToken);
+
+            if (credential is null ||
+                string.IsNullOrWhiteSpace(
+                    credential.Password))
+            {
+                throw new InvalidOperationException(
+                    "Für das Mailkonto sind keine Zugangsdaten gespeichert.");
+            }
+
+            var sender =
+                CreateSenderAddress(
+                    account.EmailAddress,
+                    account.DisplayName);
+
+            /*
+             * Die komplette MIME-Nachricht wird weiterhin vor
+             * dem SMTP-Verbindungsaufbau erstellt.
+             *
+             * Das gilt jetzt auch für Originalanhänge einer
+             * Weiterleitung:
+             *
+             * Erst wenn alle benötigten Server-Anhänge sicher
+             * geladen und geprüft wurden, beginnt SMTP.
+             */
+            using var message =
+                await CreateMessageAsync(
+                    sender,
+                    recipients,
+                    ccRecipients,
+                    bccRecipients,
+                    request.Subject,
+                    request.Body,
+                    request.Attachments,
+                    account.EmailAddress,
+                    credential.Password,
                     cancellationToken);
 
-        if (account is null)
-        {
-            throw new InvalidOperationException(
-                "Es ist kein aktives Mailkonto eingerichtet.");
-        }
+            ApplyReplyThreading(
+                message,
+                request.ParentMessageId,
+                request.ParentReferences);
 
-        var credential =
-            await _credentialStore
-                .ReadAsync(
-                    account.AccountId,
-                    cancellationToken);
-
-        if (credential is null ||
-            string.IsNullOrWhiteSpace(
-                credential.Password))
-        {
-            throw new InvalidOperationException(
-                "Für das Mailkonto sind keine Zugangsdaten gespeichert.");
-        }
-
-        var sender =
-            CreateSenderAddress(
-                account.EmailAddress,
-                account.DisplayName);
-
-        /*
-         * Die komplette MIME-Nachricht wird weiterhin vor
-         * dem SMTP-Verbindungsaufbau erstellt.
-         *
-         * Das gilt jetzt auch für Originalanhänge einer
-         * Weiterleitung:
-         *
-         * Erst wenn alle benötigten Server-Anhänge sicher
-         * geladen und geprüft wurden, beginnt SMTP.
-         */
-        using var message =
-            await CreateMessageAsync(
-                sender,
-                recipients,
-                ccRecipients,
-                bccRecipients,
-                request.Subject,
-                request.Body,
-                request.Attachments,
+            /*
+             * MailKit verwendet die Bcc-Adressen als SMTP-
+             * Envelope-Empfänger, schreibt den Bcc-Header beim
+             * normalen SMTP-Versand jedoch nicht in die für die
+             * Empfänger übertragene Nachricht.
+             *
+             * Das MimeMessage selbst behält die Bcc-Information.
+             * Dadurch kann unsere anschließend per IMAP
+             * gespeicherte eigene "Gesendet"-Kopie weiterhin
+             * anzeigen, an wen blind kopiert wurde.
+             */
+            await SendViaSmtpAsync(
                 account.EmailAddress,
                 credential.Password,
+                message,
                 cancellationToken);
 
-        ApplyReplyThreading(
-            message,
-            request.ParentMessageId,
-            request.ParentReferences);
+            var sentCopySaved =
+                await TrySaveSentCopyAsync(
+                    account.EmailAddress,
+                    credential.Password,
+                    message);
 
-        /*
-         * MailKit verwendet die Bcc-Adressen als SMTP-
-         * Envelope-Empfänger, schreibt den Bcc-Header beim
-         * normalen SMTP-Versand jedoch nicht in die für die
-         * Empfänger übertragene Nachricht.
-         *
-         * Das MimeMessage selbst behält die Bcc-Information.
-         * Dadurch kann unsere anschließend per IMAP
-         * gespeicherte eigene "Gesendet"-Kopie weiterhin
-         * anzeigen, an wen blind kopiert wurde.
-         */
-        await SendViaSmtpAsync(
-            account.EmailAddress,
-            credential.Password,
-            message,
-            cancellationToken);
+            if (sentCopySaved)
+            {
+                _logger.LogInformation(
+                    "Sent copy saved successfully.");
+            }
+            else
+            {
+                _logger.LogWarning(
+                    "Mail was sent successfully, but the sent copy could not be saved.");
+            }
 
-        var sentCopySaved =
-            await TrySaveSentCopyAsync(
-                account.EmailAddress,
-                credential.Password,
-                message);
-
-        return new MailSendResult(
-            WasSent:
-                true,
-
-            SentCopySaved:
+            _logger.LogInformation(
+                "Mail send completed successfully. SentCopySaved={SentCopySaved}.",
                 sentCopySaved);
+
+            return new MailSendResult(
+                WasSent:
+                    true,
+
+                SentCopySaved:
+                    sentCopySaved);
+        }
+        catch (OperationCanceledException)
+            when (cancellationToken.IsCancellationRequested)
+        {
+            _logger.LogInformation(
+                "Mail send was cancelled.");
+
+            throw;
+        }
+        catch (Exception ex)
+        {
+            LogSendFailure(
+                ex);
+
+            throw;
+        }
     }
 
     public async Task<MailDraftSaveIdentity?> SaveDraftAsync(
@@ -1111,7 +1167,7 @@ public sealed class MailKitSendService :
         }
     }
 
-    private static async Task SendViaSmtpAsync(
+    private async Task SendViaSmtpAsync(
         string userName,
         string password,
         MimeMessage message,
@@ -1122,6 +1178,9 @@ public sealed class MailKitSendService :
 
         try
         {
+            _logger.LogInformation(
+                "SMTP connection started.");
+
             using (var connectionTimeoutSource =
                    CancellationTokenSource.CreateLinkedTokenSource(
                        cancellationToken))
@@ -1136,6 +1195,9 @@ public sealed class MailKitSendService :
                     connectionTimeoutSource.Token);
             }
 
+            _logger.LogInformation(
+                "SMTP connection established.");
+
             using (var authenticationTimeoutSource =
                    CancellationTokenSource.CreateLinkedTokenSource(
                        cancellationToken))
@@ -1149,6 +1211,9 @@ public sealed class MailKitSendService :
                     authenticationTimeoutSource.Token);
             }
 
+            _logger.LogInformation(
+                "SMTP authentication succeeded.");
+
             using (var sendTimeoutSource =
                    CancellationTokenSource.CreateLinkedTokenSource(
                        cancellationToken))
@@ -1160,6 +1225,9 @@ public sealed class MailKitSendService :
                     message,
                     sendTimeoutSource.Token);
             }
+
+            _logger.LogInformation(
+                "SMTP message transmission succeeded.");
         }
         finally
         {
@@ -1168,7 +1236,7 @@ public sealed class MailKitSendService :
         }
     }
 
-    private static async Task<bool> TrySaveSentCopyAsync(
+    private async Task<bool> TrySaveSentCopyAsync(
         string userName,
         string password,
         MimeMessage message)
@@ -1203,6 +1271,9 @@ public sealed class MailKitSendService :
 
             if (sentFolder is null)
             {
+                _logger.LogWarning(
+                    "Sent copy could not be saved because no sent folder was found.");
+
                 return false;
             }
 
@@ -1213,8 +1284,11 @@ public sealed class MailKitSendService :
 
             return true;
         }
-        catch
+        catch (Exception ex)
         {
+            LogSentCopyFailure(
+                ex);
+
             return false;
         }
         finally
@@ -1455,6 +1529,125 @@ public sealed class MailKitSendService :
             "entwurf" => true,
             _ => false
         };
+    }
+
+    /*
+     * Für Versandfehler wird bewusst NICHT das Exception-Objekt
+     * an den Logger übergeben.
+     *
+     * Einige bestehende Exceptions können eingegebene
+     * Mailadressen oder Dateinamen im Message-Text enthalten.
+     *
+     * Für die Produktionsdiagnostik protokollieren wir daher
+     * ausschließlich eine technische Fehlerklasse.
+     */
+    private void LogSendFailure(
+        Exception exception)
+    {
+        var exceptionType =
+            exception.GetType().FullName
+            ?? exception.GetType().Name;
+
+        switch (exception)
+        {
+            case MailKit.Security.AuthenticationException:
+                _logger.LogWarning(
+                    "Mail send failed because authentication is required. ExceptionType={ExceptionType}.",
+                    exceptionType);
+                break;
+
+            case SslHandshakeException:
+                _logger.LogError(
+                    "Mail send failed because the TLS handshake could not be completed. ExceptionType={ExceptionType}.",
+                    exceptionType);
+                break;
+
+            case SocketException:
+            case IOException:
+                _logger.LogWarning(
+                    "Mail send failed because the mail server or network is unavailable. ExceptionType={ExceptionType}.",
+                    exceptionType);
+                break;
+
+            case MailSendAttachmentException:
+                _logger.LogWarning(
+                    "Mail send failed while preparing or retrieving an attachment. ExceptionType={ExceptionType}.",
+                    exceptionType);
+                break;
+
+            case ArgumentException:
+                _logger.LogWarning(
+                    "Mail send failed during request validation. ExceptionType={ExceptionType}.",
+                    exceptionType);
+                break;
+
+            case InvalidOperationException:
+                _logger.LogWarning(
+                    "Mail send failed because the local mail account state is incomplete or invalid. ExceptionType={ExceptionType}.",
+                    exceptionType);
+                break;
+
+            case OperationCanceledException:
+                _logger.LogWarning(
+                    "Mail send failed because an operation timed out. ExceptionType={ExceptionType}.",
+                    exceptionType);
+                break;
+
+            default:
+                _logger.LogError(
+                    "Mail send failed unexpectedly. ExceptionType={ExceptionType}.",
+                    exceptionType);
+                break;
+        }
+    }
+
+    /*
+     * Die Nachricht wurde an dieser Stelle bereits per SMTP
+     * versendet.
+     *
+     * Ein Fehler beim Speichern der eigenen Gesendet-Kopie ist
+     * deshalb ein separater, nicht erneut auszulösender Vorgang.
+     */
+    private void LogSentCopyFailure(
+        Exception exception)
+    {
+        var exceptionType =
+            exception.GetType().FullName
+            ?? exception.GetType().Name;
+
+        switch (exception)
+        {
+            case MailKit.Security.AuthenticationException:
+                _logger.LogWarning(
+                    "Sent copy could not be saved because IMAP authentication failed. ExceptionType={ExceptionType}.",
+                    exceptionType);
+                break;
+
+            case SslHandshakeException:
+                _logger.LogError(
+                    "Sent copy could not be saved because the IMAP TLS handshake failed. ExceptionType={ExceptionType}.",
+                    exceptionType);
+                break;
+
+            case SocketException:
+            case IOException:
+                _logger.LogWarning(
+                    "Sent copy could not be saved because the mail server or network is unavailable. ExceptionType={ExceptionType}.",
+                    exceptionType);
+                break;
+
+            case OperationCanceledException:
+                _logger.LogWarning(
+                    "Sent copy could not be saved because the operation timed out. ExceptionType={ExceptionType}.",
+                    exceptionType);
+                break;
+
+            default:
+                _logger.LogWarning(
+                    "Sent copy could not be saved. ExceptionType={ExceptionType}.",
+                    exceptionType);
+                break;
+        }
     }
 
     private static async Task DisconnectSmtpSafelyAsync(

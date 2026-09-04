@@ -125,7 +125,7 @@ public partial class MainWindow : Window
 
         await RenderSelectedMessageAsync();
 
-        StartAutomaticSynchronizationIfConnected();
+        StartAutomaticSynchronization();
     }
 
     private void MainWindow_OnClosed(
@@ -151,12 +151,10 @@ public partial class MainWindow : Window
         }
     }
 
-    private void StartAutomaticSynchronizationIfConnected()
+    private void StartAutomaticSynchronization()
     {
-        if (_viewModel.ConnectionState !=
-                MailConnectionState.Connected ||
-            _automaticSynchronizationTask
-                is { IsCompleted: false })
+        if (_automaticSynchronizationTask
+            is { IsCompleted: false })
         {
             return;
         }
@@ -186,9 +184,27 @@ public partial class MainWindow : Window
                     AutomaticSynchronizationInterval,
                     cancellationToken);
 
-                await _viewModel
-                    .SynchronizeAsync(
-                        cancellationToken);
+                switch (_viewModel.ConnectionState)
+                {
+                    case MailConnectionState.Connected:
+                        await _viewModel
+                            .SynchronizeAsync(
+                                cancellationToken);
+                        break;
+
+                    case MailConnectionState.Offline:
+                    case MailConnectionState.Error:
+                        await _viewModel
+                            .ReloadAsync(
+                                cancellationToken);
+                        break;
+
+                    case MailConnectionState.Connecting:
+                    case MailConnectionState.AuthenticationRequired:
+                    case MailConnectionState.SecurityError:
+                    default:
+                        break;
+                }
             }
         }
         catch (OperationCanceledException)
@@ -525,6 +541,25 @@ public partial class MainWindow : Window
         object sender,
         KeyEventArgs e)
     {
+        if (e.Key == Key.F5 &&
+            Keyboard.Modifiers == ModifierKeys.None)
+        {
+            if (e.IsRepeat)
+            {
+                e.Handled =
+                    true;
+
+                return;
+            }
+
+            e.Handled =
+                true;
+
+            await RefreshMailboxFromUiAsync();
+
+            return;
+        }
+
         if (Keyboard.FocusedElement is TextBoxBase)
         {
             return;
@@ -1663,9 +1698,7 @@ public partial class MainWindow : Window
             composeWindow);
     }
 
-    private async void RefreshButton_OnClick(
-        object sender,
-        RoutedEventArgs e)
+    private async Task RefreshMailboxFromUiAsync()
     {
         if (_viewModel.IsLoading)
         {
@@ -1675,22 +1708,21 @@ public partial class MainWindow : Window
         await _viewModel
             .ReloadAsync();
 
-        StartAutomaticSynchronizationIfConnected();
+        StartAutomaticSynchronization();
+    }
+
+    private async void RefreshButton_OnClick(
+        object sender,
+        RoutedEventArgs e)
+    {
+        await RefreshMailboxFromUiAsync();
     }
 
     private async void RetryButton_OnClick(
         object sender,
         RoutedEventArgs e)
     {
-        if (_viewModel.IsLoading)
-        {
-            return;
-        }
-
-        await _viewModel
-            .ReloadAsync();
-
-        StartAutomaticSynchronizationIfConnected();
+        await RefreshMailboxFromUiAsync();
     }
 
     private void AccountMenuButton_OnClick(

@@ -1,6 +1,11 @@
 ﻿using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
+using Microsoft.Extensions.Logging;
+using Serilog;
+using Serilog.Events;
 using System.Diagnostics;
+using System.IO;
+using System.Reflection;
 using System.Windows;
 using Telenec.Mail.App.Services.Mail;
 using Telenec.Mail.App.Services.Security;
@@ -16,87 +21,116 @@ public partial class App : Application
     private static readonly TimeSpan MinimumSplashDuration =
         TimeSpan.FromMilliseconds(1200);
 
+    private const long MaximumLogFileSizeBytes =
+        5L * 1024L * 1024L;
+
+    private const int RetainedLogFileCount =
+        14;
+
     private readonly IHost _host;
+
+    private ILogger<App>? _logger;
 
     public App()
     {
-        _host = Host.CreateDefaultBuilder()
-            .ConfigureServices(services =>
-            {
-                services.AddSingleton<
-                    IMailDataSource,
-                    ImapMailDataSource>();
+        _host =
+            Host.CreateDefaultBuilder()
+                .ConfigureServices(services =>
+                {
+                    /*
+                     * AppDataPaths wird bewusst vor dem Logging
+                     * registriert.
+                     *
+                     * Dadurch verwendet auch das Logging exakt
+                     * denselben lokalen Anwendungspfad wie die
+                     * restlichen Programmdaten.
+                     */
+                    services.AddSingleton<AppDataPaths>();
 
-                services.AddSingleton<
-                    IMailMessageStateSource,
-                    ImapMailMessageStateSource>();
+                    services.AddSerilog(
+                        (
+                            serviceProvider,
+                            loggerConfiguration) =>
+                        {
+                            ConfigureLogging(
+                                serviceProvider,
+                                loggerConfiguration);
+                        });
 
-                services.AddSingleton<
-                    IMailPermanentDeleteService,
-                    MailKitPermanentDeleteService>();
+                    services.AddSingleton<
+                        IMailDataSource,
+                        ImapMailDataSource>();
 
-                services.AddSingleton<
-                    IMailSendService,
-                    MailKitSendService>();
+                    services.AddSingleton<
+                        IMailMessageStateSource,
+                        ImapMailMessageStateSource>();
 
-                services.AddSingleton<
-                    IMailDraftEditService,
-                    MailKitDraftEditService>();
+                    services.AddSingleton<
+                        IMailPermanentDeleteService,
+                        MailKitPermanentDeleteService>();
 
-                services.AddSingleton<
-                    IMailDraftCleanupService,
-                    MailKitDraftCleanupService>();
+                    services.AddSingleton<
+                        IMailSendService,
+                        MailKitSendService>();
 
-                services.AddSingleton<
-                    IMailAuthenticationService,
-                    MailKitAuthenticationService>();
+                    services.AddSingleton<
+                        IMailDraftEditService,
+                        MailKitDraftEditService>();
 
-                services.AddSingleton<
-                    IApplicationUpdateService,
-                    VelopackApplicationUpdateService>();
+                    services.AddSingleton<
+                        IMailDraftCleanupService,
+                        MailKitDraftCleanupService>();
 
-                services.AddSingleton<
-                    ReleaseNotesService>();
+                    services.AddSingleton<
+                        IMailAuthenticationService,
+                        MailKitAuthenticationService>();
 
-                services.AddSingleton<AppDataPaths>();
-                services.AddSingleton<DatabaseInitializer>();
+                    services.AddSingleton<
+                        IApplicationUpdateService,
+                        VelopackApplicationUpdateService>();
 
-                services.AddSingleton<
-                    IMailAccountStore,
-                    SqliteMailAccountStore>();
+                    services.AddSingleton<
+                        ReleaseNotesService>();
 
-                services.AddSingleton<
-                    ICredentialStore,
-                    WindowsCredentialStore>();
+                    services.AddSingleton<
+                        DatabaseInitializer>();
 
-                services.AddSingleton<
-                    ApplicationStartupService>();
+                    services.AddSingleton<
+                        IMailAccountStore,
+                        SqliteMailAccountStore>();
 
-                services.AddTransient<
-                    MainViewModel>();
+                    services.AddSingleton<
+                        ICredentialStore,
+                        WindowsCredentialStore>();
 
-                services.AddTransient<
-                    LoginViewModel>();
+                    services.AddSingleton<
+                        ApplicationStartupService>();
 
-                services.AddTransient<
-                    ComposeMailViewModel>();
+                    services.AddTransient<
+                        MainViewModel>();
 
-                services.AddSingleton<
-                    SplashWindow>();
+                    services.AddTransient<
+                        LoginViewModel>();
 
-                services.AddTransient<
-                    LoginWindow>();
+                    services.AddTransient<
+                        ComposeMailViewModel>();
 
-                services.AddTransient<
-                    MainWindow>();
+                    services.AddSingleton<
+                        SplashWindow>();
 
-                services.AddTransient<
-                    ComposeWindow>();
+                    services.AddTransient<
+                        LoginWindow>();
 
-                services.AddTransient<
-                    WhatsNewWindow>();
-            })
-            .Build();
+                    services.AddTransient<
+                        MainWindow>();
+
+                    services.AddTransient<
+                        ComposeWindow>();
+
+                    services.AddTransient<
+                        WhatsNewWindow>();
+                })
+                .Build();
     }
 
     protected override async void OnStartup(
@@ -106,6 +140,8 @@ public partial class App : Application
 
         ShutdownMode =
             ShutdownMode.OnExplicitShutdown;
+
+        InitializeApplicationLogger();
 
         var splashWindow =
             _host.Services
@@ -141,7 +177,8 @@ public partial class App : Application
 
         var startupService =
             _host.Services
-                .GetRequiredService<ApplicationStartupService>();
+                .GetRequiredService<
+                    ApplicationStartupService>();
 
         var startupResult =
             await startupService
@@ -173,6 +210,113 @@ public partial class App : Application
                 await HandleStartupFailureAsync(
                     splashWindow);
                 break;
+        }
+    }
+
+    private static void ConfigureLogging(
+        IServiceProvider serviceProvider,
+        LoggerConfiguration loggerConfiguration)
+    {
+        /*
+         * Standardmäßig protokollieren wir unsere eigenen
+         * technischen Ereignisse ab Information.
+         *
+         * Framework-interne Meldungen von Microsoft/System
+         * werden auf Warning begrenzt, damit die Feldtestlogs
+         * nicht mit wenig hilfreichem Frameworkrauschen
+         * überfüllt werden.
+         */
+        loggerConfiguration
+            .MinimumLevel.Information()
+            .MinimumLevel.Override(
+                "Microsoft",
+                LogEventLevel.Warning)
+            .MinimumLevel.Override(
+                "System",
+                LogEventLevel.Warning)
+            .Enrich.FromLogContext()
+            .Enrich.WithProperty(
+                "Application",
+                "Telenec Mail");
+
+        try
+        {
+            var appDataPaths =
+                serviceProvider
+                    .GetRequiredService<
+                        AppDataPaths>();
+
+            Directory.CreateDirectory(
+                appDataPaths.LogDirectory);
+
+            loggerConfiguration
+                .WriteTo.File(
+                    path:
+                        appDataPaths
+                            .LogFilePathPattern,
+
+                    rollingInterval:
+                        RollingInterval.Day,
+
+                    retainedFileCountLimit:
+                        RetainedLogFileCount,
+
+                    fileSizeLimitBytes:
+                        MaximumLogFileSizeBytes,
+
+                    rollOnFileSizeLimit:
+                        true,
+
+                    buffered:
+                        false,
+
+                    shared:
+                        false,
+
+                    outputTemplate:
+                        "{Timestamp:yyyy-MM-dd HH:mm:ss.fff zzz} " +
+                        "[{Level:u3}] " +
+                        "{SourceContext} - " +
+                        "{Message:lj}" +
+                        "{NewLine}{Exception}");
+        }
+        catch (Exception exception)
+        {
+            /*
+             * Logging ist für Diagnose und Support wichtig,
+             * darf aber niemals verhindern, dass der Benutzer
+             * seine E-Mails erreicht.
+             *
+             * Falls beispielsweise das lokale Profil oder der
+             * Logordner nicht beschreibbar ist, läuft Telenec
+             * Mail deshalb trotzdem weiter.
+             */
+            Trace.WriteLine(
+                $"Could not initialize persistent logging: {exception}");
+        }
+    }
+
+    private void InitializeApplicationLogger()
+    {
+        try
+        {
+            _logger =
+                _host.Services
+                    .GetRequiredService<
+                        ILogger<App>>();
+
+            _logger.LogInformation(
+                "Application started. Version {ApplicationVersion}.",
+                GetApplicationVersion());
+        }
+        catch (Exception exception)
+        {
+            /*
+             * Auch das Erstellen bzw. Abrufen des Loggers
+             * darf den normalen Programmstart nicht verhindern.
+             */
+            Trace.WriteLine(
+                $"Could not initialize application logger: {exception}");
         }
     }
 
@@ -307,12 +451,78 @@ public partial class App : Application
     protected override void OnExit(
         ExitEventArgs e)
     {
-        _host.StopAsync()
-            .GetAwaiter()
-            .GetResult();
+        try
+        {
+            _logger?.LogInformation(
+                "Application stopping.");
+        }
+        catch (Exception exception)
+        {
+            Trace.WriteLine(
+                $"Could not write application shutdown log: {exception}");
+        }
 
-        _host.Dispose();
+        try
+        {
+            _host.StopAsync()
+                .GetAwaiter()
+                .GetResult();
+        }
+        catch (Exception exception)
+        {
+            try
+            {
+                _logger?.LogError(
+                    exception,
+                    "An error occurred while stopping the application host.");
+            }
+            catch
+            {
+            }
+
+            Trace.WriteLine(
+                $"Could not stop application host cleanly: {exception}");
+        }
+        finally
+        {
+            _host.Dispose();
+        }
 
         base.OnExit(e);
+    }
+
+    private static string GetApplicationVersion()
+    {
+        var assembly =
+            typeof(App).Assembly;
+
+        var informationalVersion =
+            assembly
+                .GetCustomAttribute<
+                    AssemblyInformationalVersionAttribute>()?
+                .InformationalVersion;
+
+        if (!string.IsNullOrWhiteSpace(
+                informationalVersion))
+        {
+            var metadataSeparatorIndex =
+                informationalVersion.IndexOf(
+                    '+');
+
+            if (metadataSeparatorIndex >= 0)
+            {
+                informationalVersion =
+                    informationalVersion[
+                        ..metadataSeparatorIndex];
+            }
+
+            return informationalVersion;
+        }
+
+        return assembly
+                   .GetName()
+                   .Version?
+                   .ToString()
+               ?? "unbekannt";
     }
 }

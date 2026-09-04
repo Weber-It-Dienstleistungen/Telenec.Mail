@@ -1,4 +1,5 @@
 ﻿using MailKit.Security;
+using Microsoft.Extensions.Logging;
 using System.Collections.ObjectModel;
 using System.IO;
 using System.Net.Sockets;
@@ -20,6 +21,9 @@ public sealed class MainViewModel : BaseViewModel
 
     private readonly IMailPermanentDeleteService
         _mailPermanentDeleteService;
+
+    private readonly ILogger<MainViewModel>
+        _logger;
 
     private readonly Dictionary<string, uint>
         _uidValidityByFolder =
@@ -64,7 +68,8 @@ public sealed class MainViewModel : BaseViewModel
     public MainViewModel(
         IMailDataSource mailDataSource,
         IMailMessageStateSource mailMessageStateSource,
-        IMailPermanentDeleteService mailPermanentDeleteService)
+        IMailPermanentDeleteService mailPermanentDeleteService,
+        ILogger<MainViewModel> logger)
     {
         ArgumentNullException.ThrowIfNull(
             mailDataSource);
@@ -75,6 +80,9 @@ public sealed class MainViewModel : BaseViewModel
         ArgumentNullException.ThrowIfNull(
             mailPermanentDeleteService);
 
+        ArgumentNullException.ThrowIfNull(
+            logger);
+
         _mailDataSource =
             mailDataSource;
 
@@ -83,6 +91,9 @@ public sealed class MainViewModel : BaseViewModel
 
         _mailPermanentDeleteService =
             mailPermanentDeleteService;
+
+        _logger =
+            logger;
 
         MailFolders =
             new ObservableCollection<
@@ -769,6 +780,15 @@ public sealed class MainViewModel : BaseViewModel
             return;
         }
 
+        var isConnectionRecovery =
+            ConnectionState ==
+            MailConnectionState.Offline;
+
+        _logger.LogInformation(
+            "Mailbox synchronization started. UserInitiated={UserInitiated}, VisibleMessages={VisibleMessageCount}.",
+            showUserFeedback,
+            Messages.Count);
+
         if (showUserFeedback)
         {
             HasLoadError =
@@ -781,7 +801,9 @@ public sealed class MainViewModel : BaseViewModel
                 MailConnectionState.Connecting;
 
             ConnectionStatusText =
-                "Synchronisieren …";
+                isConnectionRecovery
+                    ? "Verbindung wird wiederhergestellt …"
+                    : "Synchronisieren …";
         }
 
         try
@@ -790,6 +812,10 @@ public sealed class MainViewModel : BaseViewModel
                 await _mailDataSource
                     .GetFoldersAsync(
                         cancellationToken);
+
+            _logger.LogInformation(
+                "Mailbox synchronization retrieved {FolderCount} folders.",
+                serverFolders.Count);
 
             cancellationToken
                 .ThrowIfCancellationRequested();
@@ -902,6 +928,11 @@ public sealed class MainViewModel : BaseViewModel
                     folderToSynchronize.FolderId,
                     stateSnapshot);
 
+            _logger.LogInformation(
+                "Mailbox synchronization evaluated server state. FullReload={FullReload}, UidValidityChanged={UidValidityChanged}.",
+                requiresFullMessageReload,
+                uidValidityChanged);
+
             if (requiresFullMessageReload)
             {
                 var serverMessages =
@@ -942,19 +973,33 @@ public sealed class MainViewModel : BaseViewModel
             UpdateHasMoreMessages();
 
             SetConnected();
+
+            _logger.LogInformation(
+                "Mailbox synchronization completed successfully. VisibleMessages={VisibleMessageCount}.",
+                Messages.Count);
         }
         catch (OperationCanceledException)
             when (cancellationToken.IsCancellationRequested)
         {
+            _logger.LogInformation(
+                "Mailbox synchronization was cancelled.");
         }
         catch (Exception ex)
         {
+            LogMailOperationFailure(
+                "Mailbox synchronization",
+                ex);
+
             SetSynchronizationErrorState(
                 ex);
         }
         finally
         {
             EndSynchronization();
+
+            _logger.LogInformation(
+                "Mailbox synchronization ended. ConnectionState={ConnectionState}.",
+                ConnectionState);
         }
     }
 
@@ -1782,9 +1827,18 @@ public sealed class MainViewModel : BaseViewModel
         string? preferredMessageId,
         CancellationToken cancellationToken)
     {
+        _logger.LogInformation(
+            "Mailbox initialization started.");
+
+        var isConnectionRecovery =
+            ConnectionState ==
+            MailConnectionState.Offline;
+
         BeginLoading(
             "Postfach wird geladen …",
-            "Verbindung wird hergestellt …");
+            isConnectionRecovery
+                ? "Verbindung wird wiederhergestellt …"
+                : "Verbindung wird hergestellt …");
 
         MailFolders.Clear();
         Messages.Clear();
@@ -1810,6 +1864,10 @@ public sealed class MainViewModel : BaseViewModel
                 await _mailDataSource
                     .GetFoldersAsync(
                         cancellationToken);
+
+            _logger.LogInformation(
+                "Mailbox initialization retrieved {FolderCount} folders.",
+                folders.Count);
 
             foreach (var folder in folders)
             {
@@ -1867,11 +1925,18 @@ public sealed class MainViewModel : BaseViewModel
         catch (OperationCanceledException)
             when (cancellationToken.IsCancellationRequested)
         {
+            _logger.LogInformation(
+                "Mailbox initialization was cancelled.");
+
             IsLoading =
                 false;
         }
         catch (Exception ex)
         {
+            LogMailOperationFailure(
+                "Mailbox initialization",
+                ex);
+
             _isInitialized =
                 false;
 
@@ -1883,6 +1948,12 @@ public sealed class MainViewModel : BaseViewModel
 
             SetErrorState(
                 ex);
+        }
+        finally
+        {
+            _logger.LogInformation(
+                "Mailbox initialization ended. ConnectionState={ConnectionState}.",
+                ConnectionState);
         }
     }
 
@@ -1912,7 +1983,7 @@ public sealed class MainViewModel : BaseViewModel
 
         /*
          * Jeder vollständige Ordnerwechsel beginnt wieder mit
-         * einer Seite.
+         * der ersten Seite.
          */
         ResetMessagePagingState();
 
@@ -2025,6 +2096,10 @@ public sealed class MainViewModel : BaseViewModel
                     _folderLoadCancellationSource,
                     loadSource))
             {
+                LogMailOperationFailure(
+                    "Folder message loading",
+                    ex);
+
                 HasMoreMessages =
                     false;
 
@@ -2731,6 +2806,43 @@ public sealed class MainViewModel : BaseViewModel
 
         ConnectionStatusText =
             "Verbunden";
+    }
+
+    private void LogMailOperationFailure(
+        string operation,
+        Exception exception)
+    {
+        switch (exception)
+        {
+            case MailKit.Security.AuthenticationException:
+                _logger.LogWarning(
+                    exception,
+                    "{Operation} failed because authentication is required.",
+                    operation);
+                break;
+
+            case SslHandshakeException:
+                _logger.LogError(
+                    exception,
+                    "{Operation} failed because the TLS handshake could not be completed.",
+                    operation);
+                break;
+
+            case SocketException:
+            case IOException:
+                _logger.LogWarning(
+                    exception,
+                    "{Operation} failed because the mail server or network is unavailable.",
+                    operation);
+                break;
+
+            default:
+                _logger.LogError(
+                    exception,
+                    "{Operation} failed unexpectedly.",
+                    operation);
+                break;
+        }
     }
 
     private void SetErrorState(

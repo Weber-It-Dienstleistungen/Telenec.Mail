@@ -160,7 +160,7 @@
                         <TextBlock
                             Text="&#xE70F;"
                             Margin="0,0,9,0"
-                            FontFamily="Segoe Fluent Icons"
+                            FontFamily="Segoe MDL2 Assets"
                             FontSize="16"
                             VerticalAlignment="Center" />
 
@@ -316,7 +316,7 @@
 
                             <TextBlock
                                 Text="&#xE713;"
-                                FontFamily="Segoe Fluent Icons"
+                                FontFamily="Segoe MDL2 Assets"
                                 Foreground="{StaticResource Navigation.TextSecondary}"
                                 FontSize="18"
                                 HorizontalAlignment="Center"
@@ -387,7 +387,7 @@
 
                         <TextBlock
                             Text="&#xE72C;"
-                            FontFamily="Segoe Fluent Icons"
+                            FontFamily="Segoe MDL2 Assets"
                             FontSize="18"
                             Foreground="{StaticResource Text.Secondary}"
                             HorizontalAlignment="Center"
@@ -415,7 +415,7 @@
 
                         <TextBlock
                             Text="&#xE721;"
-                            FontFamily="Segoe Fluent Icons"
+                            FontFamily="Segoe MDL2 Assets"
                             FontSize="15"
                             Foreground="{StaticResource Text.Secondary}"
                             VerticalAlignment="Center" />
@@ -671,7 +671,7 @@
 
                         <TextBlock
                             Text="{Binding MessageActionGlyph}"
-                            FontFamily="Segoe Fluent Icons"
+                            FontFamily="Segoe MDL2 Assets"
                             FontSize="18"
                             Foreground="{StaticResource Text.Secondary}"
                             HorizontalAlignment="Center"
@@ -721,7 +721,7 @@
                             <TextBlock
                                 Text="&#xE72E;"
                                 Margin="0,0,8,0"
-                                FontFamily="Segoe Fluent Icons"
+                                FontFamily="Segoe MDL2 Assets"
                                 FontSize="15"
                                 Foreground="White"
                                 VerticalAlignment="Center" />
@@ -1014,7 +1014,7 @@
                             Grid.Column="0"
                             Text="&#xE72E;"
                             Margin="0,0,10,0"
-                            FontFamily="Segoe Fluent Icons"
+                            FontFamily="Segoe MDL2 Assets"
                             FontSize="16"
                             Foreground="{StaticResource Brand.Primary}"
                             VerticalAlignment="Center" />
@@ -1097,7 +1097,7 @@
                             <TextBlock
                                 Text="&#xE723;"
                                 Margin="0,0,8,0"
-                                FontFamily="Segoe Fluent Icons"
+                                FontFamily="Segoe MDL2 Assets"
                                 FontSize="16"
                                 Foreground="{StaticResource Brand.Primary}"
                                 VerticalAlignment="Center" />
@@ -1194,7 +1194,7 @@
                                                 Grid.Column="0"
                                                 Text="&#xE8A5;"
                                                 Margin="0,0,9,0"
-                                                FontFamily="Segoe Fluent Icons"
+                                                FontFamily="Segoe MDL2 Assets"
                                                 FontSize="18"
                                                 Foreground="{StaticResource Text.Secondary}"
                                                 VerticalAlignment="Center" />
@@ -1238,7 +1238,7 @@
                                                 Grid.Column="2"
                                                 Text="&#xE74E;"
                                                 Margin="12,0,0,0"
-                                                FontFamily="Segoe Fluent Icons"
+                                                FontFamily="Segoe MDL2 Assets"
                                                 FontSize="15"
                                                 Foreground="{StaticResource Brand.Primary}"
                                                 VerticalAlignment="Center" />
