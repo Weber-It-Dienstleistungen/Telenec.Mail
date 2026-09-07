@@ -14,11 +14,6 @@
 	</PropertyGroup>
 
 	<ItemGroup>
-		<None Remove="Assets\Brand\TelenecLogo.png" />
-		<None Remove="Assets\Brand\TelenecMailLogo.png" />
-	</ItemGroup>
-
-	<ItemGroup>
 		<PackageReference Include="MailKit" Version="4.17.0" />
 		<PackageReference Include="Microsoft.Extensions.Hosting" Version="10.0.11" />
 		<PackageReference Include="Microsoft.Data.Sqlite" Version="10.0.11" />
@@ -26,16 +21,6 @@
 		<PackageReference Include="Serilog.Extensions.Hosting" Version="10.0.0" />
 		<PackageReference Include="Serilog.Sinks.File" Version="7.0.0" />
 		<PackageReference Include="Velopack" Version="1.2.0" />
-	</ItemGroup>
-
-	<ItemGroup>
-		<Resource Include="Assets\Brand\TelenecLogo.png">
-			<CopyToOutputDirectory>Never</CopyToOutputDirectory>
-		</Resource>
-
-		<Resource Include="Assets\Brand\TelenecMailLogo.png">
-			<CopyToOutputDirectory>Never</CopyToOutputDirectory>
-		</Resource>
 	</ItemGroup>
 
 </Project>
