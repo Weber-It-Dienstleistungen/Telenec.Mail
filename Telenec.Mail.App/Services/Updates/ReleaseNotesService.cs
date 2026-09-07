@@ -72,6 +72,41 @@ public sealed class ReleaseNotesService
     {
         return version switch
         {
+            "0.1.0-test.5" =>
+                new ReleaseNotesInfo(
+                    Version:
+                        "0.1.0-test.5",
+                    Title:
+                        "Telenec Mail wurde aktualisiert",
+                    Intro:
+                        "Diese Testversion erweitert Telenec Mail " +
+                        "vor allem um eine leistungsfähige Suche und " +
+                        "weitere Verbesserungen bei Stabilität und Bedienung.",
+                    Changes:
+                    [
+                        "E-Mails können jetzt im aktuellen Ordner oder " +
+                        "im gesamten Postfach durchsucht werden. " +
+                        "Suchtreffer lassen sich direkt öffnen, beantworten, " +
+                        "weiterleiten, verschieben und löschen.",
+
+                        "Auch mehrere Suchtreffer können gemeinsam markiert " +
+                        "und per Drag & Drop, Kontextmenü oder Entf-Taste " +
+                        "verschoben beziehungsweise gelöscht werden.",
+
+                        "Der Papierkorb kann jetzt vollständig geleert werden. " +
+                        "Lösch- und Verschiebevorgänge wurden zusätzlich " +
+                        "gegen unerwartete Serverzustände abgesichert.",
+
+                        "Verbindungsstatus, Synchronisierung und Fehlerdiagnose " +
+                        "wurden verbessert. Außerdem wurde die Darstellung " +
+                        "von Programmsymbolen für Windows 10 robuster gemacht.",
+
+                        "Das Erscheinungsbild von Telenec Mail wurde mit " +
+                        "überarbeitetem Branding weiter vereinheitlicht."
+                    ],
+                    Footer:
+                        "Vielen Dank fürs Testen und für euer Feedback!"),
+
             "0.1.0-test.4" =>
                 new ReleaseNotesInfo(
                     Version:
