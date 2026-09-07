@@ -87,6 +87,22 @@ public partial class App : Application
                         ImapMailMessageStateSource>();
 
                     /*
+                     * Die Suche besitzt bewusst einen eigenen
+                     * IMAP-Service.
+                     *
+                     * Dadurch bleibt die bestehende normale
+                     * Nachrichtenquelle einschließlich Paging
+                     * vollständig unangetastet.
+                     *
+                     * Der Suchdienst arbeitet serverseitig und
+                     * kann sowohl einen einzelnen Ordner als
+                     * auch das gesamte Postfach durchsuchen.
+                     */
+                    services.AddSingleton<
+                        IMailSearchService,
+                        MailKitSearchService>();
+
+                    /*
                      * Auch Permanent Delete verwendet eine
                      * reine Logging-Hülle.
                      *

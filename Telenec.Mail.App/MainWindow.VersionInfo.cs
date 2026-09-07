@@ -12,6 +12,17 @@ public partial class MainWindow
 
         Loaded +=
             MainWindowVersionInfo_OnLoaded;
+
+        /*
+         * Die Suchoberfläche wird ebenfalls erst bei Loaded
+         * aufgebaut.
+         *
+         * Zu diesem Zeitpunkt ist der vollständige
+         * Nachrichtenbereich einschließlich des vorhandenen
+         * Suchplatzhalters sicher verfügbar.
+         */
+        Loaded +=
+            MainWindowSearch_OnLoaded;
     }
 
     private void MainWindowVersionInfo_OnLoaded(
