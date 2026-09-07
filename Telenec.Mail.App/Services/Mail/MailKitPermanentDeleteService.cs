@@ -1,5 +1,6 @@
 ﻿using MailKit;
 using MailKit.Net.Imap;
+using MailKit.Search;
 using MailKit.Security;
 using Telenec.Mail.App.Services.Security;
 using Telenec.Mail.App.Services.Storage;
@@ -23,6 +24,17 @@ public sealed class MailKitPermanentDeleteService :
 
     private static readonly TimeSpan DeleteTimeout =
         TimeSpan.FromSeconds(30);
+
+    /*
+     * Das vollständige Leeren eines großen Papierkorbs kann
+     * deutlich länger dauern als das gezielte Löschen einiger
+     * ausgewählter Nachrichten.
+     *
+     * Deshalb erhält dieser Workflow einen eigenen,
+     * großzügigeren Timeout.
+     */
+    private static readonly TimeSpan EmptyTrashTimeout =
+        TimeSpan.FromMinutes(2);
 
     private readonly IMailAccountStore
         _mailAccountStore;
@@ -303,6 +315,243 @@ public sealed class MailKitPermanentDeleteService :
                     "Der serverseitige Zustand des Papierkorbs hat sich während des Löschvorgangs geändert. " +
                     "Der Papierkorb muss neu synchronisiert werden.");
             }
+        }
+        finally
+        {
+            await DisconnectSafelyAsync(
+                client);
+        }
+    }
+
+    public async Task<int> EmptyTrashAsync(
+        string folderId,
+        CancellationToken cancellationToken = default)
+    {
+        ValidateFolderId(
+            folderId);
+
+        using var client =
+            await CreateAuthenticatedClientAsync(
+                cancellationToken);
+
+        try
+        {
+            /*
+             * Auch beim vollständigen Leeren verwenden wir
+             * ausschließlich selektives UID EXPUNGE.
+             *
+             * Ein allgemeines EXPUNGE wäre hier unnötig und
+             * würde die kontrollierte Semantik unserer
+             * Permanent-Delete-Implementierung verlassen.
+             */
+            if (!client.Capabilities.HasFlag(
+                    ImapCapabilities.UidPlus))
+            {
+                throw new NotSupportedException(
+                    "Der IMAP-Server unterstützt kein UIDPLUS. " +
+                    "Der Papierkorb kann deshalb nicht sicher vollständig geleert werden.");
+            }
+
+            using var emptyTrashTimeoutSource =
+                CancellationTokenSource.CreateLinkedTokenSource(
+                    cancellationToken);
+
+            emptyTrashTimeoutSource.CancelAfter(
+                EmptyTrashTimeout);
+
+            var operationCancellationToken =
+                emptyTrashTimeoutSource.Token;
+
+            var requestedFolder =
+                await client.GetFolderAsync(
+                    folderId,
+                    operationCancellationToken);
+
+            if (requestedFolder.Attributes.HasFlag(
+                    FolderAttributes.NoSelect))
+            {
+                throw new InvalidOperationException(
+                    "Der angegebene Mailordner kann nicht geöffnet werden.");
+            }
+
+            var trashFolder =
+                await GetTrashFolderAsync(
+                    client,
+                    operationCancellationToken);
+
+            /*
+             * Genau wie beim gezielten Permanent Delete darf
+             * auch dieser Workflow ausschließlich auf dem
+             * echten serverseitigen Papierkorb arbeiten.
+             */
+            if (!string.Equals(
+                    requestedFolder.FullName,
+                    trashFolder.FullName,
+                    StringComparison.OrdinalIgnoreCase))
+            {
+                throw new InvalidOperationException(
+                    "Nur der Papierkorb darf vollständig geleert werden.");
+            }
+
+            await requestedFolder.OpenAsync(
+                FolderAccess.ReadWrite,
+                operationCancellationToken);
+
+            var expectedUidValidity =
+                requestedFolder.UidValidity;
+
+            if (expectedUidValidity == 0)
+            {
+                throw new InvalidOperationException(
+                    "Für den Papierkorb konnte keine gültige UIDVALIDITY ermittelt werden.");
+            }
+
+            /*
+             * Wichtig:
+             *
+             * Hier verwenden wir NICHT die aktuell im UI
+             * geladenen Nachrichten.
+             *
+             * Stattdessen wird direkt auf dem Server ein
+             * vollständiger Snapshot aller momentan im
+             * Papierkorb vorhandenen UIDs gebildet.
+             *
+             * Damit werden auch Nachrichten erfasst, die wegen
+             * unseres 20er-Pagings noch gar nicht im UI
+             * sichtbar waren.
+             */
+            var snapshotUniqueIds =
+                (await requestedFolder.SearchAsync(
+                    SearchQuery.All,
+                    operationCancellationToken))
+                    .Where(
+                        uniqueId =>
+                            uniqueId.IsValid)
+                    .GroupBy(
+                        uniqueId =>
+                            uniqueId.Id)
+                    .Select(
+                        group =>
+                            group.First())
+                    .ToList();
+
+            /*
+             * Ein bereits leerer Papierkorb ist ein regulärer,
+             * erfolgreicher Zustand.
+             */
+            if (snapshotUniqueIds.Count == 0)
+            {
+                return 0;
+            }
+
+            /*
+             * Zwischen dem Öffnen des Ordners und dem
+             * Snapshot darf sich UIDVALIDITY nicht verändert
+             * haben.
+             *
+             * In diesem Fall würden wir den Snapshot verwerfen
+             * und nichts löschen.
+             */
+            if (requestedFolder.UidValidity !=
+                expectedUidValidity)
+            {
+                throw new InvalidOperationException(
+                    "Der serverseitige Zustand des Papierkorbs hat sich vor dem Leeren geändert. " +
+                    "Der Papierkorb muss neu synchronisiert werden.");
+            }
+
+            /*
+             * Wir löschen bewusst exakt den eben gebildeten
+             * Snapshot.
+             *
+             * Wird nach diesem Zeitpunkt beispielsweise von
+             * einem Smartphone eine weitere Nachricht in den
+             * Papierkorb verschoben, besitzt sie eine andere
+             * UID und wird von dieser Aktion nicht
+             * unbeabsichtigt erfasst.
+             */
+            await requestedFolder.AddFlagsAsync(
+                snapshotUniqueIds,
+                MessageFlags.Deleted,
+                silent: true,
+                operationCancellationToken);
+
+            await requestedFolder.ExpungeAsync(
+                snapshotUniqueIds,
+                operationCancellationToken);
+
+            /*
+             * Serverbestätigung:
+             *
+             * Jede UID unseres ursprünglichen Snapshots muss
+             * anschließend verschwunden sein.
+             *
+             * Neu hinzugekommene Nachrichten dürfen dagegen
+             * weiterhin existieren und führen nicht zu einem
+             * falschen Fehlerzustand.
+             */
+            var summariesAfterDelete =
+                await requestedFolder.FetchAsync(
+                    snapshotUniqueIds,
+                    MessageSummaryItems.UniqueId,
+                    operationCancellationToken);
+
+            var remainingUniqueIds =
+                summariesAfterDelete
+                    .Where(
+                        summary =>
+                            summary.UniqueId.IsValid)
+                    .Select(
+                        summary =>
+                            summary.UniqueId)
+                    .ToList();
+
+            if (remainingUniqueIds.Count > 0)
+            {
+                /*
+                 * Falls der Server einen Teil des Snapshots
+                 * nicht endgültig entfernt hat, nehmen wir bei
+                 * den noch vorhandenen Nachrichten das
+                 * \Deleted-Flag nach Möglichkeit wieder zurück.
+                 */
+                try
+                {
+                    await requestedFolder.RemoveFlagsAsync(
+                        remainingUniqueIds,
+                        MessageFlags.Deleted,
+                        silent: true,
+                        operationCancellationToken);
+                }
+                catch
+                {
+                    /*
+                     * Der endgültige Serverzustand ist in
+                     * diesem Ausnahmefall nicht eindeutig.
+                     *
+                     * Die UI muss anschließend neu
+                     * synchronisieren.
+                     */
+                }
+
+                throw new InvalidOperationException(
+                    "Das vollständige Leeren des Papierkorbs konnte nicht eindeutig bestätigt werden. " +
+                    "Der Papierkorb muss neu synchronisiert werden.");
+            }
+
+            if (requestedFolder.UidValidity !=
+                expectedUidValidity)
+            {
+                throw new InvalidOperationException(
+                    "Der serverseitige Zustand des Papierkorbs hat sich während des Leerens geändert. " +
+                    "Der Papierkorb muss neu synchronisiert werden.");
+            }
+
+            /*
+             * Zurückgegeben wird die Größe des serverseitigen
+             * Snapshots, nicht die Anzahl der aktuell im UI
+             * sichtbaren Nachrichten.
+             */
+            return snapshotUniqueIds.Count;
         }
         finally
         {

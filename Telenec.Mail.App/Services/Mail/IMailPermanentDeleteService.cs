@@ -7,4 +7,8 @@ public interface IMailPermanentDeleteService
         uint expectedUidValidity,
         IReadOnlyList<uint> uniqueIds,
         CancellationToken cancellationToken = default);
+
+    Task<int> EmptyTrashAsync(
+        string folderId,
+        CancellationToken cancellationToken = default);
 }

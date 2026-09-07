@@ -1,10 +1,12 @@
-﻿using System.Windows;
+﻿using Microsoft.Extensions.DependencyInjection;
+using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Controls.Primitives;
 using System.Windows.Data;
 using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Media.Media3D;
+using Telenec.Mail.App.Services.Mail;
 using Telenec.Mail.App.ViewModels;
 
 namespace Telenec.Mail.App;
@@ -23,22 +25,45 @@ public partial class MainWindow
     private Button?
         _permanentDeleteSelectedMessageButton;
 
+    private Button?
+        _emptyTrashButton;
+
     private bool
         _permanentDeleteVisibleActionInitialized;
+
+    private bool
+        _isEmptyTrashOperationRunning;
 
     /*
      * Der bestehende MainWindow-Keyhandler bleibt absichtlich
      * unangetastet.
      *
-     * Über die WPF-OnPreviewKeyDown-Klassenbehandlung fangen wir
-     * ausschließlich die Entf-Taste im Papierkorb vorher ab.
+     * Über den Window-Override fangen wir ausschließlich die
+     * Entf-Taste im Papierkorb vorher ab.
      *
-     * Alle anderen Tastaturaktionen laufen weiterhin durch den
-     * bisherigen MainWindow_OnPreviewKeyDown-Workflow.
+     * Während "Papierkorb leeren" läuft, wird zusätzlich F5
+     * blockiert.
+     *
+     * Dadurch kann während der irreversiblen Serveroperation
+     * keine manuelle Synchronisierung über die Tastatur
+     * gestartet werden.
      */
     protected override void OnPreviewKeyDown(
         KeyEventArgs e)
     {
+        if (_isEmptyTrashOperationRunning &&
+            (e.Key == Key.F5 ||
+             e.Key == Key.Delete))
+        {
+            e.Handled =
+                true;
+
+            base.OnPreviewKeyDown(
+                e);
+
+            return;
+        }
+
         if (e.Key == Key.Delete &&
             !e.IsRepeat &&
             Keyboard.FocusedElement is not TextBoxBase &&
@@ -53,8 +78,8 @@ public partial class MainWindow
                 /*
                  * Wichtig:
                  *
-                 * Der bestehende Keyhandler darf diese Entf-Taste
-                 * nicht zusätzlich verarbeiten.
+                 * Der bestehende Keyhandler darf diese
+                 * Entf-Taste nicht zusätzlich verarbeiten.
                  */
                 e.Handled =
                     true;
@@ -78,12 +103,12 @@ public partial class MainWindow
      * MainWindow.DraftEditing.cs verwendet bereits
      * OnContentRendered.
      *
-     * Deshalb verwenden wir für diese unabhängige UI-Erweiterung
-     * bewusst OnActivated.
+     * Deshalb verwenden wir für diese unabhängige
+     * UI-Erweiterung bewusst OnActivated.
      *
-     * Der Guard stellt sicher, dass die Erweiterung trotz späterer
-     * erneuter Aktivierungen des Fensters nur einmal installiert
-     * wird.
+     * Der Guard stellt sicher, dass die Erweiterung trotz
+     * späterer erneuter Aktivierungen des Fensters nur einmal
+     * installiert wird.
      */
     protected override void OnActivated(
         EventArgs e)
@@ -95,15 +120,20 @@ public partial class MainWindow
     }
 
     /*
-     * Der vorhandene Löschen-/Wiederherstellen-Button ist bereits
-     * Bestandteil des stabilen MainWindow-XAML.
+     * Der vorhandene Löschen-/Wiederherstellen-Button ist
+     * bereits Bestandteil des stabilen MainWindow-XAML.
      *
-     * Für die Permanent-Delete-Funktion setzen wir ihn lediglich
-     * in eine kleine horizontale Aktionsgruppe und ergänzen dort
-     * einen zweiten Button.
+     * Für die Permanent-Delete-Funktionen setzen wir ihn
+     * lediglich in eine kleine horizontale Aktionsgruppe.
      *
-     * Dadurch muss das große stabile MainWindow-XAML für diesen
-     * kleinen Erweiterungsschritt nicht verändert werden.
+     * Im Papierkorb enthält diese Gruppe:
+     *
+     * - Wiederherstellen
+     * - ausgewählte Nachricht endgültig löschen
+     * - Papierkorb vollständig leeren
+     *
+     * Das große stabile MainWindow-XAML bleibt dadurch
+     * unangetastet.
      */
     private void InitializePermanentDeleteVisibleAction()
     {
@@ -171,6 +201,15 @@ public partial class MainWindow
         actionPanel.Children.Add(
             permanentDeleteButton);
 
+        var emptyTrashButton =
+            CreateEmptyTrashButton();
+
+        _emptyTrashButton =
+            emptyTrashButton;
+
+        actionPanel.Children.Add(
+            emptyTrashButton);
+
         headerGrid.Children.Add(
             actionPanel);
     }
@@ -217,7 +256,8 @@ public partial class MainWindow
             };
 
         /*
-         * Der Button ist ausschließlich im Papierkorb sichtbar.
+         * Der Button ist ausschließlich im Papierkorb
+         * sichtbar.
          */
         button.SetBinding(
             VisibilityProperty,
@@ -230,8 +270,8 @@ public partial class MainWindow
             });
 
         /*
-         * Der vorhandene Wiederherstellen-/Löschen-Button besitzt
-         * bereits die korrekten Enable-Regeln:
+         * Der vorhandene Wiederherstellen-/Löschen-Button
+         * besitzt bereits die korrekten Enable-Regeln:
          *
          * - keine Nachricht ausgewählt -> deaktiviert
          * - Ordner wird geladen -> deaktiviert
@@ -285,12 +325,138 @@ public partial class MainWindow
         return button;
     }
 
+    private Button CreateEmptyTrashButton()
+    {
+        var button =
+            new Button
+            {
+                Height =
+                    36,
+
+                Margin =
+                    new Thickness(
+                        8,
+                        0,
+                        0,
+                        0),
+
+                Padding =
+                    new Thickness(
+                        10,
+                        0,
+                        10,
+                        0),
+
+                HorizontalAlignment =
+                    HorizontalAlignment.Right,
+
+                VerticalAlignment =
+                    VerticalAlignment.Top,
+
+                Background =
+                    Brushes.Transparent,
+
+                BorderThickness =
+                    new Thickness(0),
+
+                Cursor =
+                    Cursors.Hand,
+
+                ToolTip =
+                    "Papierkorb vollständig leeren"
+            };
+
+        /*
+         * Diese Aktion darf ausschließlich erscheinen, wenn
+         * tatsächlich der Papierkorb ausgewählt ist.
+         *
+         * Der Service prüft später zusätzlich erneut den
+         * echten serverseitigen Trash-Ordner.
+         */
+        button.SetBinding(
+            VisibilityProperty,
+            new Binding(
+                nameof(
+                    MainViewModel.IsTrashFolderSelected))
+            {
+                Converter =
+                    new BooleanToVisibilityConverter()
+            });
+
+        var contentPanel =
+            new StackPanel
+            {
+                Orientation =
+                    Orientation.Horizontal,
+
+                VerticalAlignment =
+                    VerticalAlignment.Center
+            };
+
+        var glyph =
+            new TextBlock
+            {
+                Text =
+                    "\uE74D",
+
+                FontFamily =
+                    new FontFamily(
+                        "Segoe MDL2 Assets"),
+
+                FontSize =
+                    16,
+
+                Margin =
+                    new Thickness(
+                        0,
+                        0,
+                        6,
+                        0),
+
+                VerticalAlignment =
+                    VerticalAlignment.Center
+            };
+
+        glyph.SetResourceReference(
+            TextBlock.ForegroundProperty,
+            "Status.Error");
+
+        var text =
+            new TextBlock
+            {
+                Text =
+                    "Papierkorb leeren",
+
+                VerticalAlignment =
+                    VerticalAlignment.Center
+            };
+
+        text.SetResourceReference(
+            TextBlock.ForegroundProperty,
+            "Status.Error");
+
+        contentPanel.Children.Add(
+            glyph);
+
+        contentPanel.Children.Add(
+            text);
+
+        button.Content =
+            contentPanel;
+
+        button.Click +=
+            EmptyTrashButton_OnClick;
+
+        return button;
+    }
+
     private async void
         PermanentDeleteSelectedMessageButton_OnClick(
             object sender,
             RoutedEventArgs e)
     {
-        if (_viewModel.IsLoading ||
+        if (_isEmptyTrashOperationRunning ||
+            _viewModel.IsLoading ||
             !_viewModel.IsTrashFolderSelected)
         {
             return;
@@ -306,12 +472,21 @@ public partial class MainWindow
 
         /*
          * Auch der sichtbare Button führt ausschließlich in
-         * denselben bereits getesteten Permanent-Delete-Workflow.
+         * denselben bereits getesteten
+         * Permanent-Delete-Workflow.
          *
-         * Es gibt keinen zweiten Löschmechanismus.
+         * Es gibt keinen zweiten Mechanismus für ausgewählte
+         * Nachrichten.
          */
         await DeleteMessagesPermanentlyFromUiAsync(
             messages);
+    }
+
+    private async void EmptyTrashButton_OnClick(
+        object sender,
+        RoutedEventArgs e)
+    {
+        await EmptyTrashFromUiAsync();
     }
 
     /*
@@ -497,7 +672,8 @@ public partial class MainWindow
         object sender,
         RoutedEventArgs e)
     {
-        if (_viewModel.IsLoading ||
+        if (_isEmptyTrashOperationRunning ||
+            _viewModel.IsLoading ||
             !_viewModel.IsTrashFolderSelected ||
             sender is not MenuItem menuItem)
         {
@@ -564,7 +740,8 @@ public partial class MainWindow
     private async Task DeleteMessagesPermanentlyFromUiAsync(
         IReadOnlyList<MailMessageItemViewModel> messages)
     {
-        if (messages.Count == 0 ||
+        if (_isEmptyTrashOperationRunning ||
+            messages.Count == 0 ||
             !_viewModel.IsTrashFolderSelected ||
             _viewModel.IsLoading)
         {
@@ -673,6 +850,326 @@ public partial class MainWindow
                 "Endgültig löschen",
                 MessageBoxButton.OK,
                 MessageBoxImage.Warning);
+        }
+    }
+
+    private async Task EmptyTrashFromUiAsync()
+    {
+        if (_isEmptyTrashOperationRunning ||
+            _viewModel.IsLoading ||
+            !_viewModel.IsTrashFolderSelected)
+        {
+            return;
+        }
+
+        var selectedFolder =
+            _viewModel.SelectedFolder;
+
+        if (selectedFolder is null ||
+            string.IsNullOrWhiteSpace(
+                selectedFolder.FolderId))
+        {
+            return;
+        }
+
+        /*
+         * Die Formulierung macht ausdrücklich deutlich, dass
+         * nicht nur die momentan sichtbaren Nachrichten
+         * betroffen sind.
+         *
+         * Das ist wegen des 20er-Pagings für diese Aktion
+         * entscheidend.
+         */
+        var confirmation =
+            MessageBox.Show(
+                this,
+                "Möchten Sie den Papierkorb wirklich vollständig leeren?\n\n" +
+                "Alle derzeit im Papierkorb enthaltenen Nachrichten werden " +
+                "endgültig gelöscht – auch Nachrichten, die aktuell nicht " +
+                "in der Liste sichtbar sind.\n\n" +
+                "Dieser Vorgang kann nicht rückgängig gemacht werden.",
+                "Papierkorb leeren",
+                MessageBoxButton.YesNo,
+                MessageBoxImage.Warning,
+                MessageBoxResult.No);
+
+        if (confirmation !=
+            MessageBoxResult.Yes)
+        {
+            return;
+        }
+
+        _isEmptyTrashOperationRunning =
+            true;
+
+        if (_emptyTrashButton is not null)
+        {
+            _emptyTrashButton.IsEnabled =
+                false;
+
+            _emptyTrashButton.Cursor =
+                Cursors.Wait;
+        }
+
+        /*
+         * Während des Leerens dürfen die normalen
+         * Nachrichtenaktionen nicht durch einen Mausklick
+         * parallel ausgelöst werden.
+         *
+         * IsHitTestVisible verändert keine vorhandenen
+         * Bindings der Buttons.
+         */
+        MessageListBox.IsHitTestVisible =
+            false;
+
+        FolderListBox.IsHitTestVisible =
+            false;
+
+        DeleteSelectedMessageButton.IsHitTestVisible =
+            false;
+
+        if (_permanentDeleteSelectedMessageButton is not null)
+        {
+            _permanentDeleteSelectedMessageButton
+                .IsHitTestVisible =
+                    false;
+        }
+
+        var restartAutomaticSynchronization =
+            false;
+
+        try
+        {
+            /*
+             * Ein eventuell gerade laufender Auto-Sync erhält
+             * über StopAutomaticSynchronization sein
+             * CancellationToken.
+             *
+             * Wir warten anschließend ausdrücklich auf sein
+             * vollständiges Ende.
+             *
+             * Erst danach beginnt die irreversible Operation.
+             */
+            restartAutomaticSynchronization =
+                await PauseAutomaticSynchronizationAsync();
+
+            /*
+             * Während wir auf den Abschluss eines eventuell
+             * laufenden Auto-Sync gewartet haben, könnte sich
+             * der ausgewählte Ordner theoretisch geändert
+             * haben.
+             *
+             * In diesem Fall starten wir die irreversible
+             * Operation nicht mehr.
+             */
+            if (!_viewModel.IsTrashFolderSelected ||
+                !string.Equals(
+                    _viewModel.SelectedFolder?.FolderId,
+                    selectedFolder.FolderId,
+                    StringComparison.OrdinalIgnoreCase))
+            {
+                return;
+            }
+
+            /*
+             * Über das Interface erhalten wir bewusst den
+             * registrierten LoggingPermanentDeleteService.
+             *
+             * Dieser delegiert anschließend an den bereits
+             * getesteten MailKit-Service.
+             */
+            var permanentDeleteService =
+                _serviceProvider
+                    .GetRequiredService<
+                        IMailPermanentDeleteService>();
+
+            var deletedMessageCount =
+                await permanentDeleteService
+                    .EmptyTrashAsync(
+                        selectedFolder.FolderId);
+
+            /*
+             * Nach einer irreversiblen Aktion ist ausschließlich
+             * der echte Serverzustand maßgeblich.
+             *
+             * Deshalb wird nicht lokal aus der Collection
+             * entfernt, sondern vollständig synchronisiert.
+             */
+            await _viewModel
+                .ReloadAsync();
+
+            if (deletedMessageCount == 0)
+            {
+                MessageBox.Show(
+                    this,
+                    "Der Papierkorb ist bereits leer.",
+                    "Papierkorb leeren",
+                    MessageBoxButton.OK,
+                    MessageBoxImage.Information);
+            }
+
+            /*
+             * Bei erfolgreicher Löschung gibt es bewusst keine
+             * zusätzliche Erfolgsmeldung.
+             *
+             * Der nun neu geladene Papierkorb ist die direkte
+             * und zuverlässigste Rückmeldung für den Benutzer.
+             */
+        }
+        catch (NotSupportedException)
+        {
+            await TryReloadAfterEmptyTrashAsync();
+
+            /*
+             * Dieser Fehler entsteht vor der ersten
+             * verändernden Serveroperation.
+             *
+             * Ohne UIDPLUS wird bewusst nicht auf ein
+             * unsichereres allgemeines EXPUNGE ausgewichen.
+             */
+            MessageBox.Show(
+                this,
+                "Der Mailserver unterstützt das für ein sicheres vollständiges " +
+                "Leeren des Papierkorbs erforderliche Verfahren nicht.\n\n" +
+                "Der Papierkorb wurde nicht geleert.",
+                "Papierkorb leeren",
+                MessageBoxButton.OK,
+                MessageBoxImage.Error);
+        }
+        catch
+        {
+            /*
+             * Netzwerkabbrüche und Timeouts können theoretisch
+             * nach dem UID EXPUNGE auftreten.
+             *
+             * Deshalb darf die UI niemals behaupten, dass die
+             * Löschung sicher fehlgeschlagen sei.
+             *
+             * Wir synchronisieren soweit möglich und lassen
+             * anschließend ausschließlich den echten
+             * Serverzustand entscheiden.
+             */
+            await TryReloadAfterEmptyTrashAsync();
+
+            MessageBox.Show(
+                this,
+                "Das vollständige Leeren des Papierkorbs konnte nicht " +
+                "eindeutig bestätigt werden.\n\n" +
+                "Der Papierkorb wurde soweit möglich mit dem Server neu " +
+                "synchronisiert.\n\n" +
+                "Bitte prüfen Sie den aktuellen Inhalt, bevor Sie den " +
+                "Vorgang erneut ausführen.",
+                "Papierkorb leeren",
+                MessageBoxButton.OK,
+                MessageBoxImage.Warning);
+        }
+        finally
+        {
+            _isEmptyTrashOperationRunning =
+                false;
+
+            MessageListBox.IsHitTestVisible =
+                true;
+
+            FolderListBox.IsHitTestVisible =
+                true;
+
+            DeleteSelectedMessageButton.IsHitTestVisible =
+                true;
+
+            if (_permanentDeleteSelectedMessageButton is not null)
+            {
+                _permanentDeleteSelectedMessageButton
+                    .IsHitTestVisible =
+                        true;
+            }
+
+            if (_emptyTrashButton is not null)
+            {
+                _emptyTrashButton.IsEnabled =
+                    true;
+
+                _emptyTrashButton.Cursor =
+                    Cursors.Hand;
+            }
+
+            /*
+             * Nur wenn vorher tatsächlich ein automatischer
+             * Synchronisationsloop lief, wird er wieder
+             * gestartet.
+             *
+             * Ist das Fenster inzwischen geschlossen worden,
+             * darf natürlich kein neuer Hintergrundloop mehr
+             * entstehen.
+             */
+            if (restartAutomaticSynchronization &&
+                IsVisible)
+            {
+                StartAutomaticSynchronization();
+            }
+        }
+    }
+
+    private async Task<bool>
+        PauseAutomaticSynchronizationAsync()
+    {
+        var synchronizationTask =
+            _automaticSynchronizationTask;
+
+        var wasRunning =
+            synchronizationTask is
+            {
+                IsCompleted: false
+            };
+
+        StopAutomaticSynchronization();
+
+        if (synchronizationTask is null)
+        {
+            return false;
+        }
+
+        try
+        {
+            /*
+             * RunAutomaticSynchronizationAsync behandelt einen
+             * durch uns ausgelösten OperationCanceledException
+             * selbst.
+             *
+             * Der zusätzliche Catch hier ist nur defensiv:
+             * Das Logging-/Löschfeature darf niemals wegen
+             * eines unerwarteten Fehlers im alten
+             * Hintergrundloop scheitern.
+             */
+            await synchronizationTask;
+        }
+        catch
+        {
+        }
+
+        return wasRunning;
+    }
+
+    private async Task TryReloadAfterEmptyTrashAsync()
+    {
+        try
+        {
+            /*
+             * Auch im Fehlerfall wird ausschließlich gelesen.
+             *
+             * Die irreversible Operation wird ausdrücklich
+             * NICHT automatisch wiederholt.
+             */
+            await _viewModel
+                .ReloadAsync();
+        }
+        catch
+        {
+            /*
+             * Ist auch die Kontrollsynchronisierung wegen einer
+             * Netzwerkstörung nicht möglich, bleibt die bereits
+             * angezeigte Warnung bewusst konservativ.
+             */
         }
     }
 }
