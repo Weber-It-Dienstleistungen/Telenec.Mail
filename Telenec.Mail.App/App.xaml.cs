@@ -57,17 +57,56 @@ public partial class App : Application
                                 loggerConfiguration);
                         });
 
+                    /*
+                     * ImapMailDataSource bleibt die einzige
+                     * produktive IMAP-Datenquelle.
+                     *
+                     * IMailDataSource zeigt jedoch auf eine
+                     * dünne Logging-Hülle.
+                     *
+                     * Diese reicht alle normalen Lese- und
+                     * Statusoperationen unverändert weiter und
+                     * instrumentiert ausschließlich
+                     * Nachrichtenmutationen.
+                     */
                     services.AddSingleton<
-                        IMailDataSource,
                         ImapMailDataSource>();
+
+                    services.AddSingleton<
+                        LoggingMailDataSource>();
+
+                    services.AddSingleton<
+                        IMailDataSource>(
+                        serviceProvider =>
+                            serviceProvider
+                                .GetRequiredService<
+                                    LoggingMailDataSource>());
 
                     services.AddSingleton<
                         IMailMessageStateSource,
                         ImapMailMessageStateSource>();
 
+                    /*
+                     * Auch Permanent Delete verwendet eine
+                     * reine Logging-Hülle.
+                     *
+                     * Die sicherheitskritische und bereits
+                     * getestete UIDPLUS-/UIDVALIDITY-Logik in
+                     * MailKitPermanentDeleteService wird
+                     * dadurch nicht verändert.
+                     */
                     services.AddSingleton<
-                        IMailPermanentDeleteService,
                         MailKitPermanentDeleteService>();
+
+                    services.AddSingleton<
+                        LoggingPermanentDeleteService>();
+
+                    services.AddSingleton<
+                        IMailPermanentDeleteService>(
+                        serviceProvider =>
+                            serviceProvider
+                                .GetRequiredService<
+                                    LoggingPermanentDeleteService>());
 
                     services.AddSingleton<
                         IMailSendService,
