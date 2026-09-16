@@ -593,6 +593,37 @@
                     Grid.Row="0"
                     Margin="32,26,32,22">
 
+                    <!--
+                        Der komplette Mail-Kopf wird ausgeblendet,
+                        solange keine Nachricht ausgewählt ist.
+                    -->
+
+                    <Grid.Style>
+
+                        <Style TargetType="Grid">
+
+                            <Setter
+                                Property="Visibility"
+                                Value="Visible" />
+
+                            <Style.Triggers>
+
+                                <DataTrigger
+                                    Binding="{Binding SelectedMessage}"
+                                    Value="{x:Null}">
+
+                                    <Setter
+                                        Property="Visibility"
+                                        Value="Collapsed" />
+
+                                </DataTrigger>
+
+                            </Style.Triggers>
+
+                        </Style>
+
+                    </Grid.Style>
+
                     <Grid.RowDefinitions>
                         <RowDefinition Height="Auto" />
                         <RowDefinition Height="Auto" />

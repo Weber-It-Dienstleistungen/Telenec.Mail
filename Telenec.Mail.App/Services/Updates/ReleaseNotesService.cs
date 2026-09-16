@@ -9,7 +9,9 @@ public sealed record ReleaseNotesInfo(
     string Title,
     string Intro,
     IReadOnlyList<string> Changes,
-    string Footer);
+    string Footer,
+    string? ActionText = null,
+    string? ActionUri = null);
 
 public sealed class ReleaseNotesService
 {

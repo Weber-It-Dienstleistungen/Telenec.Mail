@@ -23,6 +23,24 @@ public partial class MainWindow
          */
         Loaded +=
             MainWindowSearch_OnLoaded;
+
+        /*
+         * Plaintext-URLs werden nach dem Aufbau der normalen
+         * Oberfläche aktiviert.
+         */
+        Loaded +=
+            MainWindowPlainTextLinks_OnLoaded;
+
+        /*
+         * Auch die Ordnerverwaltung wird erst bei Loaded
+         * ergänzt.
+         *
+         * Dadurch benötigen wir keinen zweiten statischen
+         * MainWindow-Konstruktor und kollidieren nicht mit
+         * der bestehenden WebView2-Diagnostik.
+         */
+        Loaded +=
+            MainWindowFolderManagement_OnLoaded;
     }
 
     private void MainWindowVersionInfo_OnLoaded(

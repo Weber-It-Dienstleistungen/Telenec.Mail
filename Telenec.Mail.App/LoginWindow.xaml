@@ -92,6 +92,7 @@
                     <Button
                         x:Name="LoginButton"
                         Click="LoginButton_OnClick"
+                        IsDefault="True"
                         Height="44"
                         IsEnabled="{Binding CanLogin}"
                         Background="{StaticResource Brand.Primary}"

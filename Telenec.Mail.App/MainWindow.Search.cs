@@ -3833,14 +3833,16 @@ public partial class MainWindow
 
         UpdateCurrentFolderSearchScopeText();
 
-        if (_searchIsActive &&
-            !_searchWholeMailbox)
+        if (_searchIsActive ||
+            _searchWholeMailbox ||
+            !string.IsNullOrWhiteSpace(
+                _searchTextBox?.Text))
         {
             ClearSearchView(
                 clearText:
-                    false,
+                    true,
                 resetScope:
-                    false);
+                    true);
         }
     }
 

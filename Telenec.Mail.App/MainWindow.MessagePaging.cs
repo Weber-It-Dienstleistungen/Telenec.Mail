@@ -29,6 +29,15 @@ public partial class MainWindow
         base.OnSourceInitialized(
             e);
 
+        /*
+         * Derselbe einmalige Window-Lifecycle-Hook eignet sich
+         * auch für das Taskleisten-Overlay.
+         *
+         * Die eigentliche Badge-Logik bleibt bewusst in
+         * MainWindow.TaskbarUnread.cs getrennt.
+         */
+        InitializeTaskbarUnreadBadge();
+
         MessageListBox.Loaded +=
             MessageListBox_OnLoadedForPaging;
     }

@@ -5,6 +5,7 @@ public sealed class MailFolderItemViewModel : BaseViewModel
     private string _headerSubtitle;
     private int _unreadCount;
     private int _messageCount;
+    private int _hierarchyDepth;
 
     public MailFolderItemViewModel(
         string folderId,
@@ -12,7 +13,8 @@ public sealed class MailFolderItemViewModel : BaseViewModel
         string headerSubtitle,
         int unreadCount = 0,
         bool hasSeparatorAfter = false,
-        int messageCount = 0)
+        int messageCount = 0,
+        int hierarchyDepth = 0)
     {
         FolderId =
             folderId;
@@ -29,13 +31,78 @@ public sealed class MailFolderItemViewModel : BaseViewModel
         _messageCount =
             messageCount;
 
+        _hierarchyDepth =
+            Math.Max(
+                hierarchyDepth,
+                0);
+
         HasSeparatorAfter =
             hasSeparatorAfter;
     }
 
     public string FolderId { get; }
 
+    /*
+     * DisplayName bleibt absichtlich der echte sichtbare
+     * Ordnername.
+     *
+     * Andere Teile der Anwendung verwenden diese Eigenschaft
+     * z. B. für Überschriften, Dialoge und Systemordnerprüfung.
+     */
     public string DisplayName { get; }
+
+    /*
+     * Nur die Navigation verwendet diese Darstellung.
+     *
+     * Dadurch erscheint ein Unterordner optisch eingerückt,
+     * ohne den eigentlichen Ordnernamen zu verändern.
+     */
+    public string NavigationDisplayName
+    {
+        get
+        {
+            if (HierarchyDepth <= 0)
+            {
+                return DisplayName;
+            }
+
+            var indentation =
+                new string(
+                    '\u00A0',
+                    HierarchyDepth * 3);
+
+            return
+                $"{indentation}↳ {DisplayName}";
+        }
+    }
+
+    public int HierarchyDepth
+    {
+        get =>
+            _hierarchyDepth;
+
+        private set
+        {
+            var normalizedValue =
+                Math.Max(
+                    value,
+                    0);
+
+            if (_hierarchyDepth ==
+                normalizedValue)
+            {
+                return;
+            }
+
+            _hierarchyDepth =
+                normalizedValue;
+
+            OnPropertyChanged();
+
+            OnPropertyChanged(
+                nameof(NavigationDisplayName));
+        }
+    }
 
     public string HeaderSubtitle
     {
@@ -44,7 +111,8 @@ public sealed class MailFolderItemViewModel : BaseViewModel
 
         private set
         {
-            if (_headerSubtitle == value)
+            if (_headerSubtitle ==
+                value)
             {
                 return;
             }
@@ -63,7 +131,8 @@ public sealed class MailFolderItemViewModel : BaseViewModel
 
         private set
         {
-            if (_unreadCount == value)
+            if (_unreadCount ==
+                value)
             {
                 return;
             }
@@ -85,7 +154,8 @@ public sealed class MailFolderItemViewModel : BaseViewModel
 
         private set
         {
-            if (_messageCount == value)
+            if (_messageCount ==
+                value)
             {
                 return;
             }
@@ -119,6 +189,13 @@ public sealed class MailFolderItemViewModel : BaseViewModel
 
         HeaderSubtitle =
             headerSubtitle;
+    }
+
+    public void UpdateHierarchyDepth(
+        int hierarchyDepth)
+    {
+        HierarchyDepth =
+            hierarchyDepth;
     }
 
     public void DecrementUnreadCount()

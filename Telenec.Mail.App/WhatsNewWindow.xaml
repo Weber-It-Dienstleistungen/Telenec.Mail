@@ -20,20 +20,18 @@
             <RowDefinition Height="Auto" />
             <RowDefinition Height="Auto" />
             <RowDefinition Height="Auto" />
-            <RowDefinition Height="Auto" />
-            <RowDefinition Height="Auto" />
-            <RowDefinition Height="Auto" />
         </Grid.RowDefinitions>
 
-        <Image
-            Grid.Row="0"
-            Source="/Assets/Brand/TelenecMailLogo.png"
-            Width="260"
-            Margin="0,0,0,24"
-            HorizontalAlignment="Left"
-            Stretch="Uniform" />
+        <!-- FESTER KOPFBEREICH -->
 
-        <StackPanel Grid.Row="1">
+        <StackPanel Grid.Row="0">
+
+            <Image
+                Source="/Assets/Brand/TelenecMailLogo.png"
+                Width="260"
+                Margin="0,0,0,24"
+                HorizontalAlignment="Left"
+                Stretch="Uniform" />
 
             <TextBlock
                 Text="{Binding Title}"
@@ -49,73 +47,106 @@
 
         </StackPanel>
 
-        <TextBlock
-            Grid.Row="2"
-            Text="{Binding Intro}"
+        <!-- NUR DIE RELEASE NOTES SCROLLEN -->
+
+        <ScrollViewer
+            Grid.Row="1"
             Margin="0,18,0,0"
-            FontSize="14"
-            Foreground="{StaticResource Text.Secondary}"
-            TextWrapping="Wrap" />
+            MaxHeight="330"
+            VerticalScrollBarVisibility="Auto"
+            HorizontalScrollBarVisibility="Disabled">
 
-        <Border
-            Grid.Row="3"
-            Margin="0,20,0,0"
-            Padding="20"
-            Background="{StaticResource Surface.Card}"
-            BorderBrush="{StaticResource Border.Default}"
-            BorderThickness="1"
-            CornerRadius="8">
+            <StackPanel>
 
-            <ItemsControl
-                ItemsSource="{Binding Changes}">
+                <TextBlock
+                    Text="{Binding Intro}"
+                    FontSize="14"
+                    Foreground="{StaticResource Text.Secondary}"
+                    TextWrapping="Wrap" />
 
-                <ItemsControl.ItemTemplate>
+                <Border
+                    Margin="0,20,0,0"
+                    Padding="20"
+                    Background="{StaticResource Surface.Card}"
+                    BorderBrush="{StaticResource Border.Default}"
+                    BorderThickness="1"
+                    CornerRadius="8">
 
-                    <DataTemplate>
+                    <ItemsControl
+                        ItemsSource="{Binding Changes}">
 
-                        <Grid Margin="0,7">
+                        <ItemsControl.ItemTemplate>
 
-                            <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="Auto" />
-                                <ColumnDefinition Width="*" />
-                            </Grid.ColumnDefinitions>
+                            <DataTemplate>
 
-                            <TextBlock
-                                Grid.Column="0"
-                                Text="•"
-                                Margin="0,0,10,0"
-                                FontSize="16"
-                                FontWeight="Bold"
-                                Foreground="{StaticResource Brand.Primary}" />
+                                <Grid Margin="0,7">
 
-                            <TextBlock
-                                Grid.Column="1"
-                                Text="{Binding}"
-                                FontSize="13"
-                                Foreground="{StaticResource Text.Primary}"
-                                TextWrapping="Wrap" />
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="Auto" />
+                                        <ColumnDefinition Width="*" />
+                                    </Grid.ColumnDefinitions>
 
-                        </Grid>
+                                    <TextBlock
+                                        Grid.Column="0"
+                                        Text="•"
+                                        Margin="0,0,10,0"
+                                        FontSize="16"
+                                        FontWeight="Bold"
+                                        Foreground="{StaticResource Brand.Primary}" />
 
-                    </DataTemplate>
+                                    <TextBlock
+                                        Grid.Column="1"
+                                        Text="{Binding}"
+                                        FontSize="13"
+                                        Foreground="{StaticResource Text.Primary}"
+                                        TextWrapping="Wrap" />
 
-                </ItemsControl.ItemTemplate>
+                                </Grid>
 
-            </ItemsControl>
+                            </DataTemplate>
 
-        </Border>
+                        </ItemsControl.ItemTemplate>
 
-        <TextBlock
-            Grid.Row="4"
-            Text="{Binding Footer}"
-            Margin="0,20,0,0"
-            FontSize="13"
-            FontWeight="SemiBold"
-            Foreground="{StaticResource Text.Secondary}"
-            TextWrapping="Wrap" />
+                    </ItemsControl>
+
+                </Border>
+
+                <TextBlock
+                    Text="{Binding Footer}"
+                    Margin="0,20,0,0"
+                    FontSize="13"
+                    FontWeight="SemiBold"
+                    Foreground="{StaticResource Text.Secondary}"
+                    TextWrapping="Wrap" />
+
+                <!-- OPTIONALER HILFELINK -->
+
+                <TextBlock
+                    x:Name="ReleaseNotesActionText"
+                    Margin="0,14,0,0"
+                    FontSize="13"
+                    TextWrapping="Wrap"
+                    Visibility="Collapsed">
+
+                    <Hyperlink
+                        NavigateUri="{Binding ActionUri}"
+                        Foreground="{StaticResource Brand.Primary}"
+                        RequestNavigate="ReleaseNotesActionLink_OnRequestNavigate">
+
+                        <Run Text="{Binding ActionText}" />
+
+                    </Hyperlink>
+
+                </TextBlock>
+
+            </StackPanel>
+
+        </ScrollViewer>
+
+        <!-- FESTER SCHLIESSEN-BUTTON -->
 
         <Button
-            Grid.Row="5"
+            Grid.Row="2"
             Width="120"
             Height="38"
             Margin="0,24,0,0"
