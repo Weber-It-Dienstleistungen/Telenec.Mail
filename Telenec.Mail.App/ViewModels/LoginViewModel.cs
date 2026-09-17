@@ -1,5 +1,6 @@
 ﻿using System.Net.Mail;
 using Telenec.Mail.App.Models;
+using Telenec.Mail.App.Services.Contacts;
 using Telenec.Mail.App.Services.Mail;
 using Telenec.Mail.App.Services.Security;
 using Telenec.Mail.App.Services.Storage;
@@ -17,6 +18,9 @@ public sealed class LoginViewModel : BaseViewModel
     private readonly ICredentialStore
         _credentialStore;
 
+    private readonly IContactProvisioningService
+        _contactProvisioningService;
+
     private string _emailAddress =
         string.Empty;
 
@@ -29,7 +33,8 @@ public sealed class LoginViewModel : BaseViewModel
     public LoginViewModel(
         IMailAuthenticationService mailAuthenticationService,
         IMailAccountStore mailAccountStore,
-        ICredentialStore credentialStore)
+        ICredentialStore credentialStore,
+        IContactProvisioningService contactProvisioningService)
     {
         _mailAuthenticationService =
             mailAuthenticationService;
@@ -39,6 +44,9 @@ public sealed class LoginViewModel : BaseViewModel
 
         _credentialStore =
             credentialStore;
+
+        _contactProvisioningService =
+            contactProvisioningService;
     }
 
     public string EmailAddress
@@ -278,6 +286,25 @@ public sealed class LoginViewModel : BaseViewModel
 
             return false;
         }
+
+        /*
+         * CardDAV wird nach dem erfolgreichen Mail-Login
+         * automatisch vorbereitet.
+         *
+         * Der Benutzer muss weder einen CardDAV-Server
+         * kennen noch ein Adressbuch manuell anlegen.
+         *
+         * Ein Fehler an dieser Stelle darf den Mail-Login
+         * ausdrücklich nicht verhindern.
+         */
+        StatusMessage =
+            "Kontakte werden vorbereitet …";
+
+        await _contactProvisioningService
+            .EnsureDefaultAddressBookAsync(
+                emailAddress,
+                password,
+                cancellationToken);
 
         StatusMessage =
             "Anmeldung erfolgreich.";

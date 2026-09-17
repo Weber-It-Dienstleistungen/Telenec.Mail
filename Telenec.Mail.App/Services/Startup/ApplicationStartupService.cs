@@ -1,4 +1,5 @@
 ﻿using Telenec.Mail.App.Models;
+using Telenec.Mail.App.Services.Contacts;
 using Telenec.Mail.App.Services.Security;
 using Telenec.Mail.App.Services.Storage;
 
@@ -15,10 +16,14 @@ public sealed class ApplicationStartupService
     private readonly ICredentialStore
         _credentialStore;
 
+    private readonly IContactProvisioningService
+        _contactProvisioningService;
+
     public ApplicationStartupService(
         DatabaseInitializer databaseInitializer,
         IMailAccountStore mailAccountStore,
-        ICredentialStore credentialStore)
+        ICredentialStore credentialStore,
+        IContactProvisioningService contactProvisioningService)
     {
         _databaseInitializer =
             databaseInitializer;
@@ -28,6 +33,9 @@ public sealed class ApplicationStartupService
 
         _credentialStore =
             credentialStore;
+
+        _contactProvisioningService =
+            contactProvisioningService;
     }
 
     public async Task<StartupResult> DetermineStartupStateAsync(
@@ -53,16 +61,43 @@ public sealed class ApplicationStartupService
                     .AccountConfigurationInvalid(account);
             }
 
-            var credentialExists =
-                await _credentialStore.ExistsAsync(
+            /*
+             * Die gespeicherten Zugangsdaten werden hier
+             * tatsächlich gelesen und nicht nur auf ihre
+             * Existenz geprüft.
+             *
+             * Dadurch können wir beim normalen Autostart
+             * dieselben Zugangsdaten auch für CardDAV
+             * verwenden.
+             */
+            var credential =
+                await _credentialStore.ReadAsync(
                     account.AccountId,
                     cancellationToken);
 
-            if (!credentialExists)
+            if (credential is null)
             {
                 return StartupResult
                     .AuthenticationRequired(account);
             }
+
+            /*
+             * CardDAV wird auch beim normalen Programmstart
+             * automatisch vorbereitet.
+             *
+             * Der Benutzer muss sich also nicht erst manuell
+             * ab- und wieder anmelden.
+             *
+             * EnsureDefaultAddressBookAsync behandelt seine
+             * eigenen Netzwerkfehler bewusst intern.
+             * Ein nicht erreichbarer Kontakte-Server verhindert
+             * deshalb nicht den normalen Mail-Start.
+             */
+            await _contactProvisioningService
+                .EnsureDefaultAddressBookAsync(
+                    credential.UserName,
+                    credential.Password,
+                    cancellationToken);
 
             return StartupResult
                 .AccountReady(account);

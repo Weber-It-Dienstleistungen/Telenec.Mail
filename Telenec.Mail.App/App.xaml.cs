@@ -7,6 +7,7 @@ using System.Diagnostics;
 using System.IO;
 using System.Reflection;
 using System.Windows;
+using Telenec.Mail.App.Services.Contacts;
 using Telenec.Mail.App.Services.Mail;
 using Telenec.Mail.App.Services.Security;
 using Telenec.Mail.App.Services.Startup;
@@ -139,6 +140,17 @@ public partial class App : Application
                     services.AddSingleton<
                         IMailAuthenticationService,
                         MailKitAuthenticationService>();
+
+                    /*
+                     * CardDAV-Provisionierung.
+                     *
+                     * Der Dienst sorgt nach einem erfolgreichen
+                     * Mail-Login automatisch dafür, dass das
+                     * persönliche Standardadressbuch existiert.
+                     */
+                    services.AddSingleton<
+                        IContactProvisioningService,
+                        CardDavContactProvisioningService>();
 
                     services.AddSingleton<
                         IApplicationUpdateService,
