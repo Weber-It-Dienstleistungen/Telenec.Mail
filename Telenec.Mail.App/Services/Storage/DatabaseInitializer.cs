@@ -5,31 +5,39 @@ namespace Telenec.Mail.App.Services.Storage;
 
 public sealed class DatabaseInitializer
 {
-    private const int CurrentSchemaVersion = 1;
+    private const int CurrentSchemaVersion = 2;
 
     private readonly AppDataPaths _paths;
 
-    public DatabaseInitializer(AppDataPaths paths)
+    public DatabaseInitializer(
+        AppDataPaths paths)
     {
-        _paths = paths;
+        _paths =
+            paths;
     }
 
     public async Task InitializeAsync(
         CancellationToken cancellationToken = default)
     {
-        Directory.CreateDirectory(_paths.RootDirectory);
+        Directory.CreateDirectory(
+            _paths.RootDirectory);
 
         var connectionString =
             new SqliteConnectionStringBuilder
             {
-                DataSource = _paths.DatabasePath,
-                Mode = SqliteOpenMode.ReadWriteCreate
+                DataSource =
+                    _paths.DatabasePath,
+
+                Mode =
+                    SqliteOpenMode.ReadWriteCreate
             }.ToString();
 
         await using var connection =
-            new SqliteConnection(connectionString);
+            new SqliteConnection(
+                connectionString);
 
-        await connection.OpenAsync(cancellationToken);
+        await connection.OpenAsync(
+            cancellationToken);
 
         await EnableForeignKeysAsync(
             connection,
@@ -40,7 +48,8 @@ public sealed class DatabaseInitializer
                 connection,
                 cancellationToken);
 
-        if (schemaVersion > CurrentSchemaVersion)
+        if (schemaVersion >
+            CurrentSchemaVersion)
         {
             throw new InvalidOperationException(
                 $"Die lokale Datenbank verwendet Schema-Version " +
@@ -53,6 +62,27 @@ public sealed class DatabaseInitializer
             await CreateSchemaVersion1Async(
                 connection,
                 cancellationToken);
+
+            schemaVersion =
+                1;
+        }
+
+        if (schemaVersion == 1)
+        {
+            await UpgradeToSchemaVersion2Async(
+                connection,
+                cancellationToken);
+
+            schemaVersion =
+                2;
+        }
+
+        if (schemaVersion !=
+            CurrentSchemaVersion)
+        {
+            throw new InvalidOperationException(
+                $"Die lokale Datenbank konnte nicht auf Schema-Version " +
+                $"{CurrentSchemaVersion} aktualisiert werden.");
         }
     }
 
@@ -84,7 +114,8 @@ public sealed class DatabaseInitializer
             await command.ExecuteScalarAsync(
                 cancellationToken);
 
-        return Convert.ToInt32(result);
+        return Convert.ToInt32(
+            result);
     }
 
     private static async Task CreateSchemaVersion1Async(
@@ -121,6 +152,45 @@ public sealed class DatabaseInitializer
                 WHERE IsActive = 1;
 
             PRAGMA user_version = 1;
+            """;
+
+        await command.ExecuteNonQueryAsync(
+            cancellationToken);
+
+        await transaction.CommitAsync(
+            cancellationToken);
+    }
+
+    private static async Task UpgradeToSchemaVersion2Async(
+        SqliteConnection connection,
+        CancellationToken cancellationToken)
+    {
+        await using var transaction =
+            await connection.BeginTransactionAsync(
+                cancellationToken);
+
+        await using var command =
+            connection.CreateCommand();
+
+        command.Transaction =
+            (SqliteTransaction)transaction;
+
+        command.CommandText =
+            """
+            CREATE TABLE ExternalImagePermissions
+            (
+                AccountId TEXT NOT NULL,
+                MessageKey TEXT NOT NULL,
+                AllowedAtUtc TEXT NOT NULL,
+
+                PRIMARY KEY
+                (
+                    AccountId,
+                    MessageKey
+                )
+            );
+
+            PRAGMA user_version = 2;
             """;
 
         await command.ExecuteNonQueryAsync(

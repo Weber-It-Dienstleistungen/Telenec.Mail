@@ -47,6 +47,17 @@ public partial class MainWindow
          */
         Loaded +=
             MainWindowContacts_OnLoaded;
+
+        /*
+         * Die Freigabe externer Bilder wird lokal pro
+         * Nachricht gespeichert.
+         *
+         * Dadurch muss ein Benutzer bei einer bereits
+         * freigegebenen Nachricht nicht bei jedem erneuten
+         * Öffnen wieder auf "Trotzdem laden" klicken.
+         */
+        Loaded +=
+            MainWindowExternalImageMemory_OnLoaded;
     }
 
     private void MainWindowVersionInfo_OnLoaded(
