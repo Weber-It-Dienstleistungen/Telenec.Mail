@@ -74,6 +74,50 @@ public sealed class ReleaseNotesService
     {
         return version switch
         {
+            "0.1.0-test.6" =>
+                new ReleaseNotesInfo(
+                    Version:
+                        "0.1.0-test.6",
+                    Title:
+                        "Telenec Mail wurde aktualisiert",
+                    Intro:
+                        "Diese Testversion erweitert Telenec Mail " +
+                        "vor allem um eine vollständige Kontaktverwaltung " +
+                        "und verbessert weitere wichtige Arbeitsabläufe.",
+                    Changes:
+                    [
+                        "Telenec Mail besitzt jetzt ein persönliches " +
+                        "Adressbuch. Kontakte werden über CardDAV " +
+                        "synchronisiert und stehen damit auch in " +
+                        "Roundcube zur Verfügung.",
+
+                        "Kontakte können angelegt, bearbeitet und gelöscht " +
+                        "werden. Unterstützt werden unter anderem mehrere " +
+                        "E-Mail-Adressen und Telefonnummern, Firma, Adressen, " +
+                        "Notizen, Kontaktfotos sowie Gruppen und Kategorien.",
+
+                        "Absender einer geöffneten E-Mail können jetzt direkt " +
+                        "zu den Kontakten hinzugefügt werden. Bereits vorhandene " +
+                        "E-Mail-Adressen werden erkannt, damit nicht versehentlich " +
+                        "doppelte Kontakte entstehen.",
+
+                        "Beim Schreiben einer E-Mail schlägt Telenec Mail jetzt " +
+                        "passende Kontakte für An, Cc und Bcc vor. Gesucht werden " +
+                        "kann unter anderem nach Name, Firma und E-Mail-Adresse.",
+
+                        "IMAP-Ordner können jetzt direkt in Telenec Mail erstellt, " +
+                        "als Unterordner angelegt und sicher gelöscht werden. " +
+                        "Die Ordnerstruktur wird dabei serverseitig übernommen.",
+
+                        "Freigaben für externe Bilder können pro Nachricht " +
+                        "dauerhaft gespeichert werden. Außerdem wurden mehrere " +
+                        "Verbesserungen aus dem bisherigen Betatest umgesetzt, " +
+                        "unter anderem bei Bedienung, Darstellung und " +
+                        "Ungelesen-Anzeige."
+                    ],
+                    Footer:
+                        "Vielen Dank fürs Testen und für euer Feedback!"),
+
             "0.1.0-test.5" =>
                 new ReleaseNotesInfo(
                     Version:
