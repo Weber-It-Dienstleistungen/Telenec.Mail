@@ -3,10 +3,10 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:converters="clr-namespace:Telenec.Mail.App.Converters"
         Title="Telenec Mail — Kontakte"
-        Width="1050"
-        Height="700"
-        MinWidth="900"
-        MinHeight="580"
+        Width="1280"
+        Height="820"
+        MinWidth="1050"
+        MinHeight="680"
         WindowStartupLocation="CenterOwner"
         ShowInTaskbar="False"
         Background="{StaticResource Surface.Background}"
@@ -20,51 +20,104 @@
         <converters:ContactPhotoImageConverter
             x:Key="ContactPhotoImageConverter" />
 
-        <Style x:Key="DetailSectionHeader"
+        <converters:ContactVisibilityConverter
+            x:Key="ContactVisibilityConverter" />
+
+        <Style x:Key="SectionCard"
+               TargetType="Border">
+
+            <Setter
+                Property="Padding"
+                Value="18" />
+
+            <Setter
+                Property="Margin"
+                Value="0,0,0,16" />
+
+            <Setter
+                Property="Background"
+                Value="{StaticResource Surface.Background}" />
+
+            <Setter
+                Property="BorderBrush"
+                Value="{StaticResource Border.Default}" />
+
+            <Setter
+                Property="BorderThickness"
+                Value="1" />
+
+            <Setter
+                Property="CornerRadius"
+                Value="8" />
+
+        </Style>
+
+        <Style x:Key="SectionTitle"
                TargetType="TextBlock">
 
-            <Setter Property="FontSize"
-                    Value="14" />
+            <Setter
+                Property="FontSize"
+                Value="14" />
 
-            <Setter Property="FontWeight"
-                    Value="SemiBold" />
+            <Setter
+                Property="FontWeight"
+                Value="SemiBold" />
 
-            <Setter Property="Foreground"
-                    Value="{StaticResource Text.Primary}" />
+            <Setter
+                Property="Foreground"
+                Value="{StaticResource Text.Primary}" />
+
+            <Setter
+                Property="Margin"
+                Value="0,0,0,14" />
 
         </Style>
 
         <Style x:Key="DetailLabel"
                TargetType="TextBlock">
 
-            <Setter Property="Width"
-                    Value="155" />
+            <Setter
+                Property="Width"
+                Value="125" />
 
-            <Setter Property="Foreground"
-                    Value="{StaticResource Text.Secondary}" />
+            <Setter
+                Property="FontSize"
+                Value="12" />
 
-            <Setter Property="VerticalAlignment"
-                    Value="Top" />
+            <Setter
+                Property="Foreground"
+                Value="{StaticResource Text.Secondary}" />
+
+            <Setter
+                Property="VerticalAlignment"
+                Value="Top" />
 
         </Style>
 
         <Style x:Key="DetailValue"
                TargetType="TextBlock">
 
-            <Setter Property="Foreground"
-                    Value="{StaticResource Text.Primary}" />
+            <Setter
+                Property="FontSize"
+                Value="12" />
 
-            <Setter Property="TextWrapping"
-                    Value="Wrap" />
+            <Setter
+                Property="Foreground"
+                Value="{StaticResource Text.Primary}" />
 
-            <Setter Property="VerticalAlignment"
-                    Value="Top" />
+            <Setter
+                Property="TextWrapping"
+                Value="Wrap" />
+
+            <Setter
+                Property="VerticalAlignment"
+                Value="Top" />
 
         </Style>
 
     </Window.Resources>
 
-    <Grid Margin="28">
+    <Grid Margin="30">
 
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto" />
@@ -74,8 +127,9 @@
 
         <!-- KOPF -->
 
-        <Grid Grid.Row="0"
-              Margin="0,0,0,20">
+        <Grid
+            Grid.Row="0"
+            Margin="0,0,0,22">
 
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="*" />
@@ -88,7 +142,7 @@
 
                 <TextBlock
                     Text="Kontakte"
-                    FontSize="26"
+                    FontSize="28"
                     FontWeight="SemiBold"
                     Foreground="{StaticResource Text.Primary}" />
 
@@ -102,8 +156,8 @@
 
             <Button
                 Grid.Column="1"
-                Height="38"
-                Padding="16,0"
+                Height="40"
+                Padding="18,0"
                 Content="+ Neuer Kontakt"
                 Cursor="Hand"
                 Style="{StaticResource Button.Primary}"
@@ -111,8 +165,8 @@
 
             <Button
                 Grid.Column="3"
-                Width="42"
-                Height="38"
+                Width="44"
+                Height="40"
                 Padding="0"
                 Background="{StaticResource Surface.Card}"
                 BorderBrush="{StaticResource Border.Default}"
@@ -138,8 +192,8 @@
         <Grid Grid.Row="1">
 
             <Grid.ColumnDefinitions>
-                <ColumnDefinition Width="340" />
-                <ColumnDefinition Width="18" />
+                <ColumnDefinition Width="365" />
+                <ColumnDefinition Width="20" />
                 <ColumnDefinition Width="*" />
             </Grid.ColumnDefinitions>
 
@@ -151,7 +205,7 @@
                 Background="{StaticResource Surface.Card}"
                 BorderBrush="{StaticResource Border.Default}"
                 BorderThickness="1"
-                CornerRadius="8">
+                CornerRadius="10">
 
                 <Grid>
 
@@ -162,12 +216,12 @@
 
                     <Border
                         Grid.Row="0"
-                        Height="40"
-                        Margin="0,0,0,14"
+                        Height="42"
+                        Margin="0,0,0,16"
                         Background="{StaticResource Surface.Background}"
                         BorderBrush="{StaticResource Border.Default}"
                         BorderThickness="1"
-                        CornerRadius="6">
+                        CornerRadius="7">
 
                         <Grid Margin="12,0">
 
@@ -222,7 +276,7 @@
 
                                 <Setter
                                     Property="Margin"
-                                    Value="0,0,0,4" />
+                                    Value="0,0,0,5" />
 
                             </Style>
 
@@ -233,26 +287,72 @@
                             <DataTemplate>
 
                                 <Border
-                                    Padding="12,10"
-                                    CornerRadius="6">
+                                    Padding="10"
+                                    CornerRadius="7">
 
-                                    <StackPanel>
+                                    <Grid>
 
-                                        <TextBlock
-                                            Text="{Binding DisplayName}"
-                                            FontSize="13"
-                                            FontWeight="SemiBold"
-                                            Foreground="{StaticResource Text.Primary}"
-                                            TextTrimming="CharacterEllipsis" />
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="44" />
+                                            <ColumnDefinition Width="12" />
+                                            <ColumnDefinition Width="*" />
+                                        </Grid.ColumnDefinitions>
 
-                                        <TextBlock
-                                            Margin="0,3,0,0"
-                                            Text="{Binding EmailAddress}"
-                                            FontSize="11"
-                                            Foreground="{StaticResource Text.Secondary}"
-                                            TextTrimming="CharacterEllipsis" />
+                                        <Grid
+                                            Width="40"
+                                            Height="40">
 
-                                    </StackPanel>
+                                            <Ellipse
+                                                Fill="{StaticResource Surface.Background}"
+                                                Stroke="{StaticResource Border.Default}"
+                                                StrokeThickness="1" />
+
+                                            <TextBlock
+                                                Text="&#xE77B;"
+                                                FontFamily="Segoe MDL2 Assets"
+                                                FontSize="18"
+                                                Foreground="{StaticResource Text.Secondary}"
+                                                HorizontalAlignment="Center"
+                                                VerticalAlignment="Center" />
+
+                                            <Ellipse
+                                                Stroke="{StaticResource Border.Default}"
+                                                StrokeThickness="1">
+
+                                                <Ellipse.Fill>
+
+                                                    <ImageBrush
+                                                        ImageSource="{Binding PhotoData,
+                                                            Converter={StaticResource ContactPhotoImageConverter}}"
+                                                        Stretch="UniformToFill" />
+
+                                                </Ellipse.Fill>
+
+                                            </Ellipse>
+
+                                        </Grid>
+
+                                        <StackPanel
+                                            Grid.Column="2"
+                                            VerticalAlignment="Center">
+
+                                            <TextBlock
+                                                Text="{Binding DisplayName}"
+                                                FontSize="13"
+                                                FontWeight="SemiBold"
+                                                Foreground="{StaticResource Text.Primary}"
+                                                TextTrimming="CharacterEllipsis" />
+
+                                            <TextBlock
+                                                Margin="0,3,0,0"
+                                                Text="{Binding EmailAddress}"
+                                                FontSize="11"
+                                                Foreground="{StaticResource Text.Secondary}"
+                                                TextTrimming="CharacterEllipsis" />
+
+                                        </StackPanel>
+
+                                    </Grid>
 
                                 </Border>
 
@@ -270,11 +370,11 @@
 
             <Border
                 Grid.Column="2"
-                Padding="24"
+                Padding="26"
                 Background="{StaticResource Surface.Card}"
                 BorderBrush="{StaticResource Border.Default}"
                 BorderThickness="1"
-                CornerRadius="8">
+                CornerRadius="10">
 
                 <Grid>
 
@@ -284,43 +384,33 @@
                         <RowDefinition Height="Auto" />
                     </Grid.RowDefinitions>
 
-                    <!-- HEADER -->
+                    <!-- DETAILKOPF -->
 
                     <Grid Grid.Row="0">
 
                         <Grid.ColumnDefinitions>
                             <ColumnDefinition Width="Auto" />
-                            <ColumnDefinition Width="18" />
+                            <ColumnDefinition Width="20" />
                             <ColumnDefinition Width="*" />
                             <ColumnDefinition Width="Auto" />
                             <ColumnDefinition Width="10" />
                             <ColumnDefinition Width="Auto" />
                         </Grid.ColumnDefinitions>
 
-                        <!-- KONTAKTFOTO -->
-
                         <Grid
                             Grid.Column="0"
-                            Width="64"
-                            Height="64">
+                            Width="82"
+                            Height="82">
 
                             <Ellipse
                                 Fill="{StaticResource Surface.Background}"
                                 Stroke="{StaticResource Border.Default}"
                                 StrokeThickness="1" />
 
-                            <!--
-                                Das Symbol liegt hinter dem Foto.
-
-                                Liefert der Converter kein Bild,
-                                bleibt der ImageBrush transparent
-                                und das Standardsymbol ist sichtbar.
-                            -->
-
                             <TextBlock
                                 Text="&#xE77B;"
                                 FontFamily="Segoe MDL2 Assets"
-                                FontSize="28"
+                                FontSize="34"
                                 Foreground="{StaticResource Text.Secondary}"
                                 HorizontalAlignment="Center"
                                 VerticalAlignment="Center" />
@@ -348,7 +438,7 @@
 
                             <TextBlock
                                 Text="{Binding SelectedContact.DisplayName}"
-                                FontSize="22"
+                                FontSize="25"
                                 FontWeight="SemiBold"
                                 Foreground="{StaticResource Text.Primary}"
                                 TextTrimming="CharacterEllipsis" />
@@ -356,16 +446,25 @@
                             <TextBlock
                                 Margin="0,5,0,0"
                                 Text="{Binding SelectedContact.EmailAddress}"
-                                FontSize="12"
+                                FontSize="13"
                                 Foreground="{StaticResource Text.Secondary}"
                                 TextTrimming="CharacterEllipsis" />
+
+                            <TextBlock
+                                Margin="0,3,0,0"
+                                Text="{Binding SelectedContact.Company}"
+                                FontSize="12"
+                                Foreground="{StaticResource Text.Secondary}"
+                                TextTrimming="CharacterEllipsis"
+                                Visibility="{Binding SelectedContact.Company,
+                                    Converter={StaticResource ContactVisibilityConverter}}" />
 
                         </StackPanel>
 
                         <Button
                             Grid.Column="3"
-                            Height="36"
-                            Padding="14,0"
+                            Height="38"
+                            Padding="15,0"
                             Content="E-Mail schreiben"
                             IsEnabled="{Binding CanComposeToSelectedContact}"
                             Cursor="Hand"
@@ -373,8 +472,8 @@
 
                         <Button
                             Grid.Column="5"
-                            Height="36"
-                            Padding="14,0"
+                            Height="38"
+                            Padding="15,0"
                             Content="Bearbeiten"
                             IsEnabled="{Binding HasSelectedContact}"
                             Cursor="Hand"
@@ -383,7 +482,7 @@
 
                     </Grid>
 
-                    <!-- DATENBLATT -->
+                    <!-- DATEN -->
 
                     <ScrollViewer
                         Grid.Row="1"
@@ -391,635 +490,782 @@
                         VerticalScrollBarVisibility="Auto"
                         HorizontalScrollBarVisibility="Disabled">
 
-                        <StackPanel>
+                        <Grid>
 
-                            <!-- NAME -->
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="18" />
+                                <ColumnDefinition Width="*" />
+                            </Grid.ColumnDefinitions>
 
-                            <TextBlock
-                                Text="Name"
-                                Style="{StaticResource DetailSectionHeader}" />
+                            <!-- LINKE SPALTE -->
 
-                            <StackPanel Margin="0,12,0,0">
+                            <StackPanel Grid.Column="0">
 
-                                <DockPanel Margin="0,0,0,7">
+                                <!-- NAME -->
 
-                                    <TextBlock
-                                        Text="Anrede"
-                                        Style="{StaticResource DetailLabel}" />
+                                <Border
+                                    Style="{StaticResource SectionCard}"
+                                    Visibility="{Binding SelectedContact,
+                                        Converter={StaticResource ContactVisibilityConverter},
+                                        ConverterParameter=Name}">
 
-                                    <TextBlock
-                                        Text="{Binding SelectedContact.Salutation}"
-                                        Style="{StaticResource DetailValue}" />
+                                    <StackPanel>
 
-                                </DockPanel>
+                                        <TextBlock
+                                            Text="Name"
+                                            Style="{StaticResource SectionTitle}" />
 
-                                <DockPanel Margin="0,0,0,7">
+                                        <DockPanel
+                                            Margin="0,0,0,8"
+                                            Visibility="{Binding SelectedContact.Salutation,
+                                                Converter={StaticResource ContactVisibilityConverter}}">
 
-                                    <TextBlock
-                                        Text="Titel"
-                                        Style="{StaticResource DetailLabel}" />
+                                            <TextBlock
+                                                Text="Anrede"
+                                                Style="{StaticResource DetailLabel}" />
 
-                                    <TextBlock
-                                        Text="{Binding SelectedContact.AcademicTitle}"
-                                        Style="{StaticResource DetailValue}" />
+                                            <TextBlock
+                                                Text="{Binding SelectedContact.Salutation}"
+                                                Style="{StaticResource DetailValue}" />
 
-                                </DockPanel>
+                                        </DockPanel>
 
-                                <DockPanel Margin="0,0,0,7">
+                                        <DockPanel
+                                            Margin="0,0,0,8"
+                                            Visibility="{Binding SelectedContact.AcademicTitle,
+                                                Converter={StaticResource ContactVisibilityConverter}}">
 
-                                    <TextBlock
-                                        Text="Vorname"
-                                        Style="{StaticResource DetailLabel}" />
+                                            <TextBlock
+                                                Text="Titel"
+                                                Style="{StaticResource DetailLabel}" />
 
-                                    <TextBlock
-                                        Text="{Binding SelectedContact.FirstName}"
-                                        Style="{StaticResource DetailValue}" />
+                                            <TextBlock
+                                                Text="{Binding SelectedContact.AcademicTitle}"
+                                                Style="{StaticResource DetailValue}" />
 
-                                </DockPanel>
+                                        </DockPanel>
 
-                                <DockPanel Margin="0,0,0,7">
+                                        <DockPanel
+                                            Margin="0,0,0,8"
+                                            Visibility="{Binding SelectedContact.FirstName,
+                                                Converter={StaticResource ContactVisibilityConverter}}">
 
-                                    <TextBlock
-                                        Text="Zweiter Vorname"
-                                        Style="{StaticResource DetailLabel}" />
+                                            <TextBlock
+                                                Text="Vorname"
+                                                Style="{StaticResource DetailLabel}" />
 
-                                    <TextBlock
-                                        Text="{Binding SelectedContact.MiddleName}"
-                                        Style="{StaticResource DetailValue}" />
+                                            <TextBlock
+                                                Text="{Binding SelectedContact.FirstName}"
+                                                Style="{StaticResource DetailValue}" />
 
-                                </DockPanel>
+                                        </DockPanel>
 
-                                <DockPanel Margin="0,0,0,7">
+                                        <DockPanel
+                                            Margin="0,0,0,8"
+                                            Visibility="{Binding SelectedContact.MiddleName,
+                                                Converter={StaticResource ContactVisibilityConverter}}">
 
-                                    <TextBlock
-                                        Text="Nachname"
-                                        Style="{StaticResource DetailLabel}" />
+                                            <TextBlock
+                                                Text="Zweiter Vorname"
+                                                Style="{StaticResource DetailLabel}" />
 
-                                    <TextBlock
-                                        Text="{Binding SelectedContact.LastName}"
-                                        Style="{StaticResource DetailValue}" />
+                                            <TextBlock
+                                                Text="{Binding SelectedContact.MiddleName}"
+                                                Style="{StaticResource DetailValue}" />
 
-                                </DockPanel>
+                                        </DockPanel>
 
-                                <DockPanel Margin="0,0,0,7">
+                                        <DockPanel
+                                            Margin="0,0,0,8"
+                                            Visibility="{Binding SelectedContact.LastName,
+                                                Converter={StaticResource ContactVisibilityConverter}}">
 
-                                    <TextBlock
-                                        Text="Namenszusatz"
-                                        Style="{StaticResource DetailLabel}" />
+                                            <TextBlock
+                                                Text="Nachname"
+                                                Style="{StaticResource DetailLabel}" />
 
-                                    <TextBlock
-                                        Text="{Binding SelectedContact.NameSuffix}"
-                                        Style="{StaticResource DetailValue}" />
+                                            <TextBlock
+                                                Text="{Binding SelectedContact.LastName}"
+                                                Style="{StaticResource DetailValue}" />
 
-                                </DockPanel>
+                                        </DockPanel>
 
-                                <DockPanel>
+                                        <DockPanel
+                                            Margin="0,0,0,8"
+                                            Visibility="{Binding SelectedContact.NameSuffix,
+                                                Converter={StaticResource ContactVisibilityConverter}}">
 
-                                    <TextBlock
-                                        Text="Spitzname"
-                                        Style="{StaticResource DetailLabel}" />
+                                            <TextBlock
+                                                Text="Namenszusatz"
+                                                Style="{StaticResource DetailLabel}" />
 
-                                    <TextBlock
-                                        Text="{Binding SelectedContact.Nickname}"
-                                        Style="{StaticResource DetailValue}" />
+                                            <TextBlock
+                                                Text="{Binding SelectedContact.NameSuffix}"
+                                                Style="{StaticResource DetailValue}" />
 
-                                </DockPanel>
+                                        </DockPanel>
+
+                                        <DockPanel
+                                            Visibility="{Binding SelectedContact.Nickname,
+                                                Converter={StaticResource ContactVisibilityConverter}}">
+
+                                            <TextBlock
+                                                Text="Spitzname"
+                                                Style="{StaticResource DetailLabel}" />
+
+                                            <TextBlock
+                                                Text="{Binding SelectedContact.Nickname}"
+                                                Style="{StaticResource DetailValue}" />
+
+                                        </DockPanel>
+
+                                    </StackPanel>
+
+                                </Border>
+
+                                <!-- EMAIL -->
+
+                                <Border
+                                    Style="{StaticResource SectionCard}"
+                                    Visibility="{Binding SelectedContact,
+                                        Converter={StaticResource ContactVisibilityConverter},
+                                        ConverterParameter=Email}">
+
+                                    <StackPanel>
+
+                                        <TextBlock
+                                            Text="E-Mail"
+                                            Style="{StaticResource SectionTitle}" />
+
+                                        <DockPanel
+                                            Margin="0,0,0,8"
+                                            Visibility="{Binding SelectedContact.EmailAddress,
+                                                Converter={StaticResource ContactVisibilityConverter}}">
+
+                                            <TextBlock
+                                                Text="Bevorzugt"
+                                                Style="{StaticResource DetailLabel}" />
+
+                                            <TextBlock
+                                                Text="{Binding SelectedContact.EmailAddress}"
+                                                Style="{StaticResource DetailValue}" />
+
+                                        </DockPanel>
+
+                                        <DockPanel
+                                            Margin="0,0,0,8"
+                                            Visibility="{Binding SelectedContact.BusinessEmailAddress,
+                                                Converter={StaticResource ContactVisibilityConverter}}">
+
+                                            <TextBlock
+                                                Text="Geschäftlich"
+                                                Style="{StaticResource DetailLabel}" />
+
+                                            <TextBlock
+                                                Text="{Binding SelectedContact.BusinessEmailAddress}"
+                                                Style="{StaticResource DetailValue}" />
+
+                                        </DockPanel>
+
+                                        <DockPanel
+                                            Margin="0,0,0,8"
+                                            Visibility="{Binding SelectedContact.PrivateEmailAddress,
+                                                Converter={StaticResource ContactVisibilityConverter}}">
+
+                                            <TextBlock
+                                                Text="Privat"
+                                                Style="{StaticResource DetailLabel}" />
+
+                                            <TextBlock
+                                                Text="{Binding SelectedContact.PrivateEmailAddress}"
+                                                Style="{StaticResource DetailValue}" />
+
+                                        </DockPanel>
+
+                                        <DockPanel
+                                            Visibility="{Binding SelectedContact.AdditionalEmailAddresses,
+                                                Converter={StaticResource ContactVisibilityConverter}}">
+
+                                            <TextBlock
+                                                Text="Weitere"
+                                                Style="{StaticResource DetailLabel}" />
+
+                                            <ItemsControl
+                                                ItemsSource="{Binding SelectedContact.AdditionalEmailAddresses}">
+
+                                                <ItemsControl.ItemTemplate>
+
+                                                    <DataTemplate>
+
+                                                        <TextBlock
+                                                            Text="{Binding}"
+                                                            Margin="0,0,0,4"
+                                                            Style="{StaticResource DetailValue}" />
+
+                                                    </DataTemplate>
+
+                                                </ItemsControl.ItemTemplate>
+
+                                            </ItemsControl>
+
+                                        </DockPanel>
+
+                                    </StackPanel>
+
+                                </Border>
+
+                                <!-- TELEFON -->
+
+                                <Border
+                                    Style="{StaticResource SectionCard}"
+                                    Visibility="{Binding SelectedContact,
+                                        Converter={StaticResource ContactVisibilityConverter},
+                                        ConverterParameter=Phone}">
+
+                                    <StackPanel>
+
+                                        <TextBlock
+                                            Text="Telefon"
+                                            Style="{StaticResource SectionTitle}" />
+
+                                        <DockPanel
+                                            Margin="0,0,0,8"
+                                            Visibility="{Binding SelectedContact.PhoneNumber,
+                                                Converter={StaticResource ContactVisibilityConverter}}">
+
+                                            <TextBlock
+                                                Text="Bevorzugt"
+                                                Style="{StaticResource DetailLabel}" />
+
+                                            <TextBlock
+                                                Text="{Binding SelectedContact.PhoneNumber}"
+                                                Style="{StaticResource DetailValue}" />
+
+                                        </DockPanel>
+
+                                        <DockPanel
+                                            Margin="0,0,0,8"
+                                            Visibility="{Binding SelectedContact.MobilePhoneNumber,
+                                                Converter={StaticResource ContactVisibilityConverter}}">
+
+                                            <TextBlock
+                                                Text="Mobil"
+                                                Style="{StaticResource DetailLabel}" />
+
+                                            <TextBlock
+                                                Text="{Binding SelectedContact.MobilePhoneNumber}"
+                                                Style="{StaticResource DetailValue}" />
+
+                                        </DockPanel>
+
+                                        <DockPanel
+                                            Margin="0,0,0,8"
+                                            Visibility="{Binding SelectedContact.BusinessPhoneNumber,
+                                                Converter={StaticResource ContactVisibilityConverter}}">
+
+                                            <TextBlock
+                                                Text="Geschäftlich"
+                                                Style="{StaticResource DetailLabel}" />
+
+                                            <TextBlock
+                                                Text="{Binding SelectedContact.BusinessPhoneNumber}"
+                                                Style="{StaticResource DetailValue}" />
+
+                                        </DockPanel>
+
+                                        <DockPanel
+                                            Margin="0,0,0,8"
+                                            Visibility="{Binding SelectedContact.PrivatePhoneNumber,
+                                                Converter={StaticResource ContactVisibilityConverter}}">
+
+                                            <TextBlock
+                                                Text="Privat"
+                                                Style="{StaticResource DetailLabel}" />
+
+                                            <TextBlock
+                                                Text="{Binding SelectedContact.PrivatePhoneNumber}"
+                                                Style="{StaticResource DetailValue}" />
+
+                                        </DockPanel>
+
+                                        <DockPanel
+                                            Margin="0,0,0,8"
+                                            Visibility="{Binding SelectedContact.FaxNumber,
+                                                Converter={StaticResource ContactVisibilityConverter}}">
+
+                                            <TextBlock
+                                                Text="Fax"
+                                                Style="{StaticResource DetailLabel}" />
+
+                                            <TextBlock
+                                                Text="{Binding SelectedContact.FaxNumber}"
+                                                Style="{StaticResource DetailValue}" />
+
+                                        </DockPanel>
+
+                                        <DockPanel
+                                            Visibility="{Binding SelectedContact.AdditionalPhoneNumbers,
+                                                Converter={StaticResource ContactVisibilityConverter}}">
+
+                                            <TextBlock
+                                                Text="Weitere"
+                                                Style="{StaticResource DetailLabel}" />
+
+                                            <ItemsControl
+                                                ItemsSource="{Binding SelectedContact.AdditionalPhoneNumbers}">
+
+                                                <ItemsControl.ItemTemplate>
+
+                                                    <DataTemplate>
+
+                                                        <TextBlock
+                                                            Text="{Binding}"
+                                                            Margin="0,0,0,4"
+                                                            Style="{StaticResource DetailValue}" />
+
+                                                    </DataTemplate>
+
+                                                </ItemsControl.ItemTemplate>
+
+                                            </ItemsControl>
+
+                                        </DockPanel>
+
+                                    </StackPanel>
+
+                                </Border>
 
                             </StackPanel>
 
-                            <!-- E-MAIL -->
+                            <!-- RECHTE SPALTE -->
 
-                            <Border
-                                Height="1"
-                                Margin="0,22,0,20"
-                                Background="{StaticResource Border.Default}" />
+                            <StackPanel Grid.Column="2">
 
-                            <TextBlock
-                                Text="E-Mail"
-                                Style="{StaticResource DetailSectionHeader}" />
+                                <!-- FIRMA -->
 
-                            <StackPanel Margin="0,12,0,0">
+                                <Border
+                                    Style="{StaticResource SectionCard}"
+                                    Visibility="{Binding SelectedContact,
+                                        Converter={StaticResource ContactVisibilityConverter},
+                                        ConverterParameter=Work}">
 
-                                <DockPanel Margin="0,0,0,7">
+                                    <StackPanel>
 
-                                    <TextBlock
-                                        Text="Bevorzugt"
-                                        Style="{StaticResource DetailLabel}" />
+                                        <TextBlock
+                                            Text="Firma und Beruf"
+                                            Style="{StaticResource SectionTitle}" />
 
-                                    <TextBlock
-                                        Text="{Binding SelectedContact.EmailAddress}"
-                                        Style="{StaticResource DetailValue}" />
+                                        <DockPanel
+                                            Margin="0,0,0,8"
+                                            Visibility="{Binding SelectedContact.Company,
+                                                Converter={StaticResource ContactVisibilityConverter}}">
 
-                                </DockPanel>
+                                            <TextBlock
+                                                Text="Firma"
+                                                Style="{StaticResource DetailLabel}" />
 
-                                <DockPanel Margin="0,0,0,7">
+                                            <TextBlock
+                                                Text="{Binding SelectedContact.Company}"
+                                                Style="{StaticResource DetailValue}" />
 
-                                    <TextBlock
-                                        Text="Geschäftlich"
-                                        Style="{StaticResource DetailLabel}" />
+                                        </DockPanel>
 
-                                    <TextBlock
-                                        Text="{Binding SelectedContact.BusinessEmailAddress}"
-                                        Style="{StaticResource DetailValue}" />
+                                        <DockPanel
+                                            Margin="0,0,0,8"
+                                            Visibility="{Binding SelectedContact.Department,
+                                                Converter={StaticResource ContactVisibilityConverter}}">
 
-                                </DockPanel>
+                                            <TextBlock
+                                                Text="Abteilung"
+                                                Style="{StaticResource DetailLabel}" />
 
-                                <DockPanel Margin="0,0,0,7">
+                                            <TextBlock
+                                                Text="{Binding SelectedContact.Department}"
+                                                Style="{StaticResource DetailValue}" />
 
-                                    <TextBlock
-                                        Text="Privat"
-                                        Style="{StaticResource DetailLabel}" />
+                                        </DockPanel>
 
-                                    <TextBlock
-                                        Text="{Binding SelectedContact.PrivateEmailAddress}"
-                                        Style="{StaticResource DetailValue}" />
+                                        <DockPanel
+                                            Visibility="{Binding SelectedContact.JobTitle,
+                                                Converter={StaticResource ContactVisibilityConverter}}">
 
-                                </DockPanel>
+                                            <TextBlock
+                                                Text="Position"
+                                                Style="{StaticResource DetailLabel}" />
 
-                                <DockPanel>
+                                            <TextBlock
+                                                Text="{Binding SelectedContact.JobTitle}"
+                                                Style="{StaticResource DetailValue}" />
 
-                                    <TextBlock
-                                        Text="Weitere"
-                                        Style="{StaticResource DetailLabel}" />
+                                        </DockPanel>
 
-                                    <ItemsControl
-                                        ItemsSource="{Binding SelectedContact.AdditionalEmailAddresses}">
+                                    </StackPanel>
 
-                                        <ItemsControl.ItemTemplate>
+                                </Border>
 
-                                            <DataTemplate>
+                                <!-- PRIVATE ADRESSE -->
 
-                                                <TextBlock
-                                                    Text="{Binding}"
-                                                    Margin="0,0,0,4"
-                                                    Style="{StaticResource DetailValue}" />
+                                <Border
+                                    Style="{StaticResource SectionCard}"
+                                    Visibility="{Binding SelectedContact.HomeAddress,
+                                        Converter={StaticResource ContactVisibilityConverter}}">
 
-                                            </DataTemplate>
+                                    <StackPanel>
 
-                                        </ItemsControl.ItemTemplate>
+                                        <TextBlock
+                                            Text="Private Adresse"
+                                            Style="{StaticResource SectionTitle}" />
 
-                                    </ItemsControl>
+                                        <DockPanel
+                                            Margin="0,0,0,8"
+                                            Visibility="{Binding SelectedContact.HomeAddress.PostOfficeBox,
+                                                Converter={StaticResource ContactVisibilityConverter}}">
 
-                                </DockPanel>
+                                            <TextBlock
+                                                Text="Postfach"
+                                                Style="{StaticResource DetailLabel}" />
+
+                                            <TextBlock
+                                                Text="{Binding SelectedContact.HomeAddress.PostOfficeBox}"
+                                                Style="{StaticResource DetailValue}" />
+
+                                        </DockPanel>
+
+                                        <DockPanel
+                                            Margin="0,0,0,8"
+                                            Visibility="{Binding SelectedContact.HomeAddress.ExtendedAddress,
+                                                Converter={StaticResource ContactVisibilityConverter}}">
+
+                                            <TextBlock
+                                                Text="Adresszusatz"
+                                                Style="{StaticResource DetailLabel}" />
+
+                                            <TextBlock
+                                                Text="{Binding SelectedContact.HomeAddress.ExtendedAddress}"
+                                                Style="{StaticResource DetailValue}" />
+
+                                        </DockPanel>
+
+                                        <DockPanel
+                                            Margin="0,0,0,8"
+                                            Visibility="{Binding SelectedContact.HomeAddress.Street,
+                                                Converter={StaticResource ContactVisibilityConverter}}">
+
+                                            <TextBlock
+                                                Text="Straße"
+                                                Style="{StaticResource DetailLabel}" />
+
+                                            <TextBlock
+                                                Text="{Binding SelectedContact.HomeAddress.Street}"
+                                                Style="{StaticResource DetailValue}" />
+
+                                        </DockPanel>
+
+                                        <DockPanel
+                                            Margin="0,0,0,8"
+                                            Visibility="{Binding SelectedContact.HomeAddress.PostalCode,
+                                                Converter={StaticResource ContactVisibilityConverter}}">
+
+                                            <TextBlock
+                                                Text="PLZ"
+                                                Style="{StaticResource DetailLabel}" />
+
+                                            <TextBlock
+                                                Text="{Binding SelectedContact.HomeAddress.PostalCode}"
+                                                Style="{StaticResource DetailValue}" />
+
+                                        </DockPanel>
+
+                                        <DockPanel
+                                            Margin="0,0,0,8"
+                                            Visibility="{Binding SelectedContact.HomeAddress.City,
+                                                Converter={StaticResource ContactVisibilityConverter}}">
+
+                                            <TextBlock
+                                                Text="Ort"
+                                                Style="{StaticResource DetailLabel}" />
+
+                                            <TextBlock
+                                                Text="{Binding SelectedContact.HomeAddress.City}"
+                                                Style="{StaticResource DetailValue}" />
+
+                                        </DockPanel>
+
+                                        <DockPanel
+                                            Margin="0,0,0,8"
+                                            Visibility="{Binding SelectedContact.HomeAddress.Region,
+                                                Converter={StaticResource ContactVisibilityConverter}}">
+
+                                            <TextBlock
+                                                Text="Region"
+                                                Style="{StaticResource DetailLabel}" />
+
+                                            <TextBlock
+                                                Text="{Binding SelectedContact.HomeAddress.Region}"
+                                                Style="{StaticResource DetailValue}" />
+
+                                        </DockPanel>
+
+                                        <DockPanel
+                                            Visibility="{Binding SelectedContact.HomeAddress.Country,
+                                                Converter={StaticResource ContactVisibilityConverter}}">
+
+                                            <TextBlock
+                                                Text="Land"
+                                                Style="{StaticResource DetailLabel}" />
+
+                                            <TextBlock
+                                                Text="{Binding SelectedContact.HomeAddress.Country}"
+                                                Style="{StaticResource DetailValue}" />
+
+                                        </DockPanel>
+
+                                    </StackPanel>
+
+                                </Border>
+
+                                <!-- GESCHÄFTSADRESSE -->
+
+                                <Border
+                                    Style="{StaticResource SectionCard}"
+                                    Visibility="{Binding SelectedContact.WorkAddress,
+                                        Converter={StaticResource ContactVisibilityConverter}}">
+
+                                    <StackPanel>
+
+                                        <TextBlock
+                                            Text="Geschäftliche Adresse"
+                                            Style="{StaticResource SectionTitle}" />
+
+                                        <DockPanel
+                                            Margin="0,0,0,8"
+                                            Visibility="{Binding SelectedContact.WorkAddress.PostOfficeBox,
+                                                Converter={StaticResource ContactVisibilityConverter}}">
+
+                                            <TextBlock
+                                                Text="Postfach"
+                                                Style="{StaticResource DetailLabel}" />
+
+                                            <TextBlock
+                                                Text="{Binding SelectedContact.WorkAddress.PostOfficeBox}"
+                                                Style="{StaticResource DetailValue}" />
+
+                                        </DockPanel>
+
+                                        <DockPanel
+                                            Margin="0,0,0,8"
+                                            Visibility="{Binding SelectedContact.WorkAddress.ExtendedAddress,
+                                                Converter={StaticResource ContactVisibilityConverter}}">
+
+                                            <TextBlock
+                                                Text="Adresszusatz"
+                                                Style="{StaticResource DetailLabel}" />
+
+                                            <TextBlock
+                                                Text="{Binding SelectedContact.WorkAddress.ExtendedAddress}"
+                                                Style="{StaticResource DetailValue}" />
+
+                                        </DockPanel>
+
+                                        <DockPanel
+                                            Margin="0,0,0,8"
+                                            Visibility="{Binding SelectedContact.WorkAddress.Street,
+                                                Converter={StaticResource ContactVisibilityConverter}}">
+
+                                            <TextBlock
+                                                Text="Straße"
+                                                Style="{StaticResource DetailLabel}" />
+
+                                            <TextBlock
+                                                Text="{Binding SelectedContact.WorkAddress.Street}"
+                                                Style="{StaticResource DetailValue}" />
+
+                                        </DockPanel>
+
+                                        <DockPanel
+                                            Margin="0,0,0,8"
+                                            Visibility="{Binding SelectedContact.WorkAddress.PostalCode,
+                                                Converter={StaticResource ContactVisibilityConverter}}">
+
+                                            <TextBlock
+                                                Text="PLZ"
+                                                Style="{StaticResource DetailLabel}" />
+
+                                            <TextBlock
+                                                Text="{Binding SelectedContact.WorkAddress.PostalCode}"
+                                                Style="{StaticResource DetailValue}" />
+
+                                        </DockPanel>
+
+                                        <DockPanel
+                                            Margin="0,0,0,8"
+                                            Visibility="{Binding SelectedContact.WorkAddress.City,
+                                                Converter={StaticResource ContactVisibilityConverter}}">
+
+                                            <TextBlock
+                                                Text="Ort"
+                                                Style="{StaticResource DetailLabel}" />
+
+                                            <TextBlock
+                                                Text="{Binding SelectedContact.WorkAddress.City}"
+                                                Style="{StaticResource DetailValue}" />
+
+                                        </DockPanel>
+
+                                        <DockPanel
+                                            Margin="0,0,0,8"
+                                            Visibility="{Binding SelectedContact.WorkAddress.Region,
+                                                Converter={StaticResource ContactVisibilityConverter}}">
+
+                                            <TextBlock
+                                                Text="Region"
+                                                Style="{StaticResource DetailLabel}" />
+
+                                            <TextBlock
+                                                Text="{Binding SelectedContact.WorkAddress.Region}"
+                                                Style="{StaticResource DetailValue}" />
+
+                                        </DockPanel>
+
+                                        <DockPanel
+                                            Visibility="{Binding SelectedContact.WorkAddress.Country,
+                                                Converter={StaticResource ContactVisibilityConverter}}">
+
+                                            <TextBlock
+                                                Text="Land"
+                                                Style="{StaticResource DetailLabel}" />
+
+                                            <TextBlock
+                                                Text="{Binding SelectedContact.WorkAddress.Country}"
+                                                Style="{StaticResource DetailValue}" />
+
+                                        </DockPanel>
+
+                                    </StackPanel>
+
+                                </Border>
+
+                                <!-- WEITERE ANGABEN -->
+
+                                <Border
+                                    Style="{StaticResource SectionCard}"
+                                    Visibility="{Binding SelectedContact,
+                                        Converter={StaticResource ContactVisibilityConverter},
+                                        ConverterParameter=More}">
+
+                                    <StackPanel>
+
+                                        <TextBlock
+                                            Text="Weitere Angaben"
+                                            Style="{StaticResource SectionTitle}" />
+
+                                        <DockPanel
+                                            Margin="0,0,0,8"
+                                            Visibility="{Binding SelectedContact.Website,
+                                                Converter={StaticResource ContactVisibilityConverter}}">
+
+                                            <TextBlock
+                                                Text="Website"
+                                                Style="{StaticResource DetailLabel}" />
+
+                                            <TextBlock
+                                                Text="{Binding SelectedContact.Website}"
+                                                Style="{StaticResource DetailValue}" />
+
+                                        </DockPanel>
+
+                                        <DockPanel
+                                            Margin="0,0,0,8"
+                                            Visibility="{Binding SelectedContact.Birthday,
+                                                Converter={StaticResource ContactVisibilityConverter}}">
+
+                                            <TextBlock
+                                                Text="Geburtstag"
+                                                Style="{StaticResource DetailLabel}" />
+
+                                            <TextBlock
+                                                Text="{Binding SelectedContact.Birthday}"
+                                                Style="{StaticResource DetailValue}" />
+
+                                        </DockPanel>
+
+                                        <DockPanel
+                                            Margin="0,0,0,8"
+                                            Visibility="{Binding SelectedContact.Categories,
+                                                Converter={StaticResource ContactVisibilityConverter}}">
+
+                                            <TextBlock
+                                                Text="Gruppen"
+                                                Style="{StaticResource DetailLabel}" />
+
+                                            <ItemsControl
+                                                ItemsSource="{Binding SelectedContact.Categories}">
+
+                                                <ItemsControl.ItemsPanel>
+
+                                                    <ItemsPanelTemplate>
+
+                                                        <WrapPanel />
+
+                                                    </ItemsPanelTemplate>
+
+                                                </ItemsControl.ItemsPanel>
+
+                                                <ItemsControl.ItemTemplate>
+
+                                                    <DataTemplate>
+
+                                                        <Border
+                                                            Margin="0,0,6,5"
+                                                            Padding="8,3"
+                                                            CornerRadius="5"
+                                                            Background="{StaticResource Surface.Card}"
+                                                            BorderBrush="{StaticResource Border.Default}"
+                                                            BorderThickness="1">
+
+                                                            <TextBlock
+                                                                Text="{Binding}"
+                                                                FontSize="11"
+                                                                Foreground="{StaticResource Text.Primary}" />
+
+                                                        </Border>
+
+                                                    </DataTemplate>
+
+                                                </ItemsControl.ItemTemplate>
+
+                                            </ItemsControl>
+
+                                        </DockPanel>
+
+                                        <DockPanel
+                                            Visibility="{Binding SelectedContact.Notes,
+                                                Converter={StaticResource ContactVisibilityConverter}}">
+
+                                            <TextBlock
+                                                Text="Notizen"
+                                                Style="{StaticResource DetailLabel}" />
+
+                                            <TextBlock
+                                                Text="{Binding SelectedContact.Notes}"
+                                                Style="{StaticResource DetailValue}" />
+
+                                        </DockPanel>
+
+                                    </StackPanel>
+
+                                </Border>
 
                             </StackPanel>
 
-                            <!-- TELEFON -->
-
-                            <Border
-                                Height="1"
-                                Margin="0,22,0,20"
-                                Background="{StaticResource Border.Default}" />
-
-                            <TextBlock
-                                Text="Telefon"
-                                Style="{StaticResource DetailSectionHeader}" />
-
-                            <StackPanel Margin="0,12,0,0">
-
-                                <DockPanel Margin="0,0,0,7">
-
-                                    <TextBlock
-                                        Text="Bevorzugt"
-                                        Style="{StaticResource DetailLabel}" />
-
-                                    <TextBlock
-                                        Text="{Binding SelectedContact.PhoneNumber}"
-                                        Style="{StaticResource DetailValue}" />
-
-                                </DockPanel>
-
-                                <DockPanel Margin="0,0,0,7">
-
-                                    <TextBlock
-                                        Text="Mobil"
-                                        Style="{StaticResource DetailLabel}" />
-
-                                    <TextBlock
-                                        Text="{Binding SelectedContact.MobilePhoneNumber}"
-                                        Style="{StaticResource DetailValue}" />
-
-                                </DockPanel>
-
-                                <DockPanel Margin="0,0,0,7">
-
-                                    <TextBlock
-                                        Text="Geschäftlich"
-                                        Style="{StaticResource DetailLabel}" />
-
-                                    <TextBlock
-                                        Text="{Binding SelectedContact.BusinessPhoneNumber}"
-                                        Style="{StaticResource DetailValue}" />
-
-                                </DockPanel>
-
-                                <DockPanel Margin="0,0,0,7">
-
-                                    <TextBlock
-                                        Text="Privat"
-                                        Style="{StaticResource DetailLabel}" />
-
-                                    <TextBlock
-                                        Text="{Binding SelectedContact.PrivatePhoneNumber}"
-                                        Style="{StaticResource DetailValue}" />
-
-                                </DockPanel>
-
-                                <DockPanel Margin="0,0,0,7">
-
-                                    <TextBlock
-                                        Text="Fax"
-                                        Style="{StaticResource DetailLabel}" />
-
-                                    <TextBlock
-                                        Text="{Binding SelectedContact.FaxNumber}"
-                                        Style="{StaticResource DetailValue}" />
-
-                                </DockPanel>
-
-                                <DockPanel>
-
-                                    <TextBlock
-                                        Text="Weitere"
-                                        Style="{StaticResource DetailLabel}" />
-
-                                    <ItemsControl
-                                        ItemsSource="{Binding SelectedContact.AdditionalPhoneNumbers}">
-
-                                        <ItemsControl.ItemTemplate>
-
-                                            <DataTemplate>
-
-                                                <TextBlock
-                                                    Text="{Binding}"
-                                                    Margin="0,0,0,4"
-                                                    Style="{StaticResource DetailValue}" />
-
-                                            </DataTemplate>
-
-                                        </ItemsControl.ItemTemplate>
-
-                                    </ItemsControl>
-
-                                </DockPanel>
-
-                            </StackPanel>
-
-                            <!-- FIRMA -->
-
-                            <Border
-                                Height="1"
-                                Margin="0,22,0,20"
-                                Background="{StaticResource Border.Default}" />
-
-                            <TextBlock
-                                Text="Firma und Beruf"
-                                Style="{StaticResource DetailSectionHeader}" />
-
-                            <StackPanel Margin="0,12,0,0">
-
-                                <DockPanel Margin="0,0,0,7">
-
-                                    <TextBlock
-                                        Text="Firma"
-                                        Style="{StaticResource DetailLabel}" />
-
-                                    <TextBlock
-                                        Text="{Binding SelectedContact.Company}"
-                                        Style="{StaticResource DetailValue}" />
-
-                                </DockPanel>
-
-                                <DockPanel Margin="0,0,0,7">
-
-                                    <TextBlock
-                                        Text="Abteilung"
-                                        Style="{StaticResource DetailLabel}" />
-
-                                    <TextBlock
-                                        Text="{Binding SelectedContact.Department}"
-                                        Style="{StaticResource DetailValue}" />
-
-                                </DockPanel>
-
-                                <DockPanel>
-
-                                    <TextBlock
-                                        Text="Position"
-                                        Style="{StaticResource DetailLabel}" />
-
-                                    <TextBlock
-                                        Text="{Binding SelectedContact.JobTitle}"
-                                        Style="{StaticResource DetailValue}" />
-
-                                </DockPanel>
-
-                            </StackPanel>
-
-                            <!-- PRIVATE ADRESSE -->
-
-                            <Border
-                                Height="1"
-                                Margin="0,22,0,20"
-                                Background="{StaticResource Border.Default}" />
-
-                            <TextBlock
-                                Text="Private Adresse"
-                                Style="{StaticResource DetailSectionHeader}" />
-
-                            <StackPanel Margin="0,12,0,0">
-
-                                <DockPanel Margin="0,0,0,7">
-
-                                    <TextBlock
-                                        Text="Postfach"
-                                        Style="{StaticResource DetailLabel}" />
-
-                                    <TextBlock
-                                        Text="{Binding SelectedContact.HomeAddress.PostOfficeBox}"
-                                        Style="{StaticResource DetailValue}" />
-
-                                </DockPanel>
-
-                                <DockPanel Margin="0,0,0,7">
-
-                                    <TextBlock
-                                        Text="Adresszusatz"
-                                        Style="{StaticResource DetailLabel}" />
-
-                                    <TextBlock
-                                        Text="{Binding SelectedContact.HomeAddress.ExtendedAddress}"
-                                        Style="{StaticResource DetailValue}" />
-
-                                </DockPanel>
-
-                                <DockPanel Margin="0,0,0,7">
-
-                                    <TextBlock
-                                        Text="Straße"
-                                        Style="{StaticResource DetailLabel}" />
-
-                                    <TextBlock
-                                        Text="{Binding SelectedContact.HomeAddress.Street}"
-                                        Style="{StaticResource DetailValue}" />
-
-                                </DockPanel>
-
-                                <DockPanel Margin="0,0,0,7">
-
-                                    <TextBlock
-                                        Text="PLZ"
-                                        Style="{StaticResource DetailLabel}" />
-
-                                    <TextBlock
-                                        Text="{Binding SelectedContact.HomeAddress.PostalCode}"
-                                        Style="{StaticResource DetailValue}" />
-
-                                </DockPanel>
-
-                                <DockPanel Margin="0,0,0,7">
-
-                                    <TextBlock
-                                        Text="Ort"
-                                        Style="{StaticResource DetailLabel}" />
-
-                                    <TextBlock
-                                        Text="{Binding SelectedContact.HomeAddress.City}"
-                                        Style="{StaticResource DetailValue}" />
-
-                                </DockPanel>
-
-                                <DockPanel Margin="0,0,0,7">
-
-                                    <TextBlock
-                                        Text="Bundesland / Region"
-                                        Style="{StaticResource DetailLabel}" />
-
-                                    <TextBlock
-                                        Text="{Binding SelectedContact.HomeAddress.Region}"
-                                        Style="{StaticResource DetailValue}" />
-
-                                </DockPanel>
-
-                                <DockPanel>
-
-                                    <TextBlock
-                                        Text="Land"
-                                        Style="{StaticResource DetailLabel}" />
-
-                                    <TextBlock
-                                        Text="{Binding SelectedContact.HomeAddress.Country}"
-                                        Style="{StaticResource DetailValue}" />
-
-                                </DockPanel>
-
-                            </StackPanel>
-
-                            <!-- GESCHÄFTLICHE ADRESSE -->
-
-                            <Border
-                                Height="1"
-                                Margin="0,22,0,20"
-                                Background="{StaticResource Border.Default}" />
-
-                            <TextBlock
-                                Text="Geschäftliche Adresse"
-                                Style="{StaticResource DetailSectionHeader}" />
-
-                            <StackPanel Margin="0,12,0,0">
-
-                                <DockPanel Margin="0,0,0,7">
-
-                                    <TextBlock
-                                        Text="Postfach"
-                                        Style="{StaticResource DetailLabel}" />
-
-                                    <TextBlock
-                                        Text="{Binding SelectedContact.WorkAddress.PostOfficeBox}"
-                                        Style="{StaticResource DetailValue}" />
-
-                                </DockPanel>
-
-                                <DockPanel Margin="0,0,0,7">
-
-                                    <TextBlock
-                                        Text="Adresszusatz"
-                                        Style="{StaticResource DetailLabel}" />
-
-                                    <TextBlock
-                                        Text="{Binding SelectedContact.WorkAddress.ExtendedAddress}"
-                                        Style="{StaticResource DetailValue}" />
-
-                                </DockPanel>
-
-                                <DockPanel Margin="0,0,0,7">
-
-                                    <TextBlock
-                                        Text="Straße"
-                                        Style="{StaticResource DetailLabel}" />
-
-                                    <TextBlock
-                                        Text="{Binding SelectedContact.WorkAddress.Street}"
-                                        Style="{StaticResource DetailValue}" />
-
-                                </DockPanel>
-
-                                <DockPanel Margin="0,0,0,7">
-
-                                    <TextBlock
-                                        Text="PLZ"
-                                        Style="{StaticResource DetailLabel}" />
-
-                                    <TextBlock
-                                        Text="{Binding SelectedContact.WorkAddress.PostalCode}"
-                                        Style="{StaticResource DetailValue}" />
-
-                                </DockPanel>
-
-                                <DockPanel Margin="0,0,0,7">
-
-                                    <TextBlock
-                                        Text="Ort"
-                                        Style="{StaticResource DetailLabel}" />
-
-                                    <TextBlock
-                                        Text="{Binding SelectedContact.WorkAddress.City}"
-                                        Style="{StaticResource DetailValue}" />
-
-                                </DockPanel>
-
-                                <DockPanel Margin="0,0,0,7">
-
-                                    <TextBlock
-                                        Text="Bundesland / Region"
-                                        Style="{StaticResource DetailLabel}" />
-
-                                    <TextBlock
-                                        Text="{Binding SelectedContact.WorkAddress.Region}"
-                                        Style="{StaticResource DetailValue}" />
-
-                                </DockPanel>
-
-                                <DockPanel>
-
-                                    <TextBlock
-                                        Text="Land"
-                                        Style="{StaticResource DetailLabel}" />
-
-                                    <TextBlock
-                                        Text="{Binding SelectedContact.WorkAddress.Country}"
-                                        Style="{StaticResource DetailValue}" />
-
-                                </DockPanel>
-
-                            </StackPanel>
-
-                            <!-- WEITERE ANGABEN -->
-
-                            <Border
-                                Height="1"
-                                Margin="0,22,0,20"
-                                Background="{StaticResource Border.Default}" />
-
-                            <TextBlock
-                                Text="Weitere Angaben"
-                                Style="{StaticResource DetailSectionHeader}" />
-
-                            <StackPanel Margin="0,12,0,0">
-
-                                <DockPanel Margin="0,0,0,7">
-
-                                    <TextBlock
-                                        Text="Website"
-                                        Style="{StaticResource DetailLabel}" />
-
-                                    <TextBlock
-                                        Text="{Binding SelectedContact.Website}"
-                                        Style="{StaticResource DetailValue}" />
-
-                                </DockPanel>
-
-                                <DockPanel Margin="0,0,0,7">
-
-                                    <TextBlock
-                                        Text="Geburtstag"
-                                        Style="{StaticResource DetailLabel}" />
-
-                                    <TextBlock
-                                        Text="{Binding SelectedContact.Birthday}"
-                                        Style="{StaticResource DetailValue}" />
-
-                                </DockPanel>
-
-                                <DockPanel Margin="0,0,0,7">
-
-                                    <TextBlock
-                                        Text="Gruppen"
-                                        Style="{StaticResource DetailLabel}" />
-
-                                    <ItemsControl
-                                        ItemsSource="{Binding SelectedContact.Categories}">
-
-                                        <ItemsControl.ItemsPanel>
-
-                                            <ItemsPanelTemplate>
-
-                                                <WrapPanel />
-
-                                            </ItemsPanelTemplate>
-
-                                        </ItemsControl.ItemsPanel>
-
-                                        <ItemsControl.ItemTemplate>
-
-                                            <DataTemplate>
-
-                                                <Border
-                                                    Margin="0,0,6,4"
-                                                    Padding="8,3"
-                                                    CornerRadius="4"
-                                                    Background="{StaticResource Surface.Background}"
-                                                    BorderBrush="{StaticResource Border.Default}"
-                                                    BorderThickness="1">
-
-                                                    <TextBlock
-                                                        Text="{Binding}"
-                                                        FontSize="11"
-                                                        Foreground="{StaticResource Text.Primary}" />
-
-                                                </Border>
-
-                                            </DataTemplate>
-
-                                        </ItemsControl.ItemTemplate>
-
-                                    </ItemsControl>
-
-                                </DockPanel>
-
-                                <DockPanel>
-
-                                    <TextBlock
-                                        Text="Notizen"
-                                        Style="{StaticResource DetailLabel}" />
-
-                                    <TextBlock
-                                        Text="{Binding SelectedContact.Notes}"
-                                        Style="{StaticResource DetailValue}" />
-
-                                </DockPanel>
-
-                            </StackPanel>
-
-                        </StackPanel>
+                        </Grid>
 
                     </ScrollViewer>
 
-                    <!-- LÖSCHEN -->
-
                     <Button
                         Grid.Row="2"
-                        Margin="0,18,0,0"
+                        Margin="0,8,0,0"
                         HorizontalAlignment="Left"
                         Height="36"
                         Padding="14,0"
