@@ -55,6 +55,105 @@
 
                 <StackPanel>
 
+                    <!-- FOTO -->
+
+                    <Expander
+                        Header="Kontaktfoto"
+                        IsExpanded="True"
+                        Foreground="{StaticResource Text.Primary}">
+
+                        <Grid Margin="0,14,0,8">
+
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="110" />
+                                <ColumnDefinition Width="18" />
+                                <ColumnDefinition Width="*" />
+                            </Grid.ColumnDefinitions>
+
+                            <Grid
+                                Grid.Column="0"
+                                Width="96"
+                                Height="96"
+                                HorizontalAlignment="Left">
+
+                                <Ellipse
+                                    Fill="{StaticResource Surface.Background}"
+                                    Stroke="{StaticResource Border.Default}"
+                                    StrokeThickness="1" />
+
+                                <Ellipse>
+
+                                    <Ellipse.Fill>
+
+                                        <ImageBrush
+                                            x:Name="PhotoImageBrush"
+                                            Stretch="UniformToFill" />
+
+                                    </Ellipse.Fill>
+
+                                </Ellipse>
+
+                                <TextBlock
+                                    x:Name="PhotoPlaceholder"
+                                    Text="&#xE77B;"
+                                    FontFamily="Segoe MDL2 Assets"
+                                    FontSize="38"
+                                    Foreground="{StaticResource Text.Secondary}"
+                                    HorizontalAlignment="Center"
+                                    VerticalAlignment="Center" />
+
+                            </Grid>
+
+                            <StackPanel
+                                Grid.Column="2"
+                                VerticalAlignment="Center">
+
+                                <TextBlock
+                                    Text="Optionales Kontaktfoto"
+                                    FontSize="13"
+                                    FontWeight="SemiBold"
+                                    Foreground="{StaticResource Text.Primary}" />
+
+                                <TextBlock
+                                    Margin="0,4,0,12"
+                                    Text="JPEG oder PNG. Das Bild wird automatisch für das Adressbuch verkleinert."
+                                    FontSize="11"
+                                    TextWrapping="Wrap"
+                                    Foreground="{StaticResource Text.Secondary}" />
+
+                                <StackPanel
+                                    Orientation="Horizontal">
+
+                                    <Button
+                                        Height="34"
+                                        Padding="12,0"
+                                        Content="Foto auswählen"
+                                        Cursor="Hand"
+                                        Click="SelectPhotoButton_OnClick" />
+
+                                    <Button
+                                        x:Name="RemovePhotoButton"
+                                        Height="34"
+                                        Margin="8,0,0,0"
+                                        Padding="12,0"
+                                        Content="Foto entfernen"
+                                        IsEnabled="False"
+                                        Cursor="Hand"
+                                        Click="RemovePhotoButton_OnClick" />
+
+                                </StackPanel>
+
+                            </StackPanel>
+
+                        </Grid>
+
+                    </Expander>
+
+                    <Border
+                        Height="1"
+                        Margin="0,12"
+                        Background="{StaticResource Border.Default}" />
+
                     <!-- NAME -->
 
                     <Expander
@@ -865,12 +964,6 @@
                         </StackPanel>
 
                     </Expander>
-
-                    <TextBlock
-                        Margin="0,18,0,0"
-                        Text="Kontaktfoto ergänzen wir im nächsten Schritt."
-                        FontSize="11"
-                        Foreground="{StaticResource Text.Secondary}" />
 
                 </StackPanel>
 

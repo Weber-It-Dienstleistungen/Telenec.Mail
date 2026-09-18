@@ -1,5 +1,9 @@
-﻿using System.Windows;
+﻿using Microsoft.Win32;
+using System.IO;
+using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Media;
+using System.Windows.Media.Imaging;
 using Telenec.Mail.App.Models;
 using Telenec.Mail.App.ViewModels;
 
@@ -8,6 +12,9 @@ namespace Telenec.Mail.App;
 public partial class ContactEditWindow :
     Window
 {
+    private const int MaximumPhotoDimension =
+        512;
+
     private readonly ContactsViewModel
         _viewModel;
 
@@ -22,6 +29,18 @@ public partial class ContactEditWindow :
 
     private bool
         _isSaving;
+
+    private bool
+        _photoChanged;
+
+    private bool
+        _photoRemoved;
+
+    private byte[]?
+        _photoData;
+
+    private string?
+        _photoMediaType;
 
     public ContactEditWindow(
         ContactsViewModel viewModel,
@@ -80,6 +99,8 @@ public partial class ContactEditWindow :
 
             UpdateAutomaticDisplayName();
 
+            UpdatePhotoPreview();
+
             return;
         }
 
@@ -91,6 +112,15 @@ public partial class ContactEditWindow :
 
         SaveButton.Content =
             "Änderungen speichern";
+
+        _photoData =
+            _contact.PhotoData?
+                .ToArray();
+
+        _photoMediaType =
+            _contact.PhotoMediaType;
+
+        UpdatePhotoPreview();
 
         SalutationTextBox.Text =
             _contact.Salutation
@@ -224,6 +254,252 @@ public partial class ContactEditWindow :
                 DisplayNameTextBox.Text.Trim(),
                 automaticDisplayName,
                 StringComparison.CurrentCulture);
+    }
+
+    private void SelectPhotoButton_OnClick(
+        object sender,
+        RoutedEventArgs e)
+    {
+        var dialog =
+            new OpenFileDialog
+            {
+                Title =
+                    "Kontaktfoto auswählen",
+
+                Filter =
+                    "Bilddateien (*.jpg;*.jpeg;*.png)|*.jpg;*.jpeg;*.png|" +
+                    "JPEG (*.jpg;*.jpeg)|*.jpg;*.jpeg|" +
+                    "PNG (*.png)|*.png",
+
+                CheckFileExists =
+                    true,
+
+                Multiselect =
+                    false
+            };
+
+        if (dialog.ShowDialog(
+                this) !=
+            true)
+        {
+            return;
+        }
+
+        try
+        {
+            var preparedPhoto =
+                PreparePhoto(
+                    dialog.FileName);
+
+            _photoData =
+                preparedPhoto.Data;
+
+            _photoMediaType =
+                preparedPhoto.MediaType;
+
+            _photoChanged =
+                true;
+
+            _photoRemoved =
+                false;
+
+            UpdatePhotoPreview();
+        }
+        catch (Exception exception)
+        {
+            MessageBox.Show(
+                this,
+                "Das ausgewählte Bild konnte nicht als Kontaktfoto verwendet werden.\n\n" +
+                exception.Message,
+                "Telenec Mail",
+                MessageBoxButton.OK,
+                MessageBoxImage.Error);
+        }
+    }
+
+    private void RemovePhotoButton_OnClick(
+        object sender,
+        RoutedEventArgs e)
+    {
+        _photoData =
+            null;
+
+        _photoMediaType =
+            null;
+
+        _photoChanged =
+            true;
+
+        _photoRemoved =
+            true;
+
+        UpdatePhotoPreview();
+    }
+
+    private static PreparedPhoto PreparePhoto(
+        string filePath)
+    {
+        using var fileStream =
+            File.OpenRead(
+                filePath);
+
+        var decoder =
+            BitmapDecoder.Create(
+                fileStream,
+                BitmapCreateOptions.PreservePixelFormat,
+                BitmapCacheOption.OnLoad);
+
+        if (decoder.Frames.Count == 0)
+        {
+            throw new InvalidOperationException(
+                "Die Bilddatei enthält kein lesbares Bild.");
+        }
+
+        BitmapSource source =
+            decoder.Frames[0];
+
+        if (source.PixelWidth <= 0 ||
+            source.PixelHeight <= 0)
+        {
+            throw new InvalidOperationException(
+                "Das Bild besitzt ungültige Abmessungen.");
+        }
+
+        var largestDimension =
+            Math.Max(
+                source.PixelWidth,
+                source.PixelHeight);
+
+        if (largestDimension >
+            MaximumPhotoDimension)
+        {
+            var scale =
+                (double)MaximumPhotoDimension /
+                largestDimension;
+
+            var transformed =
+                new TransformedBitmap(
+                    source,
+                    new ScaleTransform(
+                        scale,
+                        scale));
+
+            transformed.Freeze();
+
+            source =
+                transformed;
+        }
+
+        /*
+         * Kontaktfotos werden bewusst als JPEG gespeichert.
+         *
+         * Dadurch bleiben die vCards klein genug, auch wenn
+         * der Benutzer ein sehr großes Smartphone-Foto oder
+         * eine verlustfreie PNG-Datei auswählt.
+         */
+        var encoder =
+            new JpegBitmapEncoder
+            {
+                QualityLevel =
+                    88
+            };
+
+        encoder.Frames.Add(
+            BitmapFrame.Create(
+                source));
+
+        using var outputStream =
+            new MemoryStream();
+
+        encoder.Save(
+            outputStream);
+
+        var data =
+            outputStream.ToArray();
+
+        if (data.Length == 0)
+        {
+            throw new InvalidOperationException(
+                "Das Kontaktfoto konnte nicht verarbeitet werden.");
+        }
+
+        return new PreparedPhoto(
+            data,
+            "image/jpeg");
+    }
+
+    private void UpdatePhotoPreview()
+    {
+        if (_photoData is not
+            { Length: > 0 })
+        {
+            PhotoImageBrush.ImageSource =
+                null;
+
+            PhotoPlaceholder.Visibility =
+                Visibility.Visible;
+
+            RemovePhotoButton.IsEnabled =
+                false;
+
+            return;
+        }
+
+        try
+        {
+            PhotoImageBrush.ImageSource =
+                CreateBitmapImage(
+                    _photoData);
+
+            PhotoPlaceholder.Visibility =
+                Visibility.Collapsed;
+
+            RemovePhotoButton.IsEnabled =
+                true;
+        }
+        catch
+        {
+            /*
+             * Ein eventuell fremdes oder beschädigtes
+             * Bildformat darf niemals verhindern, dass der
+             * restliche Kontakt bearbeitet werden kann.
+             */
+            PhotoImageBrush.ImageSource =
+                null;
+
+            PhotoPlaceholder.Visibility =
+                Visibility.Visible;
+
+            RemovePhotoButton.IsEnabled =
+                false;
+        }
+    }
+
+    private static BitmapImage CreateBitmapImage(
+        byte[] data)
+    {
+        using var stream =
+            new MemoryStream(
+                data,
+                writable:
+                    false);
+
+        var image =
+            new BitmapImage();
+
+        image.BeginInit();
+
+        image.CacheOption =
+            BitmapCacheOption.OnLoad;
+
+        image.StreamSource =
+            stream;
+
+        image.EndInit();
+
+        image.Freeze();
+
+        return image;
     }
 
     private void NameSourceTextBox_OnTextChanged(
@@ -494,7 +770,14 @@ public partial class ContactEditWindow :
 
                 Categories =
                     SplitCategories(
-                        CategoriesTextBox.Text)
+                        CategoriesTextBox.Text),
+
+                PhotoData =
+                    _photoData?
+                        .ToArray(),
+
+                PhotoMediaType =
+                    _photoMediaType
             };
 
         await _viewModel
@@ -504,6 +787,33 @@ public partial class ContactEditWindow :
 
     private async Task UpdateContactAsync()
     {
+        byte[]? photoData =
+            null;
+
+        string? photoMediaType =
+            null;
+
+        if (_photoChanged)
+        {
+            /*
+             * Ein leeres Byte-Array bedeutet hier bewusst:
+             * vorhandenes eingebettetes PHOTO entfernen.
+             *
+             * null bedeutet dagegen:
+             * das vorhandene Foto unverändert lassen.
+             */
+            photoData =
+                _photoRemoved
+                    ? Array.Empty<byte>()
+                    : _photoData?
+                        .ToArray();
+
+            photoMediaType =
+                _photoRemoved
+                    ? string.Empty
+                    : _photoMediaType;
+        }
+
         var request =
             new ContactUpdateRequest
             {
@@ -608,7 +918,13 @@ public partial class ContactEditWindow :
 
                 Categories =
                     SplitCategories(
-                        CategoriesTextBox.Text)
+                        CategoriesTextBox.Text),
+
+                PhotoData =
+                    photoData,
+
+                PhotoMediaType =
+                    photoMediaType
             };
 
         await _viewModel
@@ -820,4 +1136,8 @@ public partial class ContactEditWindow :
 
         Close();
     }
+
+    private sealed record PreparedPhoto(
+        byte[] Data,
+        string MediaType);
 }
