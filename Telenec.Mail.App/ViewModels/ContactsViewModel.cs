@@ -25,36 +25,6 @@ public sealed class ContactsViewModel :
     private string _statusText =
         "Kontakte werden geladen …";
 
-    private string _newFirstName =
-        string.Empty;
-
-    private string _newLastName =
-        string.Empty;
-
-    private string _newDisplayName =
-        string.Empty;
-
-    private string _newEmailAddress =
-        string.Empty;
-
-    private string _newPhoneNumber =
-        string.Empty;
-
-    private string _editFirstName =
-        string.Empty;
-
-    private string _editLastName =
-        string.Empty;
-
-    private string _editDisplayName =
-        string.Empty;
-
-    private string _editEmailAddress =
-        string.Empty;
-
-    private string _editPhoneNumber =
-        string.Empty;
-
     public ContactsViewModel(
         IContactService contactService)
     {
@@ -118,13 +88,8 @@ public sealed class ContactsViewModel :
 
             OnPropertyChanged();
 
-            LoadSelectedContactFields();
-
             OnPropertyChanged(
                 nameof(HasSelectedContact));
-
-            OnPropertyChanged(
-                nameof(CanSaveSelectedContact));
 
             OnPropertyChanged(
                 nameof(CanDeleteSelectedContact));
@@ -154,12 +119,6 @@ public sealed class ContactsViewModel :
                 value;
 
             OnPropertyChanged();
-
-            OnPropertyChanged(
-                nameof(CanCreateContact));
-
-            OnPropertyChanged(
-                nameof(CanSaveSelectedContact));
 
             OnPropertyChanged(
                 nameof(CanDeleteSelectedContact));
@@ -204,220 +163,6 @@ public sealed class ContactsViewModel :
             return $"{VisibleContacts.Count} von {_allContacts.Count} Kontakten";
         }
     }
-
-    public string NewFirstName
-    {
-        get => _newFirstName;
-
-        set
-        {
-            if (_newFirstName == value)
-            {
-                return;
-            }
-
-            _newFirstName =
-                value ?? string.Empty;
-
-            OnPropertyChanged();
-            OnPropertyChanged(
-                nameof(CanCreateContact));
-        }
-    }
-
-    public string NewLastName
-    {
-        get => _newLastName;
-
-        set
-        {
-            if (_newLastName == value)
-            {
-                return;
-            }
-
-            _newLastName =
-                value ?? string.Empty;
-
-            OnPropertyChanged();
-            OnPropertyChanged(
-                nameof(CanCreateContact));
-        }
-    }
-
-    public string NewDisplayName
-    {
-        get => _newDisplayName;
-
-        set
-        {
-            if (_newDisplayName == value)
-            {
-                return;
-            }
-
-            _newDisplayName =
-                value ?? string.Empty;
-
-            OnPropertyChanged();
-            OnPropertyChanged(
-                nameof(CanCreateContact));
-        }
-    }
-
-    public string NewEmailAddress
-    {
-        get => _newEmailAddress;
-
-        set
-        {
-            if (_newEmailAddress == value)
-            {
-                return;
-            }
-
-            _newEmailAddress =
-                value ?? string.Empty;
-
-            OnPropertyChanged();
-            OnPropertyChanged(
-                nameof(CanCreateContact));
-        }
-    }
-
-    public string NewPhoneNumber
-    {
-        get => _newPhoneNumber;
-
-        set
-        {
-            if (_newPhoneNumber == value)
-            {
-                return;
-            }
-
-            _newPhoneNumber =
-                value ?? string.Empty;
-
-            OnPropertyChanged();
-        }
-    }
-
-    public string EditFirstName
-    {
-        get => _editFirstName;
-
-        set
-        {
-            if (_editFirstName == value)
-            {
-                return;
-            }
-
-            _editFirstName =
-                value ?? string.Empty;
-
-            OnPropertyChanged();
-            OnPropertyChanged(
-                nameof(CanSaveSelectedContact));
-        }
-    }
-
-    public string EditLastName
-    {
-        get => _editLastName;
-
-        set
-        {
-            if (_editLastName == value)
-            {
-                return;
-            }
-
-            _editLastName =
-                value ?? string.Empty;
-
-            OnPropertyChanged();
-            OnPropertyChanged(
-                nameof(CanSaveSelectedContact));
-        }
-    }
-
-    public string EditDisplayName
-    {
-        get => _editDisplayName;
-
-        set
-        {
-            if (_editDisplayName == value)
-            {
-                return;
-            }
-
-            _editDisplayName =
-                value ?? string.Empty;
-
-            OnPropertyChanged();
-            OnPropertyChanged(
-                nameof(CanSaveSelectedContact));
-        }
-    }
-
-    public string EditEmailAddress
-    {
-        get => _editEmailAddress;
-
-        set
-        {
-            if (_editEmailAddress == value)
-            {
-                return;
-            }
-
-            _editEmailAddress =
-                value ?? string.Empty;
-
-            OnPropertyChanged();
-
-            OnPropertyChanged(
-                nameof(CanSaveSelectedContact));
-        }
-    }
-
-    public string EditPhoneNumber
-    {
-        get => _editPhoneNumber;
-
-        set
-        {
-            if (_editPhoneNumber == value)
-            {
-                return;
-            }
-
-            _editPhoneNumber =
-                value ?? string.Empty;
-
-            OnPropertyChanged();
-        }
-    }
-
-    public bool CanCreateContact =>
-        !IsLoading &&
-        HasMinimumContactData(
-            NewFirstName,
-            NewLastName,
-            NewDisplayName,
-            NewEmailAddress);
-
-    public bool CanSaveSelectedContact =>
-        !IsLoading &&
-        SelectedContact is not null &&
-        HasMinimumContactData(
-            EditFirstName,
-            EditLastName,
-            EditDisplayName,
-            EditEmailAddress);
 
     public bool CanDeleteSelectedContact =>
         !IsLoading &&
@@ -466,11 +211,15 @@ public sealed class ContactsViewModel :
         }
     }
 
-    public async Task<ContactData>
-        CreateContactAsync(
-            CancellationToken cancellationToken = default)
+    public async Task<ContactData> CreateContactAsync(
+        ContactCreateRequest request,
+        CancellationToken cancellationToken = default)
     {
-        if (!CanCreateContact)
+        ArgumentNullException.ThrowIfNull(
+            request);
+
+        if (!HasMinimumContactData(
+                request))
         {
             throw new InvalidOperationException(
                 "Bitte geben Sie mindestens einen Namen oder eine E-Mail-Adresse ein.");
@@ -487,35 +236,12 @@ public sealed class ContactsViewModel :
             var createdContact =
                 await _contactService
                     .CreateAsync(
-                        new ContactCreateRequest
-                        {
-                            FirstName =
-                                NullIfWhiteSpace(
-                                    NewFirstName),
-
-                            LastName =
-                                NullIfWhiteSpace(
-                                    NewLastName),
-
-                            DisplayName =
-                                NullIfWhiteSpace(
-                                    NewDisplayName),
-
-                            EmailAddress =
-                                NullIfWhiteSpace(
-                                    NewEmailAddress),
-
-                            PhoneNumber =
-                                NullIfWhiteSpace(
-                                    NewPhoneNumber)
-                        },
+                        request,
                         cancellationToken);
 
             await LoadContactsCoreAsync(
                 createdContact.Uid,
                 cancellationToken);
-
-            ClearNewContactFields();
 
             StatusText =
                 "Kontakt wurde gespeichert.";
@@ -530,8 +256,12 @@ public sealed class ContactsViewModel :
     }
 
     public async Task UpdateSelectedContactAsync(
+        ContactUpdateRequest request,
         CancellationToken cancellationToken = default)
     {
+        ArgumentNullException.ThrowIfNull(
+            request);
+
         var contact =
             SelectedContact;
 
@@ -540,7 +270,8 @@ public sealed class ContactsViewModel :
             return;
         }
 
-        if (!CanSaveSelectedContact)
+        if (!HasMinimumContactData(
+                request))
         {
             throw new InvalidOperationException(
                 "Bitte geben Sie mindestens einen Namen oder eine E-Mail-Adresse ein.");
@@ -558,28 +289,7 @@ public sealed class ContactsViewModel :
                 await _contactService
                     .UpdateAsync(
                         contact,
-                        new ContactUpdateRequest
-                        {
-                            FirstName =
-                                NullIfWhiteSpace(
-                                    EditFirstName),
-
-                            LastName =
-                                NullIfWhiteSpace(
-                                    EditLastName),
-
-                            DisplayName =
-                                NullIfWhiteSpace(
-                                    EditDisplayName),
-
-                            EmailAddress =
-                                NullIfWhiteSpace(
-                                    EditEmailAddress),
-
-                            PhoneNumber =
-                                NullIfWhiteSpace(
-                                    EditPhoneNumber)
-                        },
+                        request,
                         cancellationToken);
 
             await LoadContactsCoreAsync(
@@ -695,24 +405,8 @@ public sealed class ContactsViewModel :
             result =
                 result.Where(
                     contact =>
-                        ContainsSearchValue(
-                            contact.DisplayName,
-                            searchValue) ||
-
-                        ContainsSearchValue(
-                            contact.FirstName,
-                            searchValue) ||
-
-                        ContainsSearchValue(
-                            contact.LastName,
-                            searchValue) ||
-
-                        ContainsSearchValue(
-                            contact.EmailAddress,
-                            searchValue) ||
-
-                        ContainsSearchValue(
-                            contact.PhoneNumber,
+                        ContactMatchesSearch(
+                            contact,
                             searchValue));
         }
 
@@ -744,61 +438,158 @@ public sealed class ContactsViewModel :
             nameof(ContactCountText));
     }
 
-    private void LoadSelectedContactFields()
+    private static bool ContactMatchesSearch(
+        ContactData contact,
+        string searchValue)
     {
-        EditFirstName =
-            SelectedContact?
-                .FirstName
-            ?? string.Empty;
+        return
+            ContainsSearchValue(
+                contact.DisplayName,
+                searchValue) ||
 
-        EditLastName =
-            SelectedContact?
-                .LastName
-            ?? string.Empty;
+            ContainsSearchValue(
+                contact.FirstName,
+                searchValue) ||
 
-        EditDisplayName =
-            SelectedContact?
-                .DisplayName
-            ?? string.Empty;
+            ContainsSearchValue(
+                contact.MiddleName,
+                searchValue) ||
 
-        EditEmailAddress =
-            SelectedContact?
-                .EmailAddress
-            ?? string.Empty;
+            ContainsSearchValue(
+                contact.LastName,
+                searchValue) ||
 
-        EditPhoneNumber =
-            SelectedContact?
-                .PhoneNumber
-            ?? string.Empty;
+            ContainsSearchValue(
+                contact.Nickname,
+                searchValue) ||
+
+            ContainsSearchValue(
+                contact.EmailAddress,
+                searchValue) ||
+
+            ContainsSearchValue(
+                contact.BusinessEmailAddress,
+                searchValue) ||
+
+            ContainsSearchValue(
+                contact.PrivateEmailAddress,
+                searchValue) ||
+
+            ContainsAnySearchValue(
+                contact.AdditionalEmailAddresses,
+                searchValue) ||
+
+            ContainsSearchValue(
+                contact.PhoneNumber,
+                searchValue) ||
+
+            ContainsSearchValue(
+                contact.MobilePhoneNumber,
+                searchValue) ||
+
+            ContainsSearchValue(
+                contact.BusinessPhoneNumber,
+                searchValue) ||
+
+            ContainsSearchValue(
+                contact.PrivatePhoneNumber,
+                searchValue) ||
+
+            ContainsSearchValue(
+                contact.FaxNumber,
+                searchValue) ||
+
+            ContainsAnySearchValue(
+                contact.AdditionalPhoneNumbers,
+                searchValue) ||
+
+            ContainsSearchValue(
+                contact.Company,
+                searchValue) ||
+
+            ContainsSearchValue(
+                contact.Department,
+                searchValue) ||
+
+            ContainsSearchValue(
+                contact.JobTitle,
+                searchValue) ||
+
+            ContainsSearchValue(
+                contact.HomeAddress?.Street,
+                searchValue) ||
+
+            ContainsSearchValue(
+                contact.HomeAddress?.City,
+                searchValue) ||
+
+            ContainsSearchValue(
+                contact.HomeAddress?.PostalCode,
+                searchValue) ||
+
+            ContainsSearchValue(
+                contact.WorkAddress?.Street,
+                searchValue) ||
+
+            ContainsSearchValue(
+                contact.WorkAddress?.City,
+                searchValue) ||
+
+            ContainsSearchValue(
+                contact.WorkAddress?.PostalCode,
+                searchValue) ||
+
+            ContainsAnySearchValue(
+                contact.Categories,
+                searchValue);
     }
 
-    private void ClearNewContactFields()
+    private static bool HasMinimumContactData(
+        ContactCreateRequest request)
     {
-        NewFirstName =
-            string.Empty;
+        return
+            HasMinimumContactData(
+                request.FirstName,
+                request.MiddleName,
+                request.LastName,
+                request.DisplayName,
+                request.EmailAddress,
+                request.BusinessEmailAddress,
+                request.PrivateEmailAddress,
+                request.AdditionalEmailAddresses);
+    }
 
-        NewLastName =
-            string.Empty;
-
-        NewDisplayName =
-            string.Empty;
-
-        NewEmailAddress =
-            string.Empty;
-
-        NewPhoneNumber =
-            string.Empty;
+    private static bool HasMinimumContactData(
+        ContactUpdateRequest request)
+    {
+        return
+            HasMinimumContactData(
+                request.FirstName,
+                request.MiddleName,
+                request.LastName,
+                request.DisplayName,
+                request.EmailAddress,
+                request.BusinessEmailAddress,
+                request.PrivateEmailAddress,
+                request.AdditionalEmailAddresses);
     }
 
     private static bool HasMinimumContactData(
         string? firstName,
+        string? middleName,
         string? lastName,
         string? displayName,
-        string? emailAddress)
+        string? emailAddress,
+        string? businessEmailAddress,
+        string? privateEmailAddress,
+        IEnumerable<string>? additionalEmailAddresses)
     {
         return
             !string.IsNullOrWhiteSpace(
                 firstName) ||
+
+            !string.IsNullOrWhiteSpace(
+                middleName) ||
 
             !string.IsNullOrWhiteSpace(
                 lastName) ||
@@ -807,7 +598,36 @@ public sealed class ContactsViewModel :
                 displayName) ||
 
             !string.IsNullOrWhiteSpace(
-                emailAddress);
+                emailAddress) ||
+
+            !string.IsNullOrWhiteSpace(
+                businessEmailAddress) ||
+
+            !string.IsNullOrWhiteSpace(
+                privateEmailAddress) ||
+
+            additionalEmailAddresses?
+                .Any(
+                    value =>
+                        !string.IsNullOrWhiteSpace(
+                            value)) ==
+                true;
+    }
+
+    private static bool ContainsAnySearchValue(
+        IEnumerable<string>? values,
+        string searchValue)
+    {
+        if (values is null)
+        {
+            return false;
+        }
+
+        return values.Any(
+            value =>
+                ContainsSearchValue(
+                    value,
+                    searchValue));
     }
 
     private static bool ContainsSearchValue(
@@ -821,14 +641,5 @@ public sealed class ContactsViewModel :
             value.Contains(
                 searchValue,
                 StringComparison.CurrentCultureIgnoreCase);
-    }
-
-    private static string? NullIfWhiteSpace(
-        string? value)
-    {
-        return string.IsNullOrWhiteSpace(
-                value)
-            ? null
-            : value.Trim();
     }
 }

@@ -40,10 +40,19 @@ public partial class ContactEditWindow :
 
         InitializeForm();
 
+        AcademicTitleTextBox.TextChanged +=
+            NameSourceTextBox_OnTextChanged;
+
         FirstNameTextBox.TextChanged +=
             NameSourceTextBox_OnTextChanged;
 
+        MiddleNameTextBox.TextChanged +=
+            NameSourceTextBox_OnTextChanged;
+
         LastNameTextBox.TextChanged +=
+            NameSourceTextBox_OnTextChanged;
+
+        NameSuffixTextBox.TextChanged +=
             NameSourceTextBox_OnTextChanged;
 
         EmailAddressTextBox.TextChanged +=
@@ -83,12 +92,32 @@ public partial class ContactEditWindow :
         SaveButton.Content =
             "Änderungen speichern";
 
+        SalutationTextBox.Text =
+            _contact.Salutation
+            ?? string.Empty;
+
+        AcademicTitleTextBox.Text =
+            _contact.AcademicTitle
+            ?? string.Empty;
+
         FirstNameTextBox.Text =
             _contact.FirstName
             ?? string.Empty;
 
+        MiddleNameTextBox.Text =
+            _contact.MiddleName
+            ?? string.Empty;
+
         LastNameTextBox.Text =
             _contact.LastName
+            ?? string.Empty;
+
+        NameSuffixTextBox.Text =
+            _contact.NameSuffix
+            ?? string.Empty;
+
+        NicknameTextBox.Text =
+            _contact.Nickname
             ?? string.Empty;
 
         DisplayNameTextBox.Text =
@@ -99,36 +128,98 @@ public partial class ContactEditWindow :
             _contact.EmailAddress
             ?? string.Empty;
 
+        BusinessEmailAddressTextBox.Text =
+            _contact.BusinessEmailAddress
+            ?? string.Empty;
+
+        PrivateEmailAddressTextBox.Text =
+            _contact.PrivateEmailAddress
+            ?? string.Empty;
+
+        AdditionalEmailAddressesTextBox.Text =
+            JoinLines(
+                _contact.AdditionalEmailAddresses);
+
         PhoneNumberTextBox.Text =
             _contact.PhoneNumber
             ?? string.Empty;
 
-        /*
-         * Entspricht der vorhandene Anzeigename exakt dem
-         * automatisch aus Vor-/Nachname bzw. E-Mail
-         * erzeugbaren Namen, behandeln wir ihn als
-         * automatisch.
-         *
-         * Dadurch wird beispielsweise aus
-         *
-         *   Lukas Förster
-         *
-         * nach Änderung des Vornamens automatisch
-         *
-         *   Lukas Test Förster.
-         *
-         * Ein bewusst individueller Anzeigename bleibt
-         * dagegen unangetastet.
-         */
+        MobilePhoneNumberTextBox.Text =
+            _contact.MobilePhoneNumber
+            ?? string.Empty;
+
+        BusinessPhoneNumberTextBox.Text =
+            _contact.BusinessPhoneNumber
+            ?? string.Empty;
+
+        PrivatePhoneNumberTextBox.Text =
+            _contact.PrivatePhoneNumber
+            ?? string.Empty;
+
+        FaxNumberTextBox.Text =
+            _contact.FaxNumber
+            ?? string.Empty;
+
+        AdditionalPhoneNumbersTextBox.Text =
+            JoinLines(
+                _contact.AdditionalPhoneNumbers);
+
+        CompanyTextBox.Text =
+            _contact.Company
+            ?? string.Empty;
+
+        DepartmentTextBox.Text =
+            _contact.Department
+            ?? string.Empty;
+
+        JobTitleTextBox.Text =
+            _contact.JobTitle
+            ?? string.Empty;
+
+        LoadAddress(
+            _contact.HomeAddress,
+            HomePostOfficeBoxTextBox,
+            HomeExtendedAddressTextBox,
+            HomeStreetTextBox,
+            HomeCityTextBox,
+            HomeRegionTextBox,
+            HomePostalCodeTextBox,
+            HomeCountryTextBox);
+
+        LoadAddress(
+            _contact.WorkAddress,
+            WorkPostOfficeBoxTextBox,
+            WorkExtendedAddressTextBox,
+            WorkStreetTextBox,
+            WorkCityTextBox,
+            WorkRegionTextBox,
+            WorkPostalCodeTextBox,
+            WorkCountryTextBox);
+
+        WebsiteTextBox.Text =
+            _contact.Website
+            ?? string.Empty;
+
+        BirthdayTextBox.Text =
+            _contact.Birthday
+            ?? string.Empty;
+
+        CategoriesTextBox.Text =
+            string.Join(
+                ", ",
+                _contact.Categories);
+
+        NotesTextBox.Text =
+            _contact.Notes
+            ?? string.Empty;
+
         var automaticDisplayName =
-            BuildAutomaticDisplayName(
-                FirstNameTextBox.Text,
-                LastNameTextBox.Text,
-                EmailAddressTextBox.Text);
+            BuildAutomaticDisplayName();
 
         _autoDisplayNameEnabled =
             string.IsNullOrWhiteSpace(
                 DisplayNameTextBox.Text) ||
+
             string.Equals(
                 DisplayNameTextBox.Text.Trim(),
                 automaticDisplayName,
@@ -156,13 +247,6 @@ public partial class ContactEditWindow :
             return;
         }
 
-        /*
-         * Sobald der Benutzer den Anzeigenamen selbst
-         * bearbeitet, ist dieser bewusst individuell.
-         *
-         * Änderungen an Vor-/Nachname überschreiben ihn dann
-         * nicht mehr automatisch.
-         */
         _autoDisplayNameEnabled =
             false;
     }
@@ -170,10 +254,7 @@ public partial class ContactEditWindow :
     private void UpdateAutomaticDisplayName()
     {
         var automaticDisplayName =
-            BuildAutomaticDisplayName(
-                FirstNameTextBox.Text,
-                LastNameTextBox.Text,
-                EmailAddressTextBox.Text);
+            BuildAutomaticDisplayName();
 
         _updatingDisplayName =
             true;
@@ -188,6 +269,38 @@ public partial class ContactEditWindow :
             _updatingDisplayName =
                 false;
         }
+    }
+
+    private string BuildAutomaticDisplayName()
+    {
+        var name =
+            string.Join(
+                " ",
+                new[]
+                {
+                    AcademicTitleTextBox.Text,
+                    FirstNameTextBox.Text,
+                    MiddleNameTextBox.Text,
+                    LastNameTextBox.Text,
+                    NameSuffixTextBox.Text
+                }
+                .Where(
+                    value =>
+                        !string.IsNullOrWhiteSpace(
+                            value))
+                .Select(
+                    value =>
+                        value.Trim()));
+
+        if (!string.IsNullOrWhiteSpace(
+                name))
+        {
+            return name;
+        }
+
+        return EmailAddressTextBox.Text?
+                   .Trim()
+               ?? string.Empty;
     }
 
     private async void SaveButton_OnClick(
@@ -260,44 +373,247 @@ public partial class ContactEditWindow :
 
     private async Task CreateContactAsync()
     {
-        _viewModel.NewFirstName =
-            FirstNameTextBox.Text;
+        var request =
+            new ContactCreateRequest
+            {
+                Salutation =
+                    NullIfWhiteSpace(
+                        SalutationTextBox.Text),
 
-        _viewModel.NewLastName =
-            LastNameTextBox.Text;
+                AcademicTitle =
+                    NullIfWhiteSpace(
+                        AcademicTitleTextBox.Text),
 
-        _viewModel.NewDisplayName =
-            DisplayNameTextBox.Text;
+                FirstName =
+                    NullIfWhiteSpace(
+                        FirstNameTextBox.Text),
 
-        _viewModel.NewEmailAddress =
-            EmailAddressTextBox.Text;
+                MiddleName =
+                    NullIfWhiteSpace(
+                        MiddleNameTextBox.Text),
 
-        _viewModel.NewPhoneNumber =
-            PhoneNumberTextBox.Text;
+                LastName =
+                    NullIfWhiteSpace(
+                        LastNameTextBox.Text),
+
+                NameSuffix =
+                    NullIfWhiteSpace(
+                        NameSuffixTextBox.Text),
+
+                Nickname =
+                    NullIfWhiteSpace(
+                        NicknameTextBox.Text),
+
+                DisplayName =
+                    NullIfWhiteSpace(
+                        DisplayNameTextBox.Text),
+
+                EmailAddress =
+                    NullIfWhiteSpace(
+                        EmailAddressTextBox.Text),
+
+                BusinessEmailAddress =
+                    NullIfWhiteSpace(
+                        BusinessEmailAddressTextBox.Text),
+
+                PrivateEmailAddress =
+                    NullIfWhiteSpace(
+                        PrivateEmailAddressTextBox.Text),
+
+                AdditionalEmailAddresses =
+                    SplitLines(
+                        AdditionalEmailAddressesTextBox.Text),
+
+                PhoneNumber =
+                    NullIfWhiteSpace(
+                        PhoneNumberTextBox.Text),
+
+                MobilePhoneNumber =
+                    NullIfWhiteSpace(
+                        MobilePhoneNumberTextBox.Text),
+
+                BusinessPhoneNumber =
+                    NullIfWhiteSpace(
+                        BusinessPhoneNumberTextBox.Text),
+
+                PrivatePhoneNumber =
+                    NullIfWhiteSpace(
+                        PrivatePhoneNumberTextBox.Text),
+
+                FaxNumber =
+                    NullIfWhiteSpace(
+                        FaxNumberTextBox.Text),
+
+                AdditionalPhoneNumbers =
+                    SplitLines(
+                        AdditionalPhoneNumbersTextBox.Text),
+
+                Company =
+                    NullIfWhiteSpace(
+                        CompanyTextBox.Text),
+
+                Department =
+                    NullIfWhiteSpace(
+                        DepartmentTextBox.Text),
+
+                JobTitle =
+                    NullIfWhiteSpace(
+                        JobTitleTextBox.Text),
+
+                HomeAddress =
+                    CreateAddress(
+                        HomePostOfficeBoxTextBox,
+                        HomeExtendedAddressTextBox,
+                        HomeStreetTextBox,
+                        HomeCityTextBox,
+                        HomeRegionTextBox,
+                        HomePostalCodeTextBox,
+                        HomeCountryTextBox),
+
+                WorkAddress =
+                    CreateAddress(
+                        WorkPostOfficeBoxTextBox,
+                        WorkExtendedAddressTextBox,
+                        WorkStreetTextBox,
+                        WorkCityTextBox,
+                        WorkRegionTextBox,
+                        WorkPostalCodeTextBox,
+                        WorkCountryTextBox),
+
+                Website =
+                    NullIfWhiteSpace(
+                        WebsiteTextBox.Text),
+
+                Birthday =
+                    NullIfWhiteSpace(
+                        BirthdayTextBox.Text),
+
+                Notes =
+                    NullIfWhiteSpace(
+                        NotesTextBox.Text),
+
+                Categories =
+                    SplitCategories(
+                        CategoriesTextBox.Text)
+            };
 
         await _viewModel
-            .CreateContactAsync();
+            .CreateContactAsync(
+                request);
     }
 
     private async Task UpdateContactAsync()
     {
-        _viewModel.EditFirstName =
-            FirstNameTextBox.Text;
+        var request =
+            new ContactUpdateRequest
+            {
+                Salutation =
+                    SalutationTextBox.Text.Trim(),
 
-        _viewModel.EditLastName =
-            LastNameTextBox.Text;
+                AcademicTitle =
+                    AcademicTitleTextBox.Text.Trim(),
 
-        _viewModel.EditDisplayName =
-            DisplayNameTextBox.Text;
+                FirstName =
+                    NullIfWhiteSpace(
+                        FirstNameTextBox.Text),
 
-        _viewModel.EditEmailAddress =
-            EmailAddressTextBox.Text;
+                MiddleName =
+                    MiddleNameTextBox.Text.Trim(),
 
-        _viewModel.EditPhoneNumber =
-            PhoneNumberTextBox.Text;
+                LastName =
+                    NullIfWhiteSpace(
+                        LastNameTextBox.Text),
+
+                NameSuffix =
+                    NameSuffixTextBox.Text.Trim(),
+
+                Nickname =
+                    NicknameTextBox.Text.Trim(),
+
+                DisplayName =
+                    NullIfWhiteSpace(
+                        DisplayNameTextBox.Text),
+
+                EmailAddress =
+                    NullIfWhiteSpace(
+                        EmailAddressTextBox.Text),
+
+                BusinessEmailAddress =
+                    BusinessEmailAddressTextBox.Text.Trim(),
+
+                PrivateEmailAddress =
+                    PrivateEmailAddressTextBox.Text.Trim(),
+
+                AdditionalEmailAddresses =
+                    SplitLines(
+                        AdditionalEmailAddressesTextBox.Text),
+
+                PhoneNumber =
+                    NullIfWhiteSpace(
+                        PhoneNumberTextBox.Text),
+
+                MobilePhoneNumber =
+                    MobilePhoneNumberTextBox.Text.Trim(),
+
+                BusinessPhoneNumber =
+                    BusinessPhoneNumberTextBox.Text.Trim(),
+
+                PrivatePhoneNumber =
+                    PrivatePhoneNumberTextBox.Text.Trim(),
+
+                FaxNumber =
+                    FaxNumberTextBox.Text.Trim(),
+
+                AdditionalPhoneNumbers =
+                    SplitLines(
+                        AdditionalPhoneNumbersTextBox.Text),
+
+                Company =
+                    CompanyTextBox.Text.Trim(),
+
+                Department =
+                    DepartmentTextBox.Text.Trim(),
+
+                JobTitle =
+                    JobTitleTextBox.Text.Trim(),
+
+                HomeAddress =
+                    CreateAddress(
+                        HomePostOfficeBoxTextBox,
+                        HomeExtendedAddressTextBox,
+                        HomeStreetTextBox,
+                        HomeCityTextBox,
+                        HomeRegionTextBox,
+                        HomePostalCodeTextBox,
+                        HomeCountryTextBox),
+
+                WorkAddress =
+                    CreateAddress(
+                        WorkPostOfficeBoxTextBox,
+                        WorkExtendedAddressTextBox,
+                        WorkStreetTextBox,
+                        WorkCityTextBox,
+                        WorkRegionTextBox,
+                        WorkPostalCodeTextBox,
+                        WorkCountryTextBox),
+
+                Website =
+                    WebsiteTextBox.Text.Trim(),
+
+                Birthday =
+                    BirthdayTextBox.Text.Trim(),
+
+                Notes =
+                    NotesTextBox.Text.Trim(),
+
+                Categories =
+                    SplitCategories(
+                        CategoriesTextBox.Text)
+            };
 
         await _viewModel
-            .UpdateSelectedContactAsync();
+            .UpdateSelectedContactAsync(
+                request);
     }
 
     private bool HasMinimumContactData()
@@ -307,45 +623,192 @@ public partial class ContactEditWindow :
                 FirstNameTextBox.Text) ||
 
             !string.IsNullOrWhiteSpace(
+                MiddleNameTextBox.Text) ||
+
+            !string.IsNullOrWhiteSpace(
                 LastNameTextBox.Text) ||
 
             !string.IsNullOrWhiteSpace(
                 DisplayNameTextBox.Text) ||
 
             !string.IsNullOrWhiteSpace(
-                EmailAddressTextBox.Text);
+                EmailAddressTextBox.Text) ||
+
+            !string.IsNullOrWhiteSpace(
+                BusinessEmailAddressTextBox.Text) ||
+
+            !string.IsNullOrWhiteSpace(
+                PrivateEmailAddressTextBox.Text) ||
+
+            SplitLines(
+                    AdditionalEmailAddressesTextBox.Text)
+                .Count >
+                0;
     }
 
-    private static string BuildAutomaticDisplayName(
-        string? firstName,
-        string? lastName,
-        string? emailAddress)
+    private static void LoadAddress(
+        ContactPostalAddress? address,
+        TextBox postOfficeBoxTextBox,
+        TextBox extendedAddressTextBox,
+        TextBox streetTextBox,
+        TextBox cityTextBox,
+        TextBox regionTextBox,
+        TextBox postalCodeTextBox,
+        TextBox countryTextBox)
     {
-        var name =
-            string.Join(
-                " ",
-                new[]
-                {
-                    firstName,
-                    lastName
-                }
-                .Where(
-                    value =>
-                        !string.IsNullOrWhiteSpace(
-                            value))
-                .Select(
-                    value =>
-                        value!.Trim()));
+        postOfficeBoxTextBox.Text =
+            address?.PostOfficeBox
+            ?? string.Empty;
 
-        if (!string.IsNullOrWhiteSpace(
-                name))
+        extendedAddressTextBox.Text =
+            address?.ExtendedAddress
+            ?? string.Empty;
+
+        streetTextBox.Text =
+            address?.Street
+            ?? string.Empty;
+
+        cityTextBox.Text =
+            address?.City
+            ?? string.Empty;
+
+        regionTextBox.Text =
+            address?.Region
+            ?? string.Empty;
+
+        postalCodeTextBox.Text =
+            address?.PostalCode
+            ?? string.Empty;
+
+        countryTextBox.Text =
+            address?.Country
+            ?? string.Empty;
+    }
+
+    private static ContactPostalAddress CreateAddress(
+        TextBox postOfficeBoxTextBox,
+        TextBox extendedAddressTextBox,
+        TextBox streetTextBox,
+        TextBox cityTextBox,
+        TextBox regionTextBox,
+        TextBox postalCodeTextBox,
+        TextBox countryTextBox)
+    {
+        return new ContactPostalAddress
         {
-            return name;
+            PostOfficeBox =
+                NullIfWhiteSpace(
+                    postOfficeBoxTextBox.Text),
+
+            ExtendedAddress =
+                NullIfWhiteSpace(
+                    extendedAddressTextBox.Text),
+
+            Street =
+                NullIfWhiteSpace(
+                    streetTextBox.Text),
+
+            City =
+                NullIfWhiteSpace(
+                    cityTextBox.Text),
+
+            Region =
+                NullIfWhiteSpace(
+                    regionTextBox.Text),
+
+            PostalCode =
+                NullIfWhiteSpace(
+                    postalCodeTextBox.Text),
+
+            Country =
+                NullIfWhiteSpace(
+                    countryTextBox.Text)
+        };
+    }
+
+    private static IReadOnlyList<string> SplitLines(
+        string? value)
+    {
+        if (string.IsNullOrWhiteSpace(
+                value))
+        {
+            return Array.Empty<string>();
         }
 
-        return emailAddress?
-                   .Trim()
-               ?? string.Empty;
+        return value
+            .Replace(
+                "\r\n",
+                "\n")
+            .Replace(
+                '\r',
+                '\n')
+            .Split(
+                '\n',
+                StringSplitOptions.RemoveEmptyEntries |
+                StringSplitOptions.TrimEntries)
+            .Where(
+                item =>
+                    !string.IsNullOrWhiteSpace(
+                        item))
+            .Distinct(
+                StringComparer.CurrentCultureIgnoreCase)
+            .ToArray();
+    }
+
+    private static IReadOnlyList<string> SplitCategories(
+        string? value)
+    {
+        if (string.IsNullOrWhiteSpace(
+                value))
+        {
+            return Array.Empty<string>();
+        }
+
+        return value
+            .Replace(
+                "\r\n",
+                "\n")
+            .Replace(
+                '\r',
+                '\n')
+            .Split(
+                new[]
+                {
+                    ',',
+                    ';',
+                    '\n'
+                },
+                StringSplitOptions.RemoveEmptyEntries |
+                StringSplitOptions.TrimEntries)
+            .Where(
+                item =>
+                    !string.IsNullOrWhiteSpace(
+                        item))
+            .Distinct(
+                StringComparer.CurrentCultureIgnoreCase)
+            .ToArray();
+    }
+
+    private static string JoinLines(
+        IEnumerable<string>? values)
+    {
+        if (values is null)
+        {
+            return string.Empty;
+        }
+
+        return string.Join(
+            Environment.NewLine,
+            values);
+    }
+
+    private static string? NullIfWhiteSpace(
+        string? value)
+    {
+        return string.IsNullOrWhiteSpace(
+                value)
+            ? null
+            : value.Trim();
     }
 
     private void CancelButton_OnClick(

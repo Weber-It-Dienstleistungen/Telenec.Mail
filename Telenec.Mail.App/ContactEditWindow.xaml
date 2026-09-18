@@ -2,10 +2,10 @@
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         Title="Telenec Mail — Kontakt"
-        Width="620"
-        Height="570"
-        MinWidth="560"
-        MinHeight="520"
+        Width="720"
+        Height="720"
+        MinWidth="620"
+        MinHeight="560"
         WindowStartupLocation="CenterOwner"
         ShowInTaskbar="False"
         Background="{StaticResource Surface.Background}"
@@ -21,8 +21,6 @@
             <RowDefinition Height="*" />
             <RowDefinition Height="Auto" />
         </Grid.RowDefinitions>
-
-        <!-- KOPF -->
 
         <StackPanel Grid.Row="0"
                     Margin="0,0,0,20">
@@ -43,11 +41,9 @@
 
         </StackPanel>
 
-        <!-- FORMULAR -->
-
         <Border
             Grid.Row="1"
-            Padding="22"
+            Padding="20"
             Background="{StaticResource Surface.Card}"
             BorderBrush="{StaticResource Border.Default}"
             BorderThickness="1"
@@ -61,103 +57,819 @@
 
                     <!-- NAME -->
 
-                    <TextBlock
-                        Text="Name"
-                        FontSize="14"
-                        FontWeight="SemiBold"
-                        Foreground="{StaticResource Text.Primary}" />
+                    <Expander
+                        Header="Name"
+                        IsExpanded="True"
+                        Foreground="{StaticResource Text.Primary}">
 
-                    <Grid Margin="0,14,0,0">
+                        <StackPanel Margin="0,14,0,8">
 
-                        <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="*" />
-                            <ColumnDefinition Width="14" />
-                            <ColumnDefinition Width="*" />
-                        </Grid.ColumnDefinitions>
+                            <Grid>
 
-                        <StackPanel Grid.Column="0">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="12" />
+                                    <ColumnDefinition Width="*" />
+                                </Grid.ColumnDefinitions>
 
-                            <TextBlock
-                                Text="Vorname"
-                                Margin="0,0,0,5"
-                                FontSize="12"
-                                Foreground="{StaticResource Text.Secondary}" />
+                                <StackPanel Grid.Column="0">
 
-                            <TextBox
-                                x:Name="FirstNameTextBox"
-                                Height="36"
-                                Padding="9,5" />
+                                    <TextBlock
+                                        Text="Anrede"
+                                        Margin="0,0,0,5"
+                                        FontSize="12"
+                                        Foreground="{StaticResource Text.Secondary}" />
+
+                                    <TextBox
+                                        x:Name="SalutationTextBox"
+                                        Height="36"
+                                        Padding="9,5" />
+
+                                </StackPanel>
+
+                                <StackPanel Grid.Column="2">
+
+                                    <TextBlock
+                                        Text="Titel"
+                                        Margin="0,0,0,5"
+                                        FontSize="12"
+                                        Foreground="{StaticResource Text.Secondary}" />
+
+                                    <TextBox
+                                        x:Name="AcademicTitleTextBox"
+                                        Height="36"
+                                        Padding="9,5" />
+
+                                </StackPanel>
+
+                            </Grid>
+
+                            <Grid Margin="0,12,0,0">
+
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="12" />
+                                    <ColumnDefinition Width="*" />
+                                </Grid.ColumnDefinitions>
+
+                                <StackPanel Grid.Column="0">
+
+                                    <TextBlock
+                                        Text="Vorname"
+                                        Margin="0,0,0,5"
+                                        FontSize="12"
+                                        Foreground="{StaticResource Text.Secondary}" />
+
+                                    <TextBox
+                                        x:Name="FirstNameTextBox"
+                                        Height="36"
+                                        Padding="9,5" />
+
+                                </StackPanel>
+
+                                <StackPanel Grid.Column="2">
+
+                                    <TextBlock
+                                        Text="Zweiter Vorname"
+                                        Margin="0,0,0,5"
+                                        FontSize="12"
+                                        Foreground="{StaticResource Text.Secondary}" />
+
+                                    <TextBox
+                                        x:Name="MiddleNameTextBox"
+                                        Height="36"
+                                        Padding="9,5" />
+
+                                </StackPanel>
+
+                            </Grid>
+
+                            <Grid Margin="0,12,0,0">
+
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="12" />
+                                    <ColumnDefinition Width="*" />
+                                </Grid.ColumnDefinitions>
+
+                                <StackPanel Grid.Column="0">
+
+                                    <TextBlock
+                                        Text="Nachname"
+                                        Margin="0,0,0,5"
+                                        FontSize="12"
+                                        Foreground="{StaticResource Text.Secondary}" />
+
+                                    <TextBox
+                                        x:Name="LastNameTextBox"
+                                        Height="36"
+                                        Padding="9,5" />
+
+                                </StackPanel>
+
+                                <StackPanel Grid.Column="2">
+
+                                    <TextBlock
+                                        Text="Namenszusatz"
+                                        Margin="0,0,0,5"
+                                        FontSize="12"
+                                        Foreground="{StaticResource Text.Secondary}" />
+
+                                    <TextBox
+                                        x:Name="NameSuffixTextBox"
+                                        Height="36"
+                                        Padding="9,5" />
+
+                                </StackPanel>
+
+                            </Grid>
+
+                            <Grid Margin="0,12,0,0">
+
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="12" />
+                                    <ColumnDefinition Width="*" />
+                                </Grid.ColumnDefinitions>
+
+                                <StackPanel Grid.Column="0">
+
+                                    <TextBlock
+                                        Text="Spitzname"
+                                        Margin="0,0,0,5"
+                                        FontSize="12"
+                                        Foreground="{StaticResource Text.Secondary}" />
+
+                                    <TextBox
+                                        x:Name="NicknameTextBox"
+                                        Height="36"
+                                        Padding="9,5" />
+
+                                </StackPanel>
+
+                                <StackPanel Grid.Column="2">
+
+                                    <TextBlock
+                                        Text="Anzeigename"
+                                        Margin="0,0,0,5"
+                                        FontSize="12"
+                                        Foreground="{StaticResource Text.Secondary}" />
+
+                                    <TextBox
+                                        x:Name="DisplayNameTextBox"
+                                        Height="36"
+                                        Padding="9,5" />
+
+                                </StackPanel>
+
+                            </Grid>
 
                         </StackPanel>
 
-                        <StackPanel Grid.Column="2">
-
-                            <TextBlock
-                                Text="Nachname"
-                                Margin="0,0,0,5"
-                                FontSize="12"
-                                Foreground="{StaticResource Text.Secondary}" />
-
-                            <TextBox
-                                x:Name="LastNameTextBox"
-                                Height="36"
-                                Padding="9,5" />
-
-                        </StackPanel>
-
-                    </Grid>
-
-                    <TextBlock
-                        Text="Anzeigename"
-                        Margin="0,14,0,5"
-                        FontSize="12"
-                        Foreground="{StaticResource Text.Secondary}" />
-
-                    <TextBox
-                        x:Name="DisplayNameTextBox"
-                        Height="36"
-                        Padding="9,5" />
-
-                    <!-- KONTAKT -->
+                    </Expander>
 
                     <Border
                         Height="1"
-                        Margin="0,22,0,20"
+                        Margin="0,12"
                         Background="{StaticResource Border.Default}" />
 
-                    <TextBlock
-                        Text="Kontakt"
-                        FontSize="14"
-                        FontWeight="SemiBold"
-                        Foreground="{StaticResource Text.Primary}" />
+                    <!-- E-MAIL -->
 
-                    <TextBlock
-                        Text="E-Mail-Adresse"
-                        Margin="0,14,0,5"
-                        FontSize="12"
-                        Foreground="{StaticResource Text.Secondary}" />
+                    <Expander
+                        Header="E-Mail"
+                        IsExpanded="True"
+                        Foreground="{StaticResource Text.Primary}">
 
-                    <TextBox
-                        x:Name="EmailAddressTextBox"
-                        Height="36"
-                        Padding="9,5" />
+                        <StackPanel Margin="0,14,0,8">
 
-                    <TextBlock
-                        Text="Telefon"
-                        Margin="0,14,0,5"
-                        FontSize="12"
-                        Foreground="{StaticResource Text.Secondary}" />
+                            <TextBlock
+                                Text="Bevorzugte E-Mail-Adresse"
+                                Margin="0,0,0,5"
+                                FontSize="12"
+                                Foreground="{StaticResource Text.Secondary}" />
 
-                    <TextBox
-                        x:Name="PhoneNumberTextBox"
-                        Height="36"
-                        Padding="9,5" />
+                            <TextBox
+                                x:Name="EmailAddressTextBox"
+                                Height="36"
+                                Padding="9,5" />
+
+                            <Grid Margin="0,12,0,0">
+
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="12" />
+                                    <ColumnDefinition Width="*" />
+                                </Grid.ColumnDefinitions>
+
+                                <StackPanel Grid.Column="0">
+
+                                    <TextBlock
+                                        Text="Geschäftlich"
+                                        Margin="0,0,0,5"
+                                        FontSize="12"
+                                        Foreground="{StaticResource Text.Secondary}" />
+
+                                    <TextBox
+                                        x:Name="BusinessEmailAddressTextBox"
+                                        Height="36"
+                                        Padding="9,5" />
+
+                                </StackPanel>
+
+                                <StackPanel Grid.Column="2">
+
+                                    <TextBlock
+                                        Text="Privat"
+                                        Margin="0,0,0,5"
+                                        FontSize="12"
+                                        Foreground="{StaticResource Text.Secondary}" />
+
+                                    <TextBox
+                                        x:Name="PrivateEmailAddressTextBox"
+                                        Height="36"
+                                        Padding="9,5" />
+
+                                </StackPanel>
+
+                            </Grid>
+
+                            <TextBlock
+                                Text="Weitere E-Mail-Adressen (eine pro Zeile)"
+                                Margin="0,12,0,5"
+                                FontSize="12"
+                                Foreground="{StaticResource Text.Secondary}" />
+
+                            <TextBox
+                                x:Name="AdditionalEmailAddressesTextBox"
+                                Height="70"
+                                Padding="9,7"
+                                AcceptsReturn="True"
+                                VerticalScrollBarVisibility="Auto" />
+
+                        </StackPanel>
+
+                    </Expander>
+
+                    <Border
+                        Height="1"
+                        Margin="0,12"
+                        Background="{StaticResource Border.Default}" />
+
+                    <!-- TELEFON -->
+
+                    <Expander
+                        Header="Telefon"
+                        IsExpanded="True"
+                        Foreground="{StaticResource Text.Primary}">
+
+                        <StackPanel Margin="0,14,0,8">
+
+                            <TextBlock
+                                Text="Bevorzugte Telefonnummer"
+                                Margin="0,0,0,5"
+                                FontSize="12"
+                                Foreground="{StaticResource Text.Secondary}" />
+
+                            <TextBox
+                                x:Name="PhoneNumberTextBox"
+                                Height="36"
+                                Padding="9,5" />
+
+                            <Grid Margin="0,12,0,0">
+
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="12" />
+                                    <ColumnDefinition Width="*" />
+                                </Grid.ColumnDefinitions>
+
+                                <StackPanel Grid.Column="0">
+
+                                    <TextBlock
+                                        Text="Mobil"
+                                        Margin="0,0,0,5"
+                                        FontSize="12"
+                                        Foreground="{StaticResource Text.Secondary}" />
+
+                                    <TextBox
+                                        x:Name="MobilePhoneNumberTextBox"
+                                        Height="36"
+                                        Padding="9,5" />
+
+                                </StackPanel>
+
+                                <StackPanel Grid.Column="2">
+
+                                    <TextBlock
+                                        Text="Geschäftlich"
+                                        Margin="0,0,0,5"
+                                        FontSize="12"
+                                        Foreground="{StaticResource Text.Secondary}" />
+
+                                    <TextBox
+                                        x:Name="BusinessPhoneNumberTextBox"
+                                        Height="36"
+                                        Padding="9,5" />
+
+                                </StackPanel>
+
+                            </Grid>
+
+                            <Grid Margin="0,12,0,0">
+
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="12" />
+                                    <ColumnDefinition Width="*" />
+                                </Grid.ColumnDefinitions>
+
+                                <StackPanel Grid.Column="0">
+
+                                    <TextBlock
+                                        Text="Privat"
+                                        Margin="0,0,0,5"
+                                        FontSize="12"
+                                        Foreground="{StaticResource Text.Secondary}" />
+
+                                    <TextBox
+                                        x:Name="PrivatePhoneNumberTextBox"
+                                        Height="36"
+                                        Padding="9,5" />
+
+                                </StackPanel>
+
+                                <StackPanel Grid.Column="2">
+
+                                    <TextBlock
+                                        Text="Fax"
+                                        Margin="0,0,0,5"
+                                        FontSize="12"
+                                        Foreground="{StaticResource Text.Secondary}" />
+
+                                    <TextBox
+                                        x:Name="FaxNumberTextBox"
+                                        Height="36"
+                                        Padding="9,5" />
+
+                                </StackPanel>
+
+                            </Grid>
+
+                            <TextBlock
+                                Text="Weitere Telefonnummern (eine pro Zeile)"
+                                Margin="0,12,0,5"
+                                FontSize="12"
+                                Foreground="{StaticResource Text.Secondary}" />
+
+                            <TextBox
+                                x:Name="AdditionalPhoneNumbersTextBox"
+                                Height="70"
+                                Padding="9,7"
+                                AcceptsReturn="True"
+                                VerticalScrollBarVisibility="Auto" />
+
+                        </StackPanel>
+
+                    </Expander>
+
+                    <Border
+                        Height="1"
+                        Margin="0,12"
+                        Background="{StaticResource Border.Default}" />
+
+                    <!-- BERUF -->
+
+                    <Expander
+                        Header="Firma und Beruf"
+                        IsExpanded="False"
+                        Foreground="{StaticResource Text.Primary}">
+
+                        <StackPanel Margin="0,14,0,8">
+
+                            <TextBlock
+                                Text="Firma"
+                                Margin="0,0,0,5"
+                                FontSize="12"
+                                Foreground="{StaticResource Text.Secondary}" />
+
+                            <TextBox
+                                x:Name="CompanyTextBox"
+                                Height="36"
+                                Padding="9,5" />
+
+                            <Grid Margin="0,12,0,0">
+
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="12" />
+                                    <ColumnDefinition Width="*" />
+                                </Grid.ColumnDefinitions>
+
+                                <StackPanel Grid.Column="0">
+
+                                    <TextBlock
+                                        Text="Abteilung"
+                                        Margin="0,0,0,5"
+                                        FontSize="12"
+                                        Foreground="{StaticResource Text.Secondary}" />
+
+                                    <TextBox
+                                        x:Name="DepartmentTextBox"
+                                        Height="36"
+                                        Padding="9,5" />
+
+                                </StackPanel>
+
+                                <StackPanel Grid.Column="2">
+
+                                    <TextBlock
+                                        Text="Position"
+                                        Margin="0,0,0,5"
+                                        FontSize="12"
+                                        Foreground="{StaticResource Text.Secondary}" />
+
+                                    <TextBox
+                                        x:Name="JobTitleTextBox"
+                                        Height="36"
+                                        Padding="9,5" />
+
+                                </StackPanel>
+
+                            </Grid>
+
+                        </StackPanel>
+
+                    </Expander>
+
+                    <Border
+                        Height="1"
+                        Margin="0,12"
+                        Background="{StaticResource Border.Default}" />
+
+                    <!-- PRIVATE ADRESSE -->
+
+                    <Expander
+                        Header="Private Adresse"
+                        IsExpanded="False"
+                        Foreground="{StaticResource Text.Primary}">
+
+                        <StackPanel Margin="0,14,0,8">
+
+                            <Grid>
+
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="12" />
+                                    <ColumnDefinition Width="*" />
+                                </Grid.ColumnDefinitions>
+
+                                <StackPanel Grid.Column="0">
+
+                                    <TextBlock
+                                        Text="Postfach"
+                                        Margin="0,0,0,5"
+                                        FontSize="12"
+                                        Foreground="{StaticResource Text.Secondary}" />
+
+                                    <TextBox
+                                        x:Name="HomePostOfficeBoxTextBox"
+                                        Height="36"
+                                        Padding="9,5" />
+
+                                </StackPanel>
+
+                                <StackPanel Grid.Column="2">
+
+                                    <TextBlock
+                                        Text="Adresszusatz"
+                                        Margin="0,0,0,5"
+                                        FontSize="12"
+                                        Foreground="{StaticResource Text.Secondary}" />
+
+                                    <TextBox
+                                        x:Name="HomeExtendedAddressTextBox"
+                                        Height="36"
+                                        Padding="9,5" />
+
+                                </StackPanel>
+
+                            </Grid>
+
+                            <TextBlock
+                                Text="Straße"
+                                Margin="0,12,0,5"
+                                FontSize="12"
+                                Foreground="{StaticResource Text.Secondary}" />
+
+                            <TextBox
+                                x:Name="HomeStreetTextBox"
+                                Height="36"
+                                Padding="9,5" />
+
+                            <Grid Margin="0,12,0,0">
+
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="130" />
+                                    <ColumnDefinition Width="12" />
+                                    <ColumnDefinition Width="*" />
+                                </Grid.ColumnDefinitions>
+
+                                <StackPanel Grid.Column="0">
+
+                                    <TextBlock
+                                        Text="PLZ"
+                                        Margin="0,0,0,5"
+                                        FontSize="12"
+                                        Foreground="{StaticResource Text.Secondary}" />
+
+                                    <TextBox
+                                        x:Name="HomePostalCodeTextBox"
+                                        Height="36"
+                                        Padding="9,5" />
+
+                                </StackPanel>
+
+                                <StackPanel Grid.Column="2">
+
+                                    <TextBlock
+                                        Text="Ort"
+                                        Margin="0,0,0,5"
+                                        FontSize="12"
+                                        Foreground="{StaticResource Text.Secondary}" />
+
+                                    <TextBox
+                                        x:Name="HomeCityTextBox"
+                                        Height="36"
+                                        Padding="9,5" />
+
+                                </StackPanel>
+
+                            </Grid>
+
+                            <Grid Margin="0,12,0,0">
+
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="12" />
+                                    <ColumnDefinition Width="*" />
+                                </Grid.ColumnDefinitions>
+
+                                <StackPanel Grid.Column="0">
+
+                                    <TextBlock
+                                        Text="Bundesland / Region"
+                                        Margin="0,0,0,5"
+                                        FontSize="12"
+                                        Foreground="{StaticResource Text.Secondary}" />
+
+                                    <TextBox
+                                        x:Name="HomeRegionTextBox"
+                                        Height="36"
+                                        Padding="9,5" />
+
+                                </StackPanel>
+
+                                <StackPanel Grid.Column="2">
+
+                                    <TextBlock
+                                        Text="Land"
+                                        Margin="0,0,0,5"
+                                        FontSize="12"
+                                        Foreground="{StaticResource Text.Secondary}" />
+
+                                    <TextBox
+                                        x:Name="HomeCountryTextBox"
+                                        Height="36"
+                                        Padding="9,5" />
+
+                                </StackPanel>
+
+                            </Grid>
+
+                        </StackPanel>
+
+                    </Expander>
+
+                    <Border
+                        Height="1"
+                        Margin="0,12"
+                        Background="{StaticResource Border.Default}" />
+
+                    <!-- GESCHÄFTSADRESSE -->
+
+                    <Expander
+                        Header="Geschäftliche Adresse"
+                        IsExpanded="False"
+                        Foreground="{StaticResource Text.Primary}">
+
+                        <StackPanel Margin="0,14,0,8">
+
+                            <Grid>
+
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="12" />
+                                    <ColumnDefinition Width="*" />
+                                </Grid.ColumnDefinitions>
+
+                                <StackPanel Grid.Column="0">
+
+                                    <TextBlock
+                                        Text="Postfach"
+                                        Margin="0,0,0,5"
+                                        FontSize="12"
+                                        Foreground="{StaticResource Text.Secondary}" />
+
+                                    <TextBox
+                                        x:Name="WorkPostOfficeBoxTextBox"
+                                        Height="36"
+                                        Padding="9,5" />
+
+                                </StackPanel>
+
+                                <StackPanel Grid.Column="2">
+
+                                    <TextBlock
+                                        Text="Adresszusatz"
+                                        Margin="0,0,0,5"
+                                        FontSize="12"
+                                        Foreground="{StaticResource Text.Secondary}" />
+
+                                    <TextBox
+                                        x:Name="WorkExtendedAddressTextBox"
+                                        Height="36"
+                                        Padding="9,5" />
+
+                                </StackPanel>
+
+                            </Grid>
+
+                            <TextBlock
+                                Text="Straße"
+                                Margin="0,12,0,5"
+                                FontSize="12"
+                                Foreground="{StaticResource Text.Secondary}" />
+
+                            <TextBox
+                                x:Name="WorkStreetTextBox"
+                                Height="36"
+                                Padding="9,5" />
+
+                            <Grid Margin="0,12,0,0">
+
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="130" />
+                                    <ColumnDefinition Width="12" />
+                                    <ColumnDefinition Width="*" />
+                                </Grid.ColumnDefinitions>
+
+                                <StackPanel Grid.Column="0">
+
+                                    <TextBlock
+                                        Text="PLZ"
+                                        Margin="0,0,0,5"
+                                        FontSize="12"
+                                        Foreground="{StaticResource Text.Secondary}" />
+
+                                    <TextBox
+                                        x:Name="WorkPostalCodeTextBox"
+                                        Height="36"
+                                        Padding="9,5" />
+
+                                </StackPanel>
+
+                                <StackPanel Grid.Column="2">
+
+                                    <TextBlock
+                                        Text="Ort"
+                                        Margin="0,0,0,5"
+                                        FontSize="12"
+                                        Foreground="{StaticResource Text.Secondary}" />
+
+                                    <TextBox
+                                        x:Name="WorkCityTextBox"
+                                        Height="36"
+                                        Padding="9,5" />
+
+                                </StackPanel>
+
+                            </Grid>
+
+                            <Grid Margin="0,12,0,0">
+
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="12" />
+                                    <ColumnDefinition Width="*" />
+                                </Grid.ColumnDefinitions>
+
+                                <StackPanel Grid.Column="0">
+
+                                    <TextBlock
+                                        Text="Bundesland / Region"
+                                        Margin="0,0,0,5"
+                                        FontSize="12"
+                                        Foreground="{StaticResource Text.Secondary}" />
+
+                                    <TextBox
+                                        x:Name="WorkRegionTextBox"
+                                        Height="36"
+                                        Padding="9,5" />
+
+                                </StackPanel>
+
+                                <StackPanel Grid.Column="2">
+
+                                    <TextBlock
+                                        Text="Land"
+                                        Margin="0,0,0,5"
+                                        FontSize="12"
+                                        Foreground="{StaticResource Text.Secondary}" />
+
+                                    <TextBox
+                                        x:Name="WorkCountryTextBox"
+                                        Height="36"
+                                        Padding="9,5" />
+
+                                </StackPanel>
+
+                            </Grid>
+
+                        </StackPanel>
+
+                    </Expander>
+
+                    <Border
+                        Height="1"
+                        Margin="0,12"
+                        Background="{StaticResource Border.Default}" />
+
+                    <!-- WEITERE ANGABEN -->
+
+                    <Expander
+                        Header="Weitere Angaben"
+                        IsExpanded="False"
+                        Foreground="{StaticResource Text.Primary}">
+
+                        <StackPanel Margin="0,14,0,8">
+
+                            <TextBlock
+                                Text="Website"
+                                Margin="0,0,0,5"
+                                FontSize="12"
+                                Foreground="{StaticResource Text.Secondary}" />
+
+                            <TextBox
+                                x:Name="WebsiteTextBox"
+                                Height="36"
+                                Padding="9,5" />
+
+                            <TextBlock
+                                Text="Geburtstag"
+                                Margin="0,12,0,5"
+                                FontSize="12"
+                                Foreground="{StaticResource Text.Secondary}" />
+
+                            <TextBox
+                                x:Name="BirthdayTextBox"
+                                Height="36"
+                                Padding="9,5"
+                                ToolTip="Beispiel: 1986-07-31" />
+
+                            <TextBlock
+                                Text="Gruppen / Kategorien"
+                                Margin="0,12,0,5"
+                                FontSize="12"
+                                Foreground="{StaticResource Text.Secondary}" />
+
+                            <TextBox
+                                x:Name="CategoriesTextBox"
+                                Height="36"
+                                Padding="9,5"
+                                ToolTip="Mehrere Gruppen durch Komma trennen" />
+
+                            <TextBlock
+                                Text="Notizen"
+                                Margin="0,12,0,5"
+                                FontSize="12"
+                                Foreground="{StaticResource Text.Secondary}" />
+
+                            <TextBox
+                                x:Name="NotesTextBox"
+                                Height="110"
+                                Padding="9,7"
+                                AcceptsReturn="True"
+                                TextWrapping="Wrap"
+                                VerticalScrollBarVisibility="Auto" />
+
+                        </StackPanel>
+
+                    </Expander>
 
                     <TextBlock
                         Margin="0,18,0,0"
-                        Text="Weitere Angaben wie Firma, mehrere E-Mail-Adressen, Telefonnummern, Adressen, Gruppen und Foto folgen im nächsten Ausbau dieses Fensters."
+                        Text="Kontaktfoto ergänzen wir im nächsten Schritt."
                         FontSize="11"
-                        TextWrapping="Wrap"
                         Foreground="{StaticResource Text.Secondary}" />
 
                 </StackPanel>
@@ -165,8 +877,6 @@
             </ScrollViewer>
 
         </Border>
-
-        <!-- BUTTONS -->
 
         <Grid
             Grid.Row="2"
@@ -192,7 +902,7 @@
                 x:Name="SaveButton"
                 Grid.Column="3"
                 Height="38"
-                MinWidth="140"
+                MinWidth="150"
                 Padding="16,0"
                 Content="Speichern"
                 IsDefault="True"
