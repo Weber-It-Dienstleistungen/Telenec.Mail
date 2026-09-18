@@ -77,38 +77,44 @@ public partial class ContactsWindow :
         }
     }
 
-    private async void CreateContactButton_OnClick(
+    private void NewContactButton_OnClick(
         object sender,
         RoutedEventArgs e)
     {
-        try
-        {
-            await _viewModel
-                .CreateContactAsync();
-        }
-        catch (Exception exception)
-        {
-            ShowOperationError(
-                "Der Kontakt konnte nicht gespeichert werden.",
-                exception);
-        }
+        var editWindow =
+            new ContactEditWindow(
+                _viewModel)
+            {
+                Owner =
+                    this
+            };
+
+        editWindow.ShowDialog();
     }
 
-    private async void SaveContactButton_OnClick(
+    private void EditContactButton_OnClick(
         object sender,
         RoutedEventArgs e)
     {
-        try
+        var contact =
+            _viewModel
+                .SelectedContact;
+
+        if (contact is null)
         {
-            await _viewModel
-                .UpdateSelectedContactAsync();
+            return;
         }
-        catch (Exception exception)
-        {
-            ShowOperationError(
-                "Der Kontakt konnte nicht aktualisiert werden.",
-                exception);
-        }
+
+        var editWindow =
+            new ContactEditWindow(
+                _viewModel,
+                contact)
+            {
+                Owner =
+                    this
+            };
+
+        editWindow.ShowDialog();
     }
 
     private async void DeleteContactButton_OnClick(
@@ -126,6 +132,7 @@ public partial class ContactsWindow :
 
         var result =
             MessageBox.Show(
+                this,
                 $"Soll der Kontakt „{contact.DisplayName}“ wirklich gelöscht werden?\n\n" +
                 "Der Kontakt wird aus dem persönlichen Telenec-Adressbuch entfernt.",
                 "Kontakt löschen",
@@ -184,6 +191,7 @@ public partial class ContactsWindow :
         Exception exception)
     {
         MessageBox.Show(
+            this,
             message +
             "\n\n" +
             exception.Message,

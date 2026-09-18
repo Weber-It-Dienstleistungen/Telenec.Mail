@@ -2,10 +2,10 @@
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         Title="Telenec Mail — Kontakte"
-        Width="1100"
-        Height="720"
-        MinWidth="950"
-        MinHeight="620"
+        Width="1050"
+        Height="700"
+        MinWidth="900"
+        MinHeight="580"
         WindowStartupLocation="CenterOwner"
         ShowInTaskbar="False"
         Background="{StaticResource Surface.Background}"
@@ -22,11 +22,15 @@
             <RowDefinition Height="Auto" />
         </Grid.RowDefinitions>
 
+        <!-- KOPF -->
+
         <Grid Grid.Row="0"
               Margin="0,0,0,20">
 
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="Auto" />
+                <ColumnDefinition Width="10" />
                 <ColumnDefinition Width="Auto" />
             </Grid.ColumnDefinitions>
 
@@ -39,8 +43,8 @@
                     Foreground="{StaticResource Text.Primary}" />
 
                 <TextBlock
-                    Text="{Binding ContactCountText}"
                     Margin="0,5,0,0"
+                    Text="{Binding ContactCountText}"
                     FontSize="12"
                     Foreground="{StaticResource Text.Secondary}" />
 
@@ -48,6 +52,15 @@
 
             <Button
                 Grid.Column="1"
+                Height="38"
+                Padding="16,0"
+                Content="+ Neuer Kontakt"
+                Cursor="Hand"
+                Style="{StaticResource Button.Primary}"
+                Click="NewContactButton_OnClick" />
+
+            <Button
+                Grid.Column="3"
                 Width="42"
                 Height="38"
                 Padding="0"
@@ -70,15 +83,17 @@
 
         </Grid>
 
+        <!-- INHALT -->
+
         <Grid Grid.Row="1">
 
             <Grid.ColumnDefinitions>
-                <ColumnDefinition Width="350" />
+                <ColumnDefinition Width="340" />
                 <ColumnDefinition Width="18" />
                 <ColumnDefinition Width="*" />
             </Grid.ColumnDefinitions>
 
-            <!-- LISTE -->
+            <!-- KONTAKTLISTE -->
 
             <Border
                 Grid.Column="0"
@@ -181,8 +196,8 @@
                                             TextTrimming="CharacterEllipsis" />
 
                                         <TextBlock
-                                            Text="{Binding EmailAddress}"
                                             Margin="0,3,0,0"
+                                            Text="{Binding EmailAddress}"
                                             FontSize="11"
                                             Foreground="{StaticResource Text.Secondary}"
                                             TextTrimming="CharacterEllipsis" />
@@ -201,313 +216,414 @@
 
             </Border>
 
-            <!-- RECHTE SEITE -->
+            <!-- DETAILANSICHT -->
 
-            <Grid Grid.Column="2">
+            <Border
+                Grid.Column="2"
+                Padding="24"
+                Background="{StaticResource Surface.Card}"
+                BorderBrush="{StaticResource Border.Default}"
+                BorderThickness="1"
+                CornerRadius="8">
 
-                <Grid.RowDefinitions>
-                    <RowDefinition Height="*" />
-                    <RowDefinition Height="18" />
-                    <RowDefinition Height="*" />
-                </Grid.RowDefinitions>
+                <Grid>
 
-                <!-- KONTAKT BEARBEITEN -->
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="*" />
+                        <RowDefinition Height="Auto" />
+                    </Grid.RowDefinitions>
 
-                <Border
-                    Grid.Row="0"
-                    Padding="22"
-                    Background="{StaticResource Surface.Card}"
-                    BorderBrush="{StaticResource Border.Default}"
-                    BorderThickness="1"
-                    CornerRadius="8">
+                    <!-- HEADER -->
 
-                    <ScrollViewer
-                        VerticalScrollBarVisibility="Auto"
-                        HorizontalScrollBarVisibility="Disabled">
+                    <Grid Grid.Row="0">
 
-                        <StackPanel>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto" />
+                            <ColumnDefinition Width="18" />
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                            <ColumnDefinition Width="10" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
 
-                            <Grid>
-
-                                <Grid.ColumnDefinitions>
-                                    <ColumnDefinition Width="*" />
-                                    <ColumnDefinition Width="Auto" />
-                                </Grid.ColumnDefinitions>
-
-                                <StackPanel>
-
-                                    <TextBlock
-                                        Text="Kontakt"
-                                        FontSize="18"
-                                        FontWeight="SemiBold"
-                                        Foreground="{StaticResource Text.Primary}" />
-
-                                    <TextBlock
-                                        Text="{Binding SelectedContact.DisplayName}"
-                                        Margin="0,4,0,0"
-                                        FontSize="12"
-                                        Foreground="{StaticResource Text.Secondary}" />
-
-                                </StackPanel>
-
-                                <Button
-                                    Grid.Column="1"
-                                    Height="36"
-                                    Padding="14,0"
-                                    Content="E-Mail schreiben"
-                                    IsEnabled="{Binding CanComposeToSelectedContact}"
-                                    Cursor="Hand"
-                                    Click="ComposeMailButton_OnClick" />
-
-                            </Grid>
-
-                            <Grid Margin="0,18,0,0">
-
-                                <Grid.ColumnDefinitions>
-                                    <ColumnDefinition Width="*" />
-                                    <ColumnDefinition Width="14" />
-                                    <ColumnDefinition Width="*" />
-                                </Grid.ColumnDefinitions>
-
-                                <StackPanel Grid.Column="0">
-
-                                    <TextBlock
-                                        Text="Vorname"
-                                        Margin="0,0,0,5"
-                                        FontSize="12"
-                                        Foreground="{StaticResource Text.Secondary}" />
-
-                                    <TextBox
-                                        Height="36"
-                                        Padding="9,5"
-                                        Text="{Binding EditFirstName,
-                                            UpdateSourceTrigger=PropertyChanged}" />
-
-                                </StackPanel>
-
-                                <StackPanel Grid.Column="2">
-
-                                    <TextBlock
-                                        Text="Nachname"
-                                        Margin="0,0,0,5"
-                                        FontSize="12"
-                                        Foreground="{StaticResource Text.Secondary}" />
-
-                                    <TextBox
-                                        Height="36"
-                                        Padding="9,5"
-                                        Text="{Binding EditLastName,
-                                            UpdateSourceTrigger=PropertyChanged}" />
-
-                                </StackPanel>
-
-                            </Grid>
+                        <Border
+                            Width="64"
+                            Height="64"
+                            CornerRadius="32"
+                            Background="{StaticResource Surface.Background}"
+                            BorderBrush="{StaticResource Border.Default}"
+                            BorderThickness="1">
 
                             <TextBlock
-                                Text="Anzeigename"
-                                Margin="0,14,0,5"
-                                FontSize="12"
-                                Foreground="{StaticResource Text.Secondary}" />
+                                Text="&#xE77B;"
+                                FontFamily="Segoe MDL2 Assets"
+                                FontSize="28"
+                                Foreground="{StaticResource Text.Secondary}"
+                                HorizontalAlignment="Center"
+                                VerticalAlignment="Center" />
 
-                            <TextBox
-                                Height="36"
-                                Padding="9,5"
-                                Text="{Binding EditDisplayName,
-                                    UpdateSourceTrigger=PropertyChanged}" />
+                        </Border>
 
-                            <TextBlock
-                                Text="E-Mail-Adresse"
-                                Margin="0,14,0,5"
-                                FontSize="12"
-                                Foreground="{StaticResource Text.Secondary}" />
-
-                            <TextBox
-                                Height="36"
-                                Padding="9,5"
-                                Text="{Binding EditEmailAddress,
-                                    UpdateSourceTrigger=PropertyChanged}" />
+                        <StackPanel
+                            Grid.Column="2"
+                            VerticalAlignment="Center">
 
                             <TextBlock
-                                Text="Telefon"
-                                Margin="0,14,0,5"
+                                Text="{Binding SelectedContact.DisplayName}"
+                                FontSize="22"
+                                FontWeight="SemiBold"
+                                Foreground="{StaticResource Text.Primary}"
+                                TextTrimming="CharacterEllipsis" />
+
+                            <TextBlock
+                                Margin="0,5,0,0"
+                                Text="{Binding SelectedContact.EmailAddress}"
                                 FontSize="12"
-                                Foreground="{StaticResource Text.Secondary}" />
-
-                            <TextBox
-                                Height="36"
-                                Padding="9,5"
-                                Text="{Binding EditPhoneNumber,
-                                    UpdateSourceTrigger=PropertyChanged}" />
-
-                            <Grid Margin="0,18,0,0">
-
-                                <Grid.ColumnDefinitions>
-                                    <ColumnDefinition Width="Auto" />
-                                    <ColumnDefinition Width="*" />
-                                    <ColumnDefinition Width="Auto" />
-                                </Grid.ColumnDefinitions>
-
-                                <Button
-                                    Grid.Column="0"
-                                    Height="38"
-                                    Padding="14,0"
-                                    Content="Kontakt löschen"
-                                    IsEnabled="{Binding CanDeleteSelectedContact}"
-                                    Cursor="Hand"
-                                    Click="DeleteContactButton_OnClick" />
-
-                                <Button
-                                    Grid.Column="2"
-                                    Height="38"
-                                    Content="Änderungen speichern"
-                                    IsEnabled="{Binding CanSaveSelectedContact}"
-                                    Style="{StaticResource Button.Primary}"
-                                    Click="SaveContactButton_OnClick" />
-
-                            </Grid>
+                                Foreground="{StaticResource Text.Secondary}"
+                                TextTrimming="CharacterEllipsis" />
 
                         </StackPanel>
 
-                    </ScrollViewer>
+                        <Button
+                            Grid.Column="3"
+                            Height="36"
+                            Padding="14,0"
+                            Content="E-Mail schreiben"
+                            IsEnabled="{Binding CanComposeToSelectedContact}"
+                            Cursor="Hand"
+                            Click="ComposeMailButton_OnClick" />
 
-                </Border>
+                        <Button
+                            Grid.Column="5"
+                            Height="36"
+                            Padding="14,0"
+                            Content="Bearbeiten"
+                            IsEnabled="{Binding HasSelectedContact}"
+                            Cursor="Hand"
+                            Style="{StaticResource Button.Primary}"
+                            Click="EditContactButton_OnClick" />
 
-                <!-- NEUER KONTAKT -->
+                    </Grid>
 
-                <Border
-                    Grid.Row="2"
-                    Padding="22"
-                    Background="{StaticResource Surface.Card}"
-                    BorderBrush="{StaticResource Border.Default}"
-                    BorderThickness="1"
-                    CornerRadius="8">
+                    <!-- DETAILS -->
 
                     <ScrollViewer
+                        Grid.Row="1"
+                        Margin="0,24,0,0"
                         VerticalScrollBarVisibility="Auto"
                         HorizontalScrollBarVisibility="Disabled">
 
                         <StackPanel>
 
+                            <!-- KONTAKT -->
+
                             <TextBlock
-                                Text="Neuer Kontakt"
-                                FontSize="18"
+                                Text="Kontakt"
+                                FontSize="14"
                                 FontWeight="SemiBold"
                                 Foreground="{StaticResource Text.Primary}" />
 
-                            <Grid Margin="0,16,0,0">
+                            <Grid Margin="0,12,0,0">
 
                                 <Grid.ColumnDefinitions>
-                                    <ColumnDefinition Width="*" />
-                                    <ColumnDefinition Width="14" />
+                                    <ColumnDefinition Width="150" />
                                     <ColumnDefinition Width="*" />
                                 </Grid.ColumnDefinitions>
 
-                                <StackPanel Grid.Column="0">
+                                <Grid.RowDefinitions>
+                                    <RowDefinition Height="Auto" />
+                                    <RowDefinition Height="Auto" />
+                                    <RowDefinition Height="Auto" />
+                                    <RowDefinition Height="Auto" />
+                                </Grid.RowDefinitions>
 
-                                    <TextBlock
-                                        Text="Vorname"
-                                        Margin="0,0,0,5"
-                                        FontSize="12"
-                                        Foreground="{StaticResource Text.Secondary}" />
+                                <TextBlock
+                                    Grid.Row="0"
+                                    Text="Vorname"
+                                    Foreground="{StaticResource Text.Secondary}" />
 
-                                    <TextBox
-                                        Height="36"
-                                        Padding="9,5"
-                                        Text="{Binding NewFirstName,
-                                            UpdateSourceTrigger=PropertyChanged}" />
+                                <TextBlock
+                                    Grid.Row="0"
+                                    Grid.Column="1"
+                                    Text="{Binding SelectedContact.FirstName}"
+                                    Foreground="{StaticResource Text.Primary}" />
 
-                                </StackPanel>
+                                <TextBlock
+                                    Grid.Row="1"
+                                    Margin="0,8,0,0"
+                                    Text="Nachname"
+                                    Foreground="{StaticResource Text.Secondary}" />
 
-                                <StackPanel Grid.Column="2">
+                                <TextBlock
+                                    Grid.Row="1"
+                                    Grid.Column="1"
+                                    Margin="0,8,0,0"
+                                    Text="{Binding SelectedContact.LastName}"
+                                    Foreground="{StaticResource Text.Primary}" />
 
-                                    <TextBlock
-                                        Text="Nachname"
-                                        Margin="0,0,0,5"
-                                        FontSize="12"
-                                        Foreground="{StaticResource Text.Secondary}" />
+                                <TextBlock
+                                    Grid.Row="2"
+                                    Margin="0,8,0,0"
+                                    Text="E-Mail"
+                                    Foreground="{StaticResource Text.Secondary}" />
 
-                                    <TextBox
-                                        Height="36"
-                                        Padding="9,5"
-                                        Text="{Binding NewLastName,
-                                            UpdateSourceTrigger=PropertyChanged}" />
+                                <TextBlock
+                                    Grid.Row="2"
+                                    Grid.Column="1"
+                                    Margin="0,8,0,0"
+                                    Text="{Binding SelectedContact.EmailAddress}"
+                                    Foreground="{StaticResource Text.Primary}" />
 
-                                </StackPanel>
+                                <TextBlock
+                                    Grid.Row="3"
+                                    Margin="0,8,0,0"
+                                    Text="Telefon"
+                                    Foreground="{StaticResource Text.Secondary}" />
+
+                                <TextBlock
+                                    Grid.Row="3"
+                                    Grid.Column="1"
+                                    Margin="0,8,0,0"
+                                    Text="{Binding SelectedContact.PhoneNumber}"
+                                    Foreground="{StaticResource Text.Primary}" />
 
                             </Grid>
+
+                            <!-- BERUF -->
+
+                            <Border
+                                Height="1"
+                                Margin="0,22,0,20"
+                                Background="{StaticResource Border.Default}" />
 
                             <TextBlock
-                                Text="Anzeigename"
-                                Margin="0,14,0,5"
-                                FontSize="12"
-                                Foreground="{StaticResource Text.Secondary}" />
+                                Text="Beruf"
+                                FontSize="14"
+                                FontWeight="SemiBold"
+                                Foreground="{StaticResource Text.Primary}" />
 
-                            <TextBox
-                                Height="36"
-                                Padding="9,5"
-                                Text="{Binding NewDisplayName,
-                                    UpdateSourceTrigger=PropertyChanged}" />
-
-                            <Grid Margin="0,14,0,0">
+                            <Grid Margin="0,12,0,0">
 
                                 <Grid.ColumnDefinitions>
-                                    <ColumnDefinition Width="*" />
-                                    <ColumnDefinition Width="14" />
+                                    <ColumnDefinition Width="150" />
                                     <ColumnDefinition Width="*" />
                                 </Grid.ColumnDefinitions>
 
-                                <StackPanel Grid.Column="0">
+                                <Grid.RowDefinitions>
+                                    <RowDefinition Height="Auto" />
+                                    <RowDefinition Height="Auto" />
+                                    <RowDefinition Height="Auto" />
+                                </Grid.RowDefinitions>
 
-                                    <TextBlock
-                                        Text="E-Mail-Adresse"
-                                        Margin="0,0,0,5"
-                                        FontSize="12"
-                                        Foreground="{StaticResource Text.Secondary}" />
+                                <TextBlock
+                                    Grid.Row="0"
+                                    Text="Firma"
+                                    Foreground="{StaticResource Text.Secondary}" />
 
-                                    <TextBox
-                                        Height="36"
-                                        Padding="9,5"
-                                        Text="{Binding NewEmailAddress,
-                                            UpdateSourceTrigger=PropertyChanged}" />
+                                <TextBlock
+                                    Grid.Row="0"
+                                    Grid.Column="1"
+                                    Text="{Binding SelectedContact.Company}"
+                                    Foreground="{StaticResource Text.Primary}" />
 
-                                </StackPanel>
+                                <TextBlock
+                                    Grid.Row="1"
+                                    Margin="0,8,0,0"
+                                    Text="Abteilung"
+                                    Foreground="{StaticResource Text.Secondary}" />
 
-                                <StackPanel Grid.Column="2">
+                                <TextBlock
+                                    Grid.Row="1"
+                                    Grid.Column="1"
+                                    Margin="0,8,0,0"
+                                    Text="{Binding SelectedContact.Department}"
+                                    Foreground="{StaticResource Text.Primary}" />
 
-                                    <TextBlock
-                                        Text="Telefon"
-                                        Margin="0,0,0,5"
-                                        FontSize="12"
-                                        Foreground="{StaticResource Text.Secondary}" />
+                                <TextBlock
+                                    Grid.Row="2"
+                                    Margin="0,8,0,0"
+                                    Text="Position"
+                                    Foreground="{StaticResource Text.Secondary}" />
 
-                                    <TextBox
-                                        Height="36"
-                                        Padding="9,5"
-                                        Text="{Binding NewPhoneNumber,
-                                            UpdateSourceTrigger=PropertyChanged}" />
-
-                                </StackPanel>
+                                <TextBlock
+                                    Grid.Row="2"
+                                    Grid.Column="1"
+                                    Margin="0,8,0,0"
+                                    Text="{Binding SelectedContact.JobTitle}"
+                                    Foreground="{StaticResource Text.Primary}" />
 
                             </Grid>
 
-                            <Button
-                                Height="38"
-                                Margin="0,18,0,0"
-                                HorizontalAlignment="Right"
-                                Content="Kontakt speichern"
-                                IsEnabled="{Binding CanCreateContact}"
-                                Style="{StaticResource Button.Primary}"
-                                Click="CreateContactButton_OnClick" />
+                            <!-- PRIVATE ADRESSE -->
+
+                            <Border
+                                Height="1"
+                                Margin="0,22,0,20"
+                                Background="{StaticResource Border.Default}" />
+
+                            <TextBlock
+                                Text="Private Adresse"
+                                FontSize="14"
+                                FontWeight="SemiBold"
+                                Foreground="{StaticResource Text.Primary}" />
+
+                            <Grid Margin="0,12,0,0">
+
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="150" />
+                                    <ColumnDefinition Width="*" />
+                                </Grid.ColumnDefinitions>
+
+                                <Grid.RowDefinitions>
+                                    <RowDefinition Height="Auto" />
+                                    <RowDefinition Height="Auto" />
+                                    <RowDefinition Height="Auto" />
+                                    <RowDefinition Height="Auto" />
+                                </Grid.RowDefinitions>
+
+                                <TextBlock
+                                    Grid.Row="0"
+                                    Text="Straße"
+                                    Foreground="{StaticResource Text.Secondary}" />
+
+                                <TextBlock
+                                    Grid.Row="0"
+                                    Grid.Column="1"
+                                    Text="{Binding SelectedContact.HomeAddress.Street}"
+                                    Foreground="{StaticResource Text.Primary}" />
+
+                                <TextBlock
+                                    Grid.Row="1"
+                                    Margin="0,8,0,0"
+                                    Text="Postleitzahl"
+                                    Foreground="{StaticResource Text.Secondary}" />
+
+                                <TextBlock
+                                    Grid.Row="1"
+                                    Grid.Column="1"
+                                    Margin="0,8,0,0"
+                                    Text="{Binding SelectedContact.HomeAddress.PostalCode}"
+                                    Foreground="{StaticResource Text.Primary}" />
+
+                                <TextBlock
+                                    Grid.Row="2"
+                                    Margin="0,8,0,0"
+                                    Text="Ort"
+                                    Foreground="{StaticResource Text.Secondary}" />
+
+                                <TextBlock
+                                    Grid.Row="2"
+                                    Grid.Column="1"
+                                    Margin="0,8,0,0"
+                                    Text="{Binding SelectedContact.HomeAddress.City}"
+                                    Foreground="{StaticResource Text.Primary}" />
+
+                                <TextBlock
+                                    Grid.Row="3"
+                                    Margin="0,8,0,0"
+                                    Text="Land"
+                                    Foreground="{StaticResource Text.Secondary}" />
+
+                                <TextBlock
+                                    Grid.Row="3"
+                                    Grid.Column="1"
+                                    Margin="0,8,0,0"
+                                    Text="{Binding SelectedContact.HomeAddress.Country}"
+                                    Foreground="{StaticResource Text.Primary}" />
+
+                            </Grid>
+
+                            <!-- WEITERE ANGABEN -->
+
+                            <Border
+                                Height="1"
+                                Margin="0,22,0,20"
+                                Background="{StaticResource Border.Default}" />
+
+                            <TextBlock
+                                Text="Weitere Angaben"
+                                FontSize="14"
+                                FontWeight="SemiBold"
+                                Foreground="{StaticResource Text.Primary}" />
+
+                            <Grid Margin="0,12,0,0">
+
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="150" />
+                                    <ColumnDefinition Width="*" />
+                                </Grid.ColumnDefinitions>
+
+                                <Grid.RowDefinitions>
+                                    <RowDefinition Height="Auto" />
+                                    <RowDefinition Height="Auto" />
+                                    <RowDefinition Height="Auto" />
+                                </Grid.RowDefinitions>
+
+                                <TextBlock
+                                    Grid.Row="0"
+                                    Text="Website"
+                                    Foreground="{StaticResource Text.Secondary}" />
+
+                                <TextBlock
+                                    Grid.Row="0"
+                                    Grid.Column="1"
+                                    Text="{Binding SelectedContact.Website}"
+                                    Foreground="{StaticResource Text.Primary}" />
+
+                                <TextBlock
+                                    Grid.Row="1"
+                                    Margin="0,8,0,0"
+                                    Text="Geburtstag"
+                                    Foreground="{StaticResource Text.Secondary}" />
+
+                                <TextBlock
+                                    Grid.Row="1"
+                                    Grid.Column="1"
+                                    Margin="0,8,0,0"
+                                    Text="{Binding SelectedContact.Birthday}"
+                                    Foreground="{StaticResource Text.Primary}" />
+
+                                <TextBlock
+                                    Grid.Row="2"
+                                    Margin="0,8,0,0"
+                                    Text="Notizen"
+                                    Foreground="{StaticResource Text.Secondary}" />
+
+                                <TextBlock
+                                    Grid.Row="2"
+                                    Grid.Column="1"
+                                    Margin="0,8,0,0"
+                                    Text="{Binding SelectedContact.Notes}"
+                                    TextWrapping="Wrap"
+                                    Foreground="{StaticResource Text.Primary}" />
+
+                            </Grid>
 
                         </StackPanel>
 
                     </ScrollViewer>
 
-                </Border>
+                    <!-- LÖSCHEN -->
 
-            </Grid>
+                    <Button
+                        Grid.Row="2"
+                        Margin="0,18,0,0"
+                        HorizontalAlignment="Left"
+                        Height="36"
+                        Padding="14,0"
+                        Content="Kontakt löschen"
+                        IsEnabled="{Binding CanDeleteSelectedContact}"
+                        Cursor="Hand"
+                        Click="DeleteContactButton_OnClick" />
+
+                </Grid>
+
+            </Border>
 
         </Grid>
+
+        <!-- FUSS -->
 
         <Grid
             Grid.Row="2"
