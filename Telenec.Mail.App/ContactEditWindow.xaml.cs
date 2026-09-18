@@ -2,6 +2,8 @@
 using System.IO;
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Controls.Primitives;
+using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
 using Telenec.Mail.App.Models;
@@ -20,6 +22,15 @@ public partial class ContactEditWindow :
 
     private readonly ContactData?
         _contact;
+
+    private readonly List<string>
+        _availableCategories =
+            new();
+
+    private readonly HashSet<string>
+        _selectedCategories =
+            new(
+                StringComparer.CurrentCultureIgnoreCase);
 
     private bool
         _autoDisplayNameEnabled;
@@ -58,6 +69,8 @@ public partial class ContactEditWindow :
             contact;
 
         InitializeForm();
+
+        InitializeCategorySelector();
 
         AcademicTitleTextBox.TextChanged +=
             NameSourceTextBox_OnTextChanged;
@@ -234,11 +247,6 @@ public partial class ContactEditWindow :
             _contact.Birthday
             ?? string.Empty;
 
-        CategoriesTextBox.Text =
-            string.Join(
-                ", ",
-                _contact.Categories);
-
         NotesTextBox.Text =
             _contact.Notes
             ?? string.Empty;
@@ -254,6 +262,268 @@ public partial class ContactEditWindow :
                 DisplayNameTextBox.Text.Trim(),
                 automaticDisplayName,
                 StringComparison.CurrentCulture);
+    }
+
+    private void InitializeCategorySelector()
+    {
+        CategoriesTextBox.IsReadOnly =
+            true;
+
+        CategoriesTextBox.IsReadOnlyCaretVisible =
+            false;
+
+        CategoriesTextBox.Cursor =
+            Cursors.Hand;
+
+        CategoriesTextBox.ToolTip =
+            "Klicken, um Gruppen und Kategorien auszuwählen.";
+
+        CategoriesTextBox.PreviewMouseLeftButtonDown +=
+            CategoriesTextBox_OnPreviewMouseLeftButtonDown;
+
+        foreach (var category in
+                 _viewModel
+                     .GetAvailableCategories())
+        {
+            EnsureAvailableCategory(
+                category);
+        }
+
+        if (_contact is not null)
+        {
+            foreach (var category in
+                     _contact.Categories)
+            {
+                var canonicalCategory =
+                    EnsureAvailableCategory(
+                        category);
+
+                if (!string.IsNullOrWhiteSpace(
+                        canonicalCategory))
+                {
+                    _selectedCategories.Add(
+                        canonicalCategory);
+                }
+            }
+        }
+
+        UpdateCategoriesTextBox();
+    }
+
+    private void CategoriesTextBox_OnPreviewMouseLeftButtonDown(
+        object sender,
+        MouseButtonEventArgs e)
+    {
+        e.Handled =
+            true;
+
+        OpenCategoryMenu();
+    }
+
+    private void OpenCategoryMenu()
+    {
+        var contextMenu =
+            new ContextMenu
+            {
+                PlacementTarget =
+                    CategoriesTextBox,
+
+                Placement =
+                    PlacementMode.Bottom
+            };
+
+        if (_availableCategories.Count ==
+            0)
+        {
+            contextMenu.Items.Add(
+                new MenuItem
+                {
+                    Header =
+                        "Noch keine Kategorien vorhanden",
+
+                    IsEnabled =
+                        false
+                });
+        }
+        else
+        {
+            foreach (var category in
+                     _availableCategories
+                         .OrderBy(
+                             value =>
+                                 value,
+                             StringComparer.CurrentCultureIgnoreCase))
+            {
+                var menuItem =
+                    new MenuItem
+                    {
+                        Header =
+                            category,
+
+                        Tag =
+                            category,
+
+                        IsCheckable =
+                            true,
+
+                        IsChecked =
+                            _selectedCategories
+                                .Contains(
+                                    category),
+
+                        StaysOpenOnClick =
+                            true
+                    };
+
+                menuItem.Click +=
+                    CategoryMenuItem_OnClick;
+
+                contextMenu.Items.Add(
+                    menuItem);
+            }
+        }
+
+        contextMenu.Items.Add(
+            new Separator());
+
+        var addCategoryItem =
+            new MenuItem
+            {
+                Header =
+                    "+ Neue Kategorie …"
+            };
+
+        addCategoryItem.Click +=
+            AddCategoryMenuItem_OnClick;
+
+        contextMenu.Items.Add(
+            addCategoryItem);
+
+        CategoriesTextBox.ContextMenu =
+            contextMenu;
+
+        contextMenu.IsOpen =
+            true;
+    }
+
+    private void CategoryMenuItem_OnClick(
+        object sender,
+        RoutedEventArgs e)
+    {
+        if (sender is not MenuItem
+            {
+                Tag: string category
+            } menuItem)
+        {
+            return;
+        }
+
+        if (menuItem.IsChecked)
+        {
+            _selectedCategories.Add(
+                category);
+        }
+        else
+        {
+            _selectedCategories.Remove(
+                category);
+        }
+
+        UpdateCategoriesTextBox();
+    }
+
+    private void AddCategoryMenuItem_OnClick(
+        object sender,
+        RoutedEventArgs e)
+    {
+        var dialog =
+            new ContactCategoryWindow
+            {
+                Owner =
+                    this
+            };
+
+        if (dialog.ShowDialog() !=
+            true)
+        {
+            return;
+        }
+
+        var canonicalCategory =
+            EnsureAvailableCategory(
+                dialog.CategoryName);
+
+        if (string.IsNullOrWhiteSpace(
+                canonicalCategory))
+        {
+            return;
+        }
+
+        _selectedCategories.Add(
+            canonicalCategory);
+
+        UpdateCategoriesTextBox();
+    }
+
+    private string EnsureAvailableCategory(
+        string? category)
+    {
+        var normalized =
+            category?
+                .Trim();
+
+        if (string.IsNullOrWhiteSpace(
+                normalized))
+        {
+            return string.Empty;
+        }
+
+        var existing =
+            _availableCategories
+                .FirstOrDefault(
+                    value =>
+                        string.Equals(
+                            value,
+                            normalized,
+                            StringComparison.CurrentCultureIgnoreCase));
+
+        if (!string.IsNullOrWhiteSpace(
+                existing))
+        {
+            return existing;
+        }
+
+        _availableCategories.Add(
+            normalized);
+
+        _availableCategories.Sort(
+            StringComparer.CurrentCultureIgnoreCase);
+
+        return normalized;
+    }
+
+    private void UpdateCategoriesTextBox()
+    {
+        CategoriesTextBox.Text =
+            string.Join(
+                ", ",
+                GetSelectedCategories());
+    }
+
+    private IReadOnlyList<string>
+        GetSelectedCategories()
+    {
+        return _availableCategories
+            .Where(
+                category =>
+                    _selectedCategories
+                        .Contains(
+                            category))
+            .OrderBy(
+                category =>
+                    category,
+                StringComparer.CurrentCultureIgnoreCase)
+            .ToArray();
     }
 
     private void SelectPhotoButton_OnClick(
@@ -390,13 +660,6 @@ public partial class ContactEditWindow :
                 transformed;
         }
 
-        /*
-         * Kontaktfotos werden bewusst als JPEG gespeichert.
-         *
-         * Dadurch bleiben die vCards klein genug, auch wenn
-         * der Benutzer ein sehr großes Smartphone-Foto oder
-         * eine verlustfreie PNG-Datei auswählt.
-         */
         var encoder =
             new JpegBitmapEncoder
             {
@@ -459,11 +722,6 @@ public partial class ContactEditWindow :
         }
         catch
         {
-            /*
-             * Ein eventuell fremdes oder beschädigtes
-             * Bildformat darf niemals verhindern, dass der
-             * restliche Kontakt bearbeitet werden kann.
-             */
             PhotoImageBrush.ImageSource =
                 null;
 
@@ -769,8 +1027,7 @@ public partial class ContactEditWindow :
                         NotesTextBox.Text),
 
                 Categories =
-                    SplitCategories(
-                        CategoriesTextBox.Text),
+                    GetSelectedCategories(),
 
                 PhotoData =
                     _photoData?
@@ -795,13 +1052,6 @@ public partial class ContactEditWindow :
 
         if (_photoChanged)
         {
-            /*
-             * Ein leeres Byte-Array bedeutet hier bewusst:
-             * vorhandenes eingebettetes PHOTO entfernen.
-             *
-             * null bedeutet dagegen:
-             * das vorhandene Foto unverändert lassen.
-             */
             photoData =
                 _photoRemoved
                     ? Array.Empty<byte>()
@@ -917,8 +1167,7 @@ public partial class ContactEditWindow :
                     NotesTextBox.Text.Trim(),
 
                 Categories =
-                    SplitCategories(
-                        CategoriesTextBox.Text),
+                    GetSelectedCategories(),
 
                 PhotoData =
                     photoData,
@@ -1060,40 +1309,6 @@ public partial class ContactEditWindow :
                 '\n')
             .Split(
                 '\n',
-                StringSplitOptions.RemoveEmptyEntries |
-                StringSplitOptions.TrimEntries)
-            .Where(
-                item =>
-                    !string.IsNullOrWhiteSpace(
-                        item))
-            .Distinct(
-                StringComparer.CurrentCultureIgnoreCase)
-            .ToArray();
-    }
-
-    private static IReadOnlyList<string> SplitCategories(
-        string? value)
-    {
-        if (string.IsNullOrWhiteSpace(
-                value))
-        {
-            return Array.Empty<string>();
-        }
-
-        return value
-            .Replace(
-                "\r\n",
-                "\n")
-            .Replace(
-                '\r',
-                '\n')
-            .Split(
-                new[]
-                {
-                    ',',
-                    ';',
-                    '\n'
-                },
                 StringSplitOptions.RemoveEmptyEntries |
                 StringSplitOptions.TrimEntries)
             .Where(

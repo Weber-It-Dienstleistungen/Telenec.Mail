@@ -174,6 +174,34 @@ public sealed class ContactsViewModel :
         !string.IsNullOrWhiteSpace(
             SelectedContact.EmailAddress);
 
+    public IReadOnlyList<string>
+        GetAvailableCategories()
+    {
+        return _allContacts
+            .SelectMany(
+                contact =>
+                    contact.Categories)
+            .Where(
+                category =>
+                    !string.IsNullOrWhiteSpace(
+                        category))
+            .Select(
+                category =>
+                    category.Trim())
+            .GroupBy(
+                category =>
+                    category,
+                StringComparer.CurrentCultureIgnoreCase)
+            .Select(
+                group =>
+                    group.First())
+            .OrderBy(
+                category =>
+                    category,
+                StringComparer.CurrentCultureIgnoreCase)
+            .ToArray();
+    }
+
     public async Task InitializeAsync(
         CancellationToken cancellationToken = default)
     {
