@@ -202,6 +202,27 @@ public sealed class ContactsViewModel :
             .ToArray();
     }
 
+    public ContactData?
+        FindContactByEmail(
+            string? emailAddress)
+    {
+        var normalizedEmail =
+            NormalizeEmailForComparison(
+                emailAddress);
+
+        if (normalizedEmail is null)
+        {
+            return null;
+        }
+
+        return _allContacts
+            .FirstOrDefault(
+                contact =>
+                    ContactContainsEmail(
+                        contact,
+                        normalizedEmail));
+    }
+
     public async Task InitializeAsync(
         CancellationToken cancellationToken = default)
     {
@@ -570,6 +591,66 @@ public sealed class ContactsViewModel :
             ContainsAnySearchValue(
                 contact.Categories,
                 searchValue);
+    }
+
+    private static bool ContactContainsEmail(
+        ContactData contact,
+        string normalizedEmail)
+    {
+        return
+            EmailEquals(
+                contact.EmailAddress,
+                normalizedEmail) ||
+
+            EmailEquals(
+                contact.BusinessEmailAddress,
+                normalizedEmail) ||
+
+            EmailEquals(
+                contact.PrivateEmailAddress,
+                normalizedEmail) ||
+
+            contact.AdditionalEmailAddresses
+                .Any(
+                    email =>
+                        EmailEquals(
+                            email,
+                            normalizedEmail));
+    }
+
+    private static bool EmailEquals(
+        string? emailAddress,
+        string normalizedEmail)
+    {
+        var contactEmail =
+            NormalizeEmailForComparison(
+                emailAddress);
+
+        return
+            contactEmail is not null &&
+            string.Equals(
+                contactEmail,
+                normalizedEmail,
+                StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static string?
+        NormalizeEmailForComparison(
+            string? emailAddress)
+    {
+        if (string.IsNullOrWhiteSpace(
+                emailAddress))
+        {
+            return null;
+        }
+
+        /*
+         * Bewusst nur trimmen.
+         *
+         * Plus-Aliase, Punkte oder andere Bestandteile der
+         * Adresse werden nicht verändert.
+         */
+        return emailAddress.Trim();
     }
 
     private static bool HasMinimumContactData(

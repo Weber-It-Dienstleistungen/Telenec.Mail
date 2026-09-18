@@ -23,6 +23,12 @@ public partial class ContactEditWindow :
     private readonly ContactData?
         _contact;
 
+    private readonly string?
+        _initialDisplayName;
+
+    private readonly string?
+        _initialEmailAddress;
+
     private readonly List<string>
         _availableCategories =
             new();
@@ -55,7 +61,9 @@ public partial class ContactEditWindow :
 
     public ContactEditWindow(
         ContactsViewModel viewModel,
-        ContactData? contact = null)
+        ContactData? contact = null,
+        string? initialDisplayName = null,
+        string? initialEmailAddress = null)
     {
         ArgumentNullException.ThrowIfNull(
             viewModel);
@@ -67,6 +75,14 @@ public partial class ContactEditWindow :
 
         _contact =
             contact;
+
+        _initialDisplayName =
+            NullIfWhiteSpace(
+                initialDisplayName);
+
+        _initialEmailAddress =
+            NullIfWhiteSpace(
+                initialEmailAddress);
 
         InitializeForm();
 
@@ -102,15 +118,39 @@ public partial class ContactEditWindow :
                 "Neuer Kontakt";
 
             SubtitleText.Text =
-                "Neuen Kontakt im persönlichen Adressbuch anlegen";
+                !string.IsNullOrWhiteSpace(
+                    _initialEmailAddress)
+                    ? "Absender als neuen Kontakt anlegen"
+                    : "Neuen Kontakt im persönlichen Adressbuch anlegen";
 
             SaveButton.Content =
                 "Kontakt speichern";
 
-            _autoDisplayNameEnabled =
-                true;
+            EmailAddressTextBox.Text =
+                _initialEmailAddress
+                ?? string.Empty;
 
-            UpdateAutomaticDisplayName();
+            if (!string.IsNullOrWhiteSpace(
+                    _initialDisplayName))
+            {
+                DisplayNameTextBox.Text =
+                    _initialDisplayName;
+
+                /*
+                 * Ein vom Absender übernommener Anzeigename
+                 * soll nicht automatisch überschrieben
+                 * werden.
+                 */
+                _autoDisplayNameEnabled =
+                    false;
+            }
+            else
+            {
+                _autoDisplayNameEnabled =
+                    true;
+
+                UpdateAutomaticDisplayName();
+            }
 
             UpdatePhotoPreview();
 
