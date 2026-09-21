@@ -3,8 +3,7 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         Title="Telenec Mail – Was ist neu?"
         Width="580"
-        SizeToContent="Height"
-        MaxHeight="650"
+        Height="650"
         ResizeMode="NoResize"
         WindowStartupLocation="CenterOwner"
         ShowInTaskbar="False"
@@ -17,9 +16,24 @@
     <Grid Margin="32">
 
         <Grid.RowDefinitions>
+
+            <!-- Kopfbereich behält immer seine benötigte Höhe. -->
             <RowDefinition Height="Auto" />
+
+            <!--
+                Der Release-Notes-Bereich erhält ausschließlich
+                den verbleibenden Platz.
+
+                Ist der Inhalt länger, scrollt nur dieser Bereich.
+            -->
+            <RowDefinition Height="*" />
+
+            <!--
+                Der Bestätigungsbutton bleibt immer vollständig
+                sichtbar und liegt außerhalb des Scrollbereichs.
+            -->
             <RowDefinition Height="Auto" />
-            <RowDefinition Height="Auto" />
+
         </Grid.RowDefinitions>
 
         <!-- FESTER KOPFBEREICH -->
@@ -52,7 +66,6 @@
         <ScrollViewer
             Grid.Row="1"
             Margin="0,18,0,0"
-            MaxHeight="330"
             VerticalScrollBarVisibility="Auto"
             HorizontalScrollBarVisibility="Disabled">
 
