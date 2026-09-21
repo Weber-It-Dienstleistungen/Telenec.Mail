@@ -7,6 +7,10 @@ public sealed class MailFolderItemViewModel : BaseViewModel
     private int _messageCount;
     private int _hierarchyDepth;
 
+    private bool _hasChildFolders;
+    private bool _isExpanded = true;
+    private bool _isVisibleInNavigation = true;
+
     public MailFolderItemViewModel(
         string folderId,
         string displayName,
@@ -54,27 +58,43 @@ public sealed class MailFolderItemViewModel : BaseViewModel
     /*
      * Nur die Navigation verwendet diese Darstellung.
      *
-     * Dadurch erscheint ein Unterordner optisch eingerückt,
-     * ohne den eigentlichen Ordnernamen zu verändern.
+     * Elternordner mit Unterordnern erhalten einen kleinen
+     * Auf-/Zuklapp-Pfeil.
+     *
+     * Normale Unterordner behalten weiterhin den bekannten
+     * Hierarchiehinweis.
      */
     public string NavigationDisplayName
     {
         get
         {
-            if (HierarchyDepth <= 0)
+            var indentation =
+                HierarchyDepth > 0
+                    ? new string(
+                        '\u2003',
+                        HierarchyDepth)
+                    : string.Empty;
+
+            if (HasChildFolders)
             {
-                return DisplayName;
+                return
+                    $"{indentation}{ExpandCollapseGlyph} {DisplayName}";
             }
 
-            var indentation =
-                new string(
-                    '\u00A0',
-                    HierarchyDepth * 3);
+            if (HierarchyDepth > 0)
+            {
+                return
+                    $"{indentation}↳ {DisplayName}";
+            }
 
-            return
-                $"{indentation}↳ {DisplayName}";
+            return DisplayName;
         }
     }
+
+    public string ExpandCollapseGlyph =>
+        IsExpanded
+            ? "▾"
+            : "▸";
 
     public int HierarchyDepth
     {
@@ -101,6 +121,75 @@ public sealed class MailFolderItemViewModel : BaseViewModel
 
             OnPropertyChanged(
                 nameof(NavigationDisplayName));
+        }
+    }
+
+    public bool HasChildFolders
+    {
+        get =>
+            _hasChildFolders;
+
+        private set
+        {
+            if (_hasChildFolders ==
+                value)
+            {
+                return;
+            }
+
+            _hasChildFolders =
+                value;
+
+            OnPropertyChanged();
+
+            OnPropertyChanged(
+                nameof(NavigationDisplayName));
+        }
+    }
+
+    public bool IsExpanded
+    {
+        get =>
+            _isExpanded;
+
+        private set
+        {
+            if (_isExpanded ==
+                value)
+            {
+                return;
+            }
+
+            _isExpanded =
+                value;
+
+            OnPropertyChanged();
+
+            OnPropertyChanged(
+                nameof(ExpandCollapseGlyph));
+
+            OnPropertyChanged(
+                nameof(NavigationDisplayName));
+        }
+    }
+
+    public bool IsVisibleInNavigation
+    {
+        get =>
+            _isVisibleInNavigation;
+
+        private set
+        {
+            if (_isVisibleInNavigation ==
+                value)
+            {
+                return;
+            }
+
+            _isVisibleInNavigation =
+                value;
+
+            OnPropertyChanged();
         }
     }
 
@@ -196,6 +285,25 @@ public sealed class MailFolderItemViewModel : BaseViewModel
     {
         HierarchyDepth =
             hierarchyDepth;
+    }
+
+    public void UpdateHierarchyState(
+        int hierarchyDepth,
+        bool hasChildFolders,
+        bool isExpanded,
+        bool isVisibleInNavigation)
+    {
+        HierarchyDepth =
+            hierarchyDepth;
+
+        HasChildFolders =
+            hasChildFolders;
+
+        IsExpanded =
+            isExpanded;
+
+        IsVisibleInNavigation =
+            isVisibleInNavigation;
     }
 
     public void DecrementUnreadCount()

@@ -147,6 +147,269 @@
     <FontFamily x:Key="Typography.FontFamily">Segoe UI Variable</FontFamily>
 
     <!-- =========================================================
+         ScrollBars
+         ========================================================= -->
+
+    <Style
+        x:Key="SlimScrollBar.VerticalThumb"
+        TargetType="Thumb">
+
+        <Setter
+            Property="OverridesDefaultStyle"
+            Value="True" />
+
+        <Setter
+            Property="IsTabStop"
+            Value="False" />
+
+        <Setter
+            Property="Focusable"
+            Value="False" />
+
+        <Setter
+            Property="MinHeight"
+            Value="28" />
+
+        <Setter Property="Template">
+
+            <Setter.Value>
+
+                <ControlTemplate TargetType="Thumb">
+
+                    <Border
+                        Margin="1"
+                        Background="{StaticResource Brand.Primary}"
+                        CornerRadius="3" />
+
+                </ControlTemplate>
+
+            </Setter.Value>
+
+        </Setter>
+
+    </Style>
+
+    <Style
+        x:Key="SlimScrollBar.HorizontalThumb"
+        TargetType="Thumb">
+
+        <Setter
+            Property="OverridesDefaultStyle"
+            Value="True" />
+
+        <Setter
+            Property="IsTabStop"
+            Value="False" />
+
+        <Setter
+            Property="Focusable"
+            Value="False" />
+
+        <Setter
+            Property="MinWidth"
+            Value="28" />
+
+        <Setter Property="Template">
+
+            <Setter.Value>
+
+                <ControlTemplate TargetType="Thumb">
+
+                    <Border
+                        Margin="1"
+                        Background="{StaticResource Brand.Primary}"
+                        CornerRadius="3" />
+
+                </ControlTemplate>
+
+            </Setter.Value>
+
+        </Setter>
+
+    </Style>
+
+    <Style
+        x:Key="SlimScrollBar.PageButton"
+        TargetType="RepeatButton">
+
+        <Setter
+            Property="OverridesDefaultStyle"
+            Value="True" />
+
+        <Setter
+            Property="Focusable"
+            Value="False" />
+
+        <Setter
+            Property="IsTabStop"
+            Value="False" />
+
+        <Setter
+            Property="Background"
+            Value="Transparent" />
+
+        <Setter
+            Property="BorderThickness"
+            Value="0" />
+
+        <Setter Property="Template">
+
+            <Setter.Value>
+
+                <ControlTemplate TargetType="RepeatButton">
+
+                    <Border
+                        Background="Transparent" />
+
+                </ControlTemplate>
+
+            </Setter.Value>
+
+        </Setter>
+
+    </Style>
+
+    <ControlTemplate
+        x:Key="SlimVerticalScrollBar"
+        TargetType="ScrollBar">
+
+        <Grid
+            Width="8"
+            Background="Transparent">
+
+            <Border
+                Width="6"
+                Margin="0,3"
+                HorizontalAlignment="Center"
+                Background="#180078C8"
+                CornerRadius="3">
+
+                <Track
+                    x:Name="PART_Track"
+                    Orientation="Vertical"
+                    IsDirectionReversed="True"
+                    Minimum="{TemplateBinding Minimum}"
+                    Maximum="{TemplateBinding Maximum}"
+                    Value="{TemplateBinding Value}"
+                    ViewportSize="{TemplateBinding ViewportSize}">
+
+                    <Track.DecreaseRepeatButton>
+
+                        <RepeatButton
+                            Command="ScrollBar.PageUpCommand"
+                            Style="{StaticResource SlimScrollBar.PageButton}" />
+
+                    </Track.DecreaseRepeatButton>
+
+                    <Track.Thumb>
+
+                        <Thumb
+                            Style="{StaticResource SlimScrollBar.VerticalThumb}" />
+
+                    </Track.Thumb>
+
+                    <Track.IncreaseRepeatButton>
+
+                        <RepeatButton
+                            Command="ScrollBar.PageDownCommand"
+                            Style="{StaticResource SlimScrollBar.PageButton}" />
+
+                    </Track.IncreaseRepeatButton>
+
+                </Track>
+
+            </Border>
+
+        </Grid>
+
+    </ControlTemplate>
+
+    <ControlTemplate
+        x:Key="SlimHorizontalScrollBar"
+        TargetType="ScrollBar">
+
+        <Grid
+            Height="8"
+            Background="Transparent">
+
+            <Border
+                Height="6"
+                Margin="3,0"
+                VerticalAlignment="Center"
+                Background="#180078C8"
+                CornerRadius="3">
+
+                <Track
+                    x:Name="PART_Track"
+                    Orientation="Horizontal"
+                    IsDirectionReversed="False"
+                    Minimum="{TemplateBinding Minimum}"
+                    Maximum="{TemplateBinding Maximum}"
+                    Value="{TemplateBinding Value}"
+                    ViewportSize="{TemplateBinding ViewportSize}">
+
+                    <Track.DecreaseRepeatButton>
+
+                        <RepeatButton
+                            Command="ScrollBar.PageLeftCommand"
+                            Style="{StaticResource SlimScrollBar.PageButton}" />
+
+                    </Track.DecreaseRepeatButton>
+
+                    <Track.Thumb>
+
+                        <Thumb
+                            Style="{StaticResource SlimScrollBar.HorizontalThumb}" />
+
+                    </Track.Thumb>
+
+                    <Track.IncreaseRepeatButton>
+
+                        <RepeatButton
+                            Command="ScrollBar.PageRightCommand"
+                            Style="{StaticResource SlimScrollBar.PageButton}" />
+
+                    </Track.IncreaseRepeatButton>
+
+                </Track>
+
+            </Border>
+
+        </Grid>
+
+    </ControlTemplate>
+
+    <Style TargetType="ScrollBar">
+
+        <Setter
+            Property="Background"
+            Value="Transparent" />
+
+        <Setter
+            Property="Focusable"
+            Value="False" />
+
+        <Setter
+            Property="Template"
+            Value="{StaticResource SlimVerticalScrollBar}" />
+
+        <Style.Triggers>
+
+            <Trigger
+                Property="Orientation"
+                Value="Horizontal">
+
+                <Setter
+                    Property="Template"
+                    Value="{StaticResource SlimHorizontalScrollBar}" />
+
+            </Trigger>
+
+        </Style.Triggers>
+
+    </Style>
+
+    <!-- =========================================================
          Primary Button
          ========================================================= -->
 
@@ -299,7 +562,7 @@
                 Value="Disabled" />
 
         <Setter Property="ScrollViewer.VerticalScrollBarVisibility"
-                Value="Disabled" />
+                Value="Auto" />
 
     </Style>
 

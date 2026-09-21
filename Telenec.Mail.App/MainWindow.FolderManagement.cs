@@ -18,6 +18,17 @@ public partial class MainWindow
     private bool
         _folderManagementOperationRunning;
 
+    private bool
+        _folderHierarchyUpdateRunning;
+
+    private bool
+        _folderHierarchyUpdateScheduled;
+
+    private readonly HashSet<string>
+        _collapsedFolderIds =
+            new(
+                StringComparer.OrdinalIgnoreCase);
+
     private Button?
         _createFolderButton;
 
@@ -278,8 +289,161 @@ public partial class MainWindow
             return;
         }
 
+        if (TryHandleFolderExpandCollapseClick(
+                e,
+                item,
+                folder))
+        {
+            return;
+        }
+
         SetFolderCreationParentCandidate(
             folder);
+    }
+
+    private bool TryHandleFolderExpandCollapseClick(
+        MouseButtonEventArgs e,
+        ListBoxItem item,
+        MailFolderItemViewModel folder)
+    {
+        if (!folder.HasChildFolders)
+        {
+            return false;
+        }
+
+        var folderNameText =
+            FindVisualDescendantByName<TextBlock>(
+                item,
+                "FolderNameText");
+
+        if (folderNameText is null ||
+            folderNameText.ActualWidth <= 0 ||
+            folderNameText.ActualHeight <= 0)
+        {
+            return false;
+        }
+
+        var mousePosition =
+            e.GetPosition(
+                folderNameText);
+
+        if (mousePosition.X < 0 ||
+            mousePosition.Y < 0 ||
+            mousePosition.X >
+                folderNameText.ActualWidth ||
+            mousePosition.Y >
+                folderNameText.ActualHeight)
+        {
+            return false;
+        }
+
+        /*
+         * Der Pfeil ist Bestandteil des NavigationDisplayName.
+         *
+         * Pro Hierarchiestufe verwenden wir dort genau ein
+         * EM-Space. Bei 14-Punkt-Navigation entspricht das
+         * ungefähr 14 Pixeln.
+         *
+         * Nur der Bereich bis kurz hinter dem Pfeil löst das
+         * Ein-/Ausklappen aus. Ein normaler Klick auf den
+         * Ordnernamen öffnet weiterhin wie gewohnt den Ordner.
+         */
+        var toggleHitWidth =
+            (folder.HierarchyDepth * 14.0) +
+            20.0;
+
+        if (mousePosition.X >
+            toggleHitWidth)
+        {
+            return false;
+        }
+
+        ToggleFolderExpansion(
+            folder);
+
+        e.Handled =
+            true;
+
+        return true;
+    }
+
+    private void ToggleFolderExpansion(
+        MailFolderItemViewModel folder)
+    {
+        if (!folder.HasChildFolders)
+        {
+            return;
+        }
+
+        var separator =
+            _folderHierarchySeparator;
+
+        if (!separator.HasValue)
+        {
+            separator =
+                DetectFolderHierarchySeparator(
+                    _viewModel
+                        .MailFolders
+                        .ToList());
+        }
+
+        if (!separator.HasValue)
+        {
+            return;
+        }
+
+        var isCurrentlyCollapsed =
+            _collapsedFolderIds.Contains(
+                folder.FolderId);
+
+        if (isCurrentlyCollapsed)
+        {
+            _collapsedFolderIds.Remove(
+                folder.FolderId);
+        }
+        else
+        {
+            _collapsedFolderIds.Add(
+                folder.FolderId);
+
+            var selectedFolder =
+                _viewModel.SelectedFolder;
+
+            if (selectedFolder is not null &&
+                IsDescendantFolder(
+                    selectedFolder.FolderId,
+                    folder.FolderId,
+                    separator.Value))
+            {
+                _viewModel.SelectedFolder =
+                    folder;
+            }
+        }
+
+        UpdateFolderHierarchy();
+    }
+
+    private static bool IsDescendantFolder(
+        string candidateFolderId,
+        string parentFolderId,
+        char separator)
+    {
+        if (string.Equals(
+                candidateFolderId,
+                parentFolderId,
+                StringComparison.OrdinalIgnoreCase))
+        {
+            return false;
+        }
+
+        var childPrefix =
+            parentFolderId +
+            separator;
+
+        return candidateFolderId
+            .StartsWith(
+                childPrefix,
+                StringComparison.OrdinalIgnoreCase);
     }
 
     private void
@@ -409,7 +573,32 @@ public partial class MainWindow
         object? sender,
         NotifyCollectionChangedEventArgs e)
     {
-        UpdateFolderHierarchy();
+        if (_folderHierarchyUpdateRunning ||
+            _folderHierarchyUpdateScheduled)
+        {
+            return;
+        }
+
+        /*
+         * ObservableCollection darf nicht innerhalb ihres
+         * eigenen CollectionChanged-Ereignisses erneut mit
+         * Move(...) verändert werden.
+         *
+         * Deshalb wird die Hierarchiesortierung bewusst auf den
+         * nächsten Dispatcher-Zyklus verschoben.
+         */
+        _folderHierarchyUpdateScheduled =
+            true;
+
+        Dispatcher.BeginInvoke(
+            new Action(
+                () =>
+                {
+                    _folderHierarchyUpdateScheduled =
+                        false;
+
+                    UpdateFolderHierarchy();
+                }));
     }
 
     private void
@@ -424,6 +613,11 @@ public partial class MainWindow
 
     private void UpdateFolderHierarchy()
     {
+        if (_folderHierarchyUpdateRunning)
+        {
+            return;
+        }
+
         var folders =
             _viewModel
                 .MailFolders
@@ -431,8 +625,23 @@ public partial class MainWindow
 
         if (folders.Count == 0)
         {
+            RefreshFolderNavigationView();
+
             return;
         }
+
+        var currentFolderIds =
+            folders
+                .Select(
+                    folder =>
+                        folder.FolderId)
+                .ToHashSet(
+                    StringComparer.OrdinalIgnoreCase);
+
+        _collapsedFolderIds.RemoveWhere(
+            folderId =>
+                !currentFolderIds.Contains(
+                    folderId));
 
         _folderHierarchySeparator ??=
             DetectFolderHierarchySeparator(
@@ -441,22 +650,379 @@ public partial class MainWindow
         var separator =
             _folderHierarchySeparator;
 
-        foreach (var folder in folders)
-        {
-            var depth =
-                separator.HasValue
-                    ? CalculateFolderHierarchyDepth(
-                        folder.FolderId,
-                        separator.Value)
-                    : 0;
+        _folderHierarchyUpdateRunning =
+            true;
 
-            folder.UpdateHierarchyDepth(
-                depth);
+        try
+        {
+            if (!separator.HasValue)
+            {
+                foreach (var folder in
+                         folders)
+                {
+                    folder.UpdateHierarchyState(
+                        hierarchyDepth:
+                            0,
+
+                        hasChildFolders:
+                            false,
+
+                        isExpanded:
+                            true,
+
+                        isVisibleInNavigation:
+                            true);
+                }
+
+                RefreshFolderNavigationView();
+            }
+            else
+            {
+                foreach (var folder in
+                         folders)
+                {
+                    var depth =
+                        CalculateFolderHierarchyDepth(
+                            folder.FolderId,
+                            separator.Value);
+
+                    folder.UpdateHierarchyDepth(
+                        depth);
+                }
+
+                var orderedFolders =
+                    OrderFoldersByHierarchy(
+                        folders,
+                        separator.Value);
+
+                for (var targetIndex = 0;
+                     targetIndex < orderedFolders.Count;
+                     targetIndex++)
+                {
+                    var folder =
+                        orderedFolders[targetIndex];
+
+                    var currentIndex =
+                        _viewModel
+                            .MailFolders
+                            .IndexOf(
+                                folder);
+
+                    if (currentIndex < 0 ||
+                        currentIndex == targetIndex)
+                    {
+                        continue;
+                    }
+
+                    _viewModel
+                        .MailFolders
+                        .Move(
+                            currentIndex,
+                            targetIndex);
+                }
+
+                var foldersById =
+                    folders
+                        .ToDictionary(
+                            folder =>
+                                folder.FolderId,
+                            StringComparer.OrdinalIgnoreCase);
+
+                foreach (var folder in
+                         folders)
+                {
+                    var depth =
+                        CalculateFolderHierarchyDepth(
+                            folder.FolderId,
+                            separator.Value);
+
+                    var hasChildFolders =
+                        HasDirectChildFolders(
+                            folder,
+                            folders,
+                            separator.Value);
+
+                    var isExpanded =
+                        !_collapsedFolderIds.Contains(
+                            folder.FolderId);
+
+                    var isVisibleInNavigation =
+                        IsFolderVisibleInNavigation(
+                            folder,
+                            foldersById,
+                            separator.Value);
+
+                    folder.UpdateHierarchyState(
+                        hierarchyDepth:
+                            depth,
+
+                        hasChildFolders:
+                            hasChildFolders,
+
+                        isExpanded:
+                            isExpanded,
+
+                        isVisibleInNavigation:
+                            isVisibleInNavigation);
+                }
+
+                RefreshFolderNavigationView();
+            }
+        }
+        finally
+        {
+            _folderHierarchyUpdateRunning =
+                false;
         }
 
         Dispatcher.BeginInvoke(
             new Action(
                 ApplyFolderNavigationBindings));
+    }
+
+    private static bool HasDirectChildFolders(
+        MailFolderItemViewModel parentFolder,
+        IReadOnlyList<MailFolderItemViewModel> folders,
+        char separator)
+    {
+        return folders.Any(
+            candidate =>
+            {
+                if (ReferenceEquals(
+                        candidate,
+                        parentFolder))
+                {
+                    return false;
+                }
+
+                var parentFolderId =
+                    GetVisibleParentFolderId(
+                        candidate.FolderId,
+                        separator);
+
+                return string.Equals(
+                    parentFolderId,
+                    parentFolder.FolderId,
+                    StringComparison.OrdinalIgnoreCase);
+            });
+    }
+
+    private bool IsFolderVisibleInNavigation(
+        MailFolderItemViewModel folder,
+        IReadOnlyDictionary<string, MailFolderItemViewModel> foldersById,
+        char separator)
+    {
+        var parentFolderId =
+            GetVisibleParentFolderId(
+                folder.FolderId,
+                separator);
+
+        var visitedParentIds =
+            new HashSet<string>(
+                StringComparer.OrdinalIgnoreCase);
+
+        while (!string.IsNullOrWhiteSpace(
+                   parentFolderId))
+        {
+            if (!visitedParentIds.Add(
+                    parentFolderId))
+            {
+                return true;
+            }
+
+            if (_collapsedFolderIds.Contains(
+                    parentFolderId))
+            {
+                return false;
+            }
+
+            if (!foldersById.ContainsKey(
+                    parentFolderId))
+            {
+                return true;
+            }
+
+            parentFolderId =
+                GetVisibleParentFolderId(
+                    parentFolderId,
+                    separator);
+        }
+
+        return true;
+    }
+
+    private void RefreshFolderNavigationView()
+    {
+        var view =
+            CollectionViewSource
+                .GetDefaultView(
+                    _viewModel.MailFolders);
+
+        view.Filter =
+            item =>
+                item is not
+                    MailFolderItemViewModel folder ||
+                folder.IsVisibleInNavigation;
+
+        view.Refresh();
+    }
+
+    private static IReadOnlyList<MailFolderItemViewModel>
+        OrderFoldersByHierarchy(
+            IReadOnlyList<MailFolderItemViewModel> folders,
+            char separator)
+    {
+        var foldersById =
+            folders
+                .ToDictionary(
+                    folder =>
+                        folder.FolderId,
+                    StringComparer.OrdinalIgnoreCase);
+
+        var rootFolders =
+            new List<MailFolderItemViewModel>();
+
+        var childrenByParentId =
+            new Dictionary<
+                string,
+                List<MailFolderItemViewModel>>(
+                    StringComparer.OrdinalIgnoreCase);
+
+        foreach (var folder in folders)
+        {
+            var parentFolderId =
+                GetVisibleParentFolderId(
+                    folder.FolderId,
+                    separator);
+
+            if (string.IsNullOrWhiteSpace(
+                    parentFolderId) ||
+                !foldersById.ContainsKey(
+                    parentFolderId))
+            {
+                rootFolders.Add(
+                    folder);
+
+                continue;
+            }
+
+            if (!childrenByParentId.TryGetValue(
+                    parentFolderId,
+                    out var children))
+            {
+                children =
+                    new List<MailFolderItemViewModel>();
+
+                childrenByParentId.Add(
+                    parentFolderId,
+                    children);
+            }
+
+            children.Add(
+                folder);
+        }
+
+        var orderedFolders =
+            new List<MailFolderItemViewModel>(
+                folders.Count);
+
+        var visitedFolderIds =
+            new HashSet<string>(
+                StringComparer.OrdinalIgnoreCase);
+
+        void AppendFolderAndChildren(
+            MailFolderItemViewModel folder)
+        {
+            if (!visitedFolderIds.Add(
+                    folder.FolderId))
+            {
+                return;
+            }
+
+            orderedFolders.Add(
+                folder);
+
+            if (!childrenByParentId.TryGetValue(
+                    folder.FolderId,
+                    out var children))
+            {
+                return;
+            }
+
+            foreach (var child in
+                     children)
+            {
+                AppendFolderAndChildren(
+                    child);
+            }
+        }
+
+        foreach (var rootFolder in
+                 rootFolders)
+        {
+            AppendFolderAndChildren(
+                rootFolder);
+        }
+
+        foreach (var folder in
+                 folders)
+        {
+            AppendFolderAndChildren(
+                folder);
+        }
+
+        return orderedFolders;
+    }
+
+    private static string?
+        GetVisibleParentFolderId(
+            string folderId,
+            char separator)
+    {
+        var normalizedPath =
+            NormalizeFolderHierarchyPath(
+                folderId,
+                separator);
+
+        if (string.IsNullOrWhiteSpace(
+                normalizedPath))
+        {
+            return null;
+        }
+
+        var lastSeparatorIndex =
+            normalizedPath.LastIndexOf(
+                separator);
+
+        if (lastSeparatorIndex < 0)
+        {
+            return null;
+        }
+
+        var normalizedParentPath =
+            normalizedPath[
+                ..lastSeparatorIndex];
+
+        if (string.IsNullOrWhiteSpace(
+                normalizedParentPath))
+        {
+            return null;
+        }
+
+        var inboxPrefix =
+            "INBOX" +
+            separator;
+
+        if (folderId.StartsWith(
+                inboxPrefix,
+                StringComparison.OrdinalIgnoreCase))
+        {
+            return
+                inboxPrefix +
+                normalizedParentPath;
+        }
+
+        return normalizedParentPath;
     }
 
     private static char?
@@ -526,28 +1092,6 @@ public partial class MainWindow
         string folderId,
         char separator)
     {
-        /*
-         * Unser Server verwendet offenbar INBOX als Präfix des
-         * persönlichen IMAP-Namensraums.
-         *
-         * Beispiel:
-         *
-         * INBOX
-         * INBOX.Gesendet
-         * INBOX.Freimaurerei
-         * INBOX.testüberordner
-         * INBOX.testüberordner.testunterordner
-         *
-         * "INBOX." ist dabei KEINE sichtbare Hierarchiestufe.
-         *
-         * Deshalb:
-         *
-         * INBOX.Freimaurerei
-         *      -> Tiefe 0
-         *
-         * INBOX.testüberordner.testunterordner
-         *      -> Tiefe 1
-         */
         var normalizedPath =
             NormalizeFolderHierarchyPath(
                 folderId,
@@ -1069,13 +1613,6 @@ public partial class MainWindow
             return;
         }
 
-        /*
-         * Unterordner werden bereits im aktuell geladenen
-         * Ordnerbaum erkannt.
-         *
-         * Damit muss der Benutzer nicht erst einen serverseitigen
-         * DELETE-Fehler bekommen.
-         */
         if (HasChildFolders(
                 folder))
         {
@@ -1148,14 +1685,6 @@ public partial class MainWindow
         }
         catch (InvalidOperationException exception)
         {
-            /*
-             * Der Server behält zusätzlich seine eigene
-             * Schutzprüfung.
-             *
-             * Sollte sich die Ordnerstruktur zwischen unserem
-             * UI-Check und DELETE geändert haben, bekommen wir
-             * weiterhin eine verständliche Meldung.
-             */
             MessageBox.Show(
                 this,
                 exception.Message,
