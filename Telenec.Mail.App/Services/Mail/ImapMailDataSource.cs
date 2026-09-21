@@ -1484,30 +1484,73 @@ public sealed class ImapMailDataSource : IMailDataSource
             IMessageSummary summary,
             IReadOnlySet<string> inlinePartSpecifiers)
     {
+        /*
+         * MailKit summary.Attachments enthält nur MIME-Parts,
+         * deren Content-Disposition ausdrücklich "attachment"
+         * lautet.
+         *
+         * Einige Mailclients - insbesondere Apple Mail auf
+         * iPhone/iPad - versenden Bilder jedoch als
+         * Content-Disposition: inline, auch wenn kein HTML-
+         * Body vorhanden ist, der dieses Bild per cid:
+         * referenziert.
+         *
+         * Solche Bilder würden sonst vollständig aus der
+         * Oberfläche verschwinden:
+         *
+         * - nicht im HTML gerendert
+         * - nicht in summary.Attachments enthalten
+         *
+         * Deshalb betrachten wir zusätzlich alle image/*-
+         * BodyParts als Fallback-Anhänge, sofern sie nicht
+         * bereits erfolgreich als echtes Inline-Bild
+         * aufgelöst wurden.
+         */
+        var attachmentCandidates =
+            summary
+                .BodyParts
+                .OfType<BodyPartBasic>()
+                .Where(
+                    bodyPart =>
+                        !string.IsNullOrWhiteSpace(
+                            bodyPart.PartSpecifier))
+                .Where(
+                    bodyPart =>
+                        !inlinePartSpecifiers.Contains(
+                            bodyPart.PartSpecifier))
+                .Where(
+                    bodyPart =>
+                        !IsSmimeSignaturePart(
+                            bodyPart))
+                .Where(
+                    bodyPart =>
+                        bodyPart.IsAttachment ||
+                        string.Equals(
+                            bodyPart.ContentType.MediaType,
+                            "image",
+                            StringComparison.OrdinalIgnoreCase))
+                .GroupBy(
+                    bodyPart =>
+                        bodyPart.PartSpecifier,
+                    StringComparer.Ordinal)
+                .Select(
+                    group =>
+                        group.First())
+                .ToList();
+
         var attachments =
             new List<MailAttachmentData>();
 
         var attachmentNumber =
             0;
 
-        foreach (var attachment in summary.Attachments)
+        foreach (var attachment in
+                 attachmentCandidates)
         {
-            if (IsSmimeSignaturePart(
-                    attachment))
-            {
-                continue;
-            }
-
             var partSpecifier =
                 attachment.PartSpecifier;
 
             if (string.IsNullOrWhiteSpace(
-                    partSpecifier))
-            {
-                continue;
-            }
-
-            if (inlinePartSpecifiers.Contains(
                     partSpecifier))
             {
                 continue;
