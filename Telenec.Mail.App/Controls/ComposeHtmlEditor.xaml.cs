@@ -479,6 +479,7 @@ public partial class ComposeHtmlEditor :
                 body {
                     font-family: "Segoe UI", sans-serif;
                     font-size: 14px;
+                    color: #1F2328;
                 }
 
                 #editor {
@@ -490,7 +491,7 @@ public partial class ComposeHtmlEditor :
                     overflow-y: auto;
                     overflow-x: hidden;
                     outline: none;
-                    white-space: normal;
+                    white-space: pre-wrap;
                     overflow-wrap: anywhere;
                 }
 
