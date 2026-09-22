@@ -13,4 +13,5 @@ public sealed record MailDraftEditData(
     string Body,
     string? ParentMessageId,
     IReadOnlyList<string> ParentReferences,
-    IReadOnlyList<MailSendAttachmentData> Attachments);
+    IReadOnlyList<MailSendAttachmentData> Attachments,
+    string? HtmlBody = null);
