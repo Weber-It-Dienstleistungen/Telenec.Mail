@@ -22,6 +22,9 @@ public partial class MailPrintWindow :
     private bool
         _isClosed;
 
+    private string?
+        _temporaryPrintDocumentPath;
+
     public MailPrintWindow(
         MailMessageItemViewModel message,
         bool allowExternalImages)
@@ -58,10 +61,46 @@ public partial class MailPrintWindow :
                 BuildPrintDocument(
                     _message);
 
+            /*
+             * NavigateToString besitzt eine Größenbegrenzung
+             * von ungefähr 2 MB.
+             *
+             * HTML-Mails mit eingebetteten Bildern können
+             * diese Grenze leicht überschreiten.
+             *
+             * Deshalb laden wir die Druckansicht über eine
+             * temporäre lokale HTML-Datei.
+             */
+            var temporaryPath =
+                CreateTemporaryPrintDocumentPath();
+
+            await File.WriteAllTextAsync(
+                temporaryPath,
+                printDocument,
+                new UTF8Encoding(
+                    encoderShouldEmitUTF8Identifier:
+                        false));
+
+            if (_isClosed)
+            {
+                TryDeleteTemporaryPrintDocument(
+                    temporaryPath);
+
+                return;
+            }
+
+            _temporaryPrintDocumentPath =
+                temporaryPath;
+
+            var printDocumentUri =
+                new Uri(
+                    temporaryPath,
+                    UriKind.Absolute);
+
             PrintWebView
                 .CoreWebView2
-                .NavigateToString(
-                    printDocument);
+                .Navigate(
+                    printDocumentUri.AbsoluteUri);
         }
         catch
         {
@@ -87,13 +126,12 @@ public partial class MailPrintWindow :
                 .CoreWebView2;
 
         /*
-         * Das äußere Druckdokument stammt vollständig
-         * von Telenec Mail und verwendet ein kleines
-         * internes Script ausschließlich dafür, die
-         * eingebettete Mail auf ihre Druckhöhe zu bringen.
+         * Script ist ausschließlich für unser eigenes
+         * Druckdokument erforderlich.
          *
-         * Der eigentliche Mailinhalt läuft dagegen in
-         * einem sandboxed iframe OHNE Scriptfreigabe.
+         * Der eigentliche Mailinhalt wird zunächst mit
+         * DOMParser als inertes Dokument verarbeitet und
+         * anschließend bereinigt.
          */
         coreWebView.Settings.IsScriptEnabled =
             true;
@@ -122,20 +160,11 @@ public partial class MailPrintWindow :
         coreWebView.NavigationStarting +=
             CoreWebView2_OnNavigationStarting;
 
-        coreWebView.FrameNavigationStarting +=
-            CoreWebView2_OnFrameNavigationStarting;
-
         /*
-         * Für die Druckansicht beobachten wir ALLE
-         * Netzwerkressourcen.
+         * Auch für die Druckansicht gilt:
          *
-         * Externe CSS-, Script-, Font- und sonstige
-         * Ressourcen dürfen nicht still im Hintergrund
-         * nachgeladen werden.
-         *
-         * Wurde für die aktuell angezeigte Mail zuvor
-         * ausdrücklich "Trotzdem laden" gewählt, dürfen
-         * ausschließlich externe Bilder geladen werden.
+         * Keine externen Ressourcen still im Hintergrund
+         * laden.
          */
         coreWebView.AddWebResourceRequestedFilter(
             "*",
@@ -183,9 +212,6 @@ public partial class MailPrintWindow :
         object? sender,
         CoreWebView2NewWindowRequestedEventArgs e)
     {
-        /*
-         * Die Druckvorschau öffnet keinerlei Links.
-         */
         e.Handled =
             true;
     }
@@ -201,24 +227,9 @@ public partial class MailPrintWindow :
         }
 
         /*
-         * Ein Klick innerhalb einer Mail darf die
-         * Druckvorschau nicht auf eine Webseite
-         * navigieren.
+         * Links aus einer Mail dürfen die Druckansicht
+         * nicht verlassen.
          */
-        e.Cancel =
-            true;
-    }
-
-    private void CoreWebView2_OnFrameNavigationStarting(
-        object? sender,
-        CoreWebView2NavigationStartingEventArgs e)
-    {
-        if (!IsExternalWebUri(
-                e.Uri))
-        {
-            return;
-        }
-
         e.Cancel =
             true;
     }
@@ -237,11 +248,9 @@ public partial class MailPrintWindow :
         }
 
         /*
-         * Nur wenn externe Bilder für genau diese Mail
-         * bereits ausdrücklich freigegeben wurden, darf
-         * WebView2 HTTP(S)-Bilder laden.
-         *
-         * Alles andere bleibt auch beim Drucken blockiert.
+         * Hat der Benutzer für genau diese Nachricht zuvor
+         * "Trotzdem laden" gewählt, dürfen ausschließlich
+         * externe Bilder geladen werden.
          */
         if (_allowExternalImages &&
             e.ResourceContext ==
@@ -275,15 +284,25 @@ public partial class MailPrintWindow :
 
         try
         {
+            /*
+             * Browser statt System:
+             *
+             * Browser öffnet die WebView2-/Edge-
+             * Druckoberfläche MIT Seitenvorschau.
+             *
+             * System würde lediglich den Windows-
+             * Systemdruckdialog öffnen, der für unsere
+             * WebView2-Seite keine Seitenansicht anbietet.
+             */
             PrintWebView
                 .CoreWebView2
                 .ShowPrintUI(
-                    CoreWebView2PrintDialogKind.System);
+                    CoreWebView2PrintDialogKind.Browser);
         }
         catch
         {
             MessageBox.Show(
-                "Der Windows-Druckdialog konnte nicht geöffnet werden.",
+                "Der Druckdialog konnte nicht geöffnet werden.",
                 "Drucken nicht möglich",
                 MessageBoxButton.OK,
                 MessageBoxImage.Error);
@@ -321,9 +340,6 @@ public partial class MailPrintWindow :
                 coreWebView.NavigationStarting -=
                     CoreWebView2_OnNavigationStarting;
 
-                coreWebView.FrameNavigationStarting -=
-                    CoreWebView2_OnFrameNavigationStarting;
-
                 coreWebView.WebResourceRequested -=
                     CoreWebView2_OnWebResourceRequested;
             }
@@ -335,6 +351,48 @@ public partial class MailPrintWindow :
         try
         {
             PrintWebView.Dispose();
+        }
+        catch
+        {
+        }
+
+        var temporaryPath =
+            _temporaryPrintDocumentPath;
+
+        _temporaryPrintDocumentPath =
+            null;
+
+        if (!string.IsNullOrWhiteSpace(
+                temporaryPath))
+        {
+            TryDeleteTemporaryPrintDocument(
+                temporaryPath);
+        }
+    }
+
+    private static string
+        CreateTemporaryPrintDocumentPath()
+    {
+        return Path.Combine(
+            Path.GetTempPath(),
+            "TelenecMail_Print_" +
+            Guid.NewGuid()
+                .ToString("N") +
+            ".html");
+    }
+
+    private static void
+        TryDeleteTemporaryPrintDocument(
+            string filePath)
+    {
+        try
+        {
+            if (File.Exists(
+                    filePath))
+            {
+                File.Delete(
+                    filePath);
+            }
         }
         catch
         {
@@ -398,12 +456,12 @@ public partial class MailPrintWindow :
                     message);
 
         /*
-         * Der eigentliche Mailinhalt wird Base64-kodiert
-         * an das interne Druckdokument übergeben.
+         * Der fremde Mailinhalt wird nicht direkt in unser
+         * eigenes HTML hineinkopiert.
          *
-         * Dadurch kann fremdes HTML weder unser äußeres
-         * Dokument noch das interne Script syntaktisch
-         * verlassen.
+         * Stattdessen wird er Base64-kodiert übergeben,
+         * anschließend im Browser als inertes Dokument
+         * geparst und bereinigt.
          */
         var bodyBase64 =
             Convert.ToBase64String(
@@ -445,14 +503,21 @@ public partial class MailPrintWindow :
             $$"""
             <!DOCTYPE html>
             <html lang="de">
+
             <head>
+
                 <meta charset="utf-8">
 
                 <meta
                     name="viewport"
                     content="width=device-width, initial-scale=1">
 
+                <meta
+                    http-equiv="Content-Security-Policy"
+                    content="default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; img-src data: http: https:; font-src data:;">
+
                 <style>
+
                     @page {
                         margin: 16mm;
                     }
@@ -480,13 +545,13 @@ public partial class MailPrintWindow :
                     }
 
                     .print-header {
-                        margin: 0 0 22px 0;
-                        padding: 0 0 18px 0;
+                        margin: 0 0 20px 0;
+                        padding: 0 0 16px 0;
                         border-bottom: 1px solid #D8DEE4;
                     }
 
                     .subject {
-                        margin: 0 0 16px 0;
+                        margin: 0 0 14px 0;
                         font-size: 20pt;
                         line-height: 1.2;
                         font-weight: 600;
@@ -519,21 +584,23 @@ public partial class MailPrintWindow :
                         font-weight: 600;
                     }
 
-                    #mailBody {
+                    #mailBodyHost {
                         display: block;
                         width: 100%;
-                        min-height: 200px;
-                        border: 0;
-                        overflow: hidden;
-                        background: white;
+                        min-width: 0;
                     }
 
                     @media print {
+
                         .print-header {
                             break-inside: avoid;
+                            page-break-inside: avoid;
                         }
+
                     }
+
                 </style>
+
             </head>
 
             <body>
@@ -567,20 +634,19 @@ public partial class MailPrintWindow :
 
                 </section>
 
-                <!--
-                    sandbox erlaubt dem Host das Lesen der
-                    Dokumenthöhe, aber ausdrücklich KEINE
-                    Scripts aus der E-Mail.
-                -->
-                <iframe
-                    id="mailBody"
-                    sandbox="allow-same-origin"></iframe>
+                <div id="mailBodyHost"></div>
 
                 <script>
                     (() => {
-                        const frame =
+
+                        const host =
                             document.getElementById(
-                                "mailBody");
+                                "mailBodyHost");
+
+                        const shadow =
+                            host.attachShadow({
+                                mode: "open"
+                            });
 
                         const encoded =
                             "{{bodyBase64}}";
@@ -597,98 +663,311 @@ public partial class MailPrintWindow :
                                 .decode(
                                     bytes);
 
-                        let resizeObserver =
-                            null;
+                        /*
+                         * DOMParser erzeugt zunächst ein
+                         * inertes Dokument.
+                         *
+                         * Fremde Scripts werden dabei nicht
+                         * ausgeführt.
+                         */
+                        const parser =
+                            new DOMParser();
 
-                        let readyReported =
-                            false;
+                        const mailDocument =
+                            parser.parseFromString(
+                                html,
+                                "text/html");
 
-                        function resizeFrame() {
-                            try {
-                                const documentElement =
-                                    frame
-                                        .contentDocument
-                                        ?.documentElement;
+                        /*
+                         * Aktive oder interaktive Elemente
+                         * werden vollständig entfernt.
+                         */
+                        const forbiddenElements =
+                            mailDocument.querySelectorAll(
+                                [
+                                    "script",
+                                    "iframe",
+                                    "frame",
+                                    "frameset",
+                                    "object",
+                                    "embed",
+                                    "applet",
+                                    "form",
+                                    "input",
+                                    "button",
+                                    "textarea",
+                                    "select",
+                                    "option",
+                                    "base",
+                                    "meta",
+                                    "link"
+                                ].join(","));
 
-                                const body =
-                                    frame
-                                        .contentDocument
-                                        ?.body;
+                        for (const element
+                             of forbiddenElements) {
+                            element.remove();
+                        }
 
-                                if (!documentElement) {
-                                    return;
-                                }
+                        /*
+                         * Eventhandler wie onclick/onload
+                         * dürfen ebenfalls nicht in die
+                         * Druckansicht übernommen werden.
+                         */
+                        for (const element
+                             of mailDocument
+                                 .querySelectorAll("*")) {
 
-                                const height =
-                                    Math.max(
-                                        documentElement.scrollHeight,
-                                        documentElement.offsetHeight,
-                                        body?.scrollHeight ?? 0,
-                                        body?.offsetHeight ?? 0,
-                                        200);
+                            for (const attribute
+                                 of Array.from(
+                                     element.attributes)) {
 
-                                frame.style.height =
-                                    `${height + 20}px`;
+                                const name =
+                                    attribute
+                                        .name
+                                        .toLowerCase();
 
-                                if (!readyReported) {
-                                    readyReported =
-                                        true;
+                                const value =
+                                    attribute
+                                        .value
+                                        .trim()
+                                        .toLowerCase();
 
-                                    window.chrome
-                                        .webview
-                                        .postMessage(
-                                            "printReady");
-                                }
-                            }
-                            catch {
-                                if (!readyReported) {
-                                    readyReported =
-                                        true;
-
-                                    window.chrome
-                                        .webview
-                                        .postMessage(
-                                            "printReady");
+                                if (name.startsWith(
+                                        "on") ||
+                                    name === "srcdoc" ||
+                                    (
+                                        (
+                                            name === "href" ||
+                                            name === "src" ||
+                                            name === "xlink:href"
+                                        ) &&
+                                        value.startsWith(
+                                            "javascript:")
+                                    )) {
+                                    element.removeAttribute(
+                                        attribute.name);
                                 }
                             }
                         }
 
-                        frame.addEventListener(
-                            "load",
-                            () => {
-                                requestAnimationFrame(
-                                    () => {
-                                        requestAnimationFrame(
-                                            resizeFrame);
-                                    });
+                        /*
+                         * Styles aus der Mail bleiben innerhalb
+                         * des Shadow DOM erhalten und können
+                         * dadurch unseren Druckkopf nicht
+                         * beeinflussen.
+                         */
+                        for (const styleElement
+                             of mailDocument
+                                 .querySelectorAll(
+                                     "style")) {
 
-                                try {
-                                    const documentElement =
-                                        frame
-                                            .contentDocument
-                                            ?.documentElement;
+                            const styleCopy =
+                                document.createElement(
+                                    "style");
 
-                                    if (documentElement &&
-                                        typeof ResizeObserver !==
-                                            "undefined") {
-                                        resizeObserver =
-                                            new ResizeObserver(
-                                                resizeFrame);
+                            styleCopy.textContent =
+                                styleElement.textContent
+                                ?? "";
 
-                                        resizeObserver.observe(
-                                            documentElement);
-                                    }
+                            shadow.appendChild(
+                                styleCopy);
+                        }
+
+                        /*
+                         * Diese Regeln werden absichtlich
+                         * NACH den Mail-Styles eingefügt.
+                         *
+                         * Große Fotos werden dadurch auf die
+                         * verfügbare Druckbreite und maximal
+                         * ungefähr eine Seite Höhe begrenzt.
+                         */
+                        const printOverrides =
+                            document.createElement(
+                                "style");
+
+                        printOverrides.textContent =
+                            `
+                            :host {
+                                display: block;
+                                width: 100%;
+                                min-width: 0;
+                            }
+
+                            * {
+                                box-sizing: border-box;
+                            }
+
+                            img {
+                                max-width: 100% !important;
+                                max-height: 220mm !important;
+                                width: auto !important;
+                                height: auto !important;
+                                object-fit: contain !important;
+
+                                break-inside: avoid !important;
+                                page-break-inside: avoid !important;
+                            }
+
+                            table {
+                                max-width: 100% !important;
+                            }
+
+                            pre {
+                                white-space: pre-wrap !important;
+                                overflow-wrap: anywhere !important;
+                            }
+
+                            body,
+                            div,
+                            p,
+                            span,
+                            td,
+                            th {
+                                overflow-wrap: anywhere;
+                            }
+
+                            @media print {
+
+                                img {
+                                    break-inside: avoid !important;
+                                    page-break-inside: avoid !important;
                                 }
-                                catch {
+
+                            }
+                            `;
+
+                        shadow.appendChild(
+                            printOverrides);
+
+                        const mailContent =
+                            document.createElement(
+                                "div");
+
+                        mailContent.setAttribute(
+                            "part",
+                            "mail-content");
+
+                        while (mailDocument.body.firstChild) {
+
+                            mailContent.appendChild(
+                                mailDocument.body.firstChild);
+
+                        }
+
+                        shadow.appendChild(
+                            mailContent);
+
+                        /*
+                         * Links bleiben sichtbar, sind in der
+                         * Druckansicht aber nicht anklickbar.
+                         */
+                        shadow.addEventListener(
+                            "click",
+                            event => {
+
+                                const target =
+                                    event.target;
+
+                                if (!(target instanceof Element)) {
+                                    return;
                                 }
+
+                                if (target.closest(
+                                        "a")) {
+                                    event.preventDefault();
+                                }
+
                             });
 
-                        frame.srcdoc =
-                            html;
+                        async function waitForImages() {
+
+                            const images =
+                                Array.from(
+                                    shadow.querySelectorAll(
+                                        "img"));
+
+                            if (images.length === 0) {
+                                return;
+                            }
+
+                            const imagePromises =
+                                images.map(
+                                    image => {
+
+                                        if (image.complete) {
+                                            return Promise.resolve();
+                                        }
+
+                                        return new Promise(
+                                            resolve => {
+
+                                                image.addEventListener(
+                                                    "load",
+                                                    resolve,
+                                                    {
+                                                        once: true
+                                                    });
+
+                                                image.addEventListener(
+                                                    "error",
+                                                    resolve,
+                                                    {
+                                                        once: true
+                                                    });
+
+                                            });
+
+                                    });
+
+                            /*
+                             * Eine externe Ressource darf das
+                             * Druckfenster niemals dauerhaft
+                             * blockieren.
+                             */
+                            await Promise.race([
+                                Promise.all(
+                                    imagePromises),
+
+                                new Promise(
+                                    resolve =>
+                                        setTimeout(
+                                            resolve,
+                                            3000))
+                            ]);
+
+                        }
+
+                        async function finish() {
+
+                            await waitForImages();
+
+                            /*
+                             * Zwei Frames geben Chromium noch
+                             * Gelegenheit, die endgültigen
+                             * Bildgrößen und Umbrüche zu
+                             * berechnen.
+                             */
+                            await new Promise(
+                                resolve =>
+                                    requestAnimationFrame(
+                                        () =>
+                                            requestAnimationFrame(
+                                                resolve)));
+
+                            window.chrome
+                                .webview
+                                .postMessage(
+                                    "printReady");
+
+                        }
+
+                        finish();
+
                     })();
                 </script>
 
             </body>
+
             </html>
             """;
     }
