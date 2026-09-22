@@ -185,6 +185,7 @@ public sealed class MailKitSendService :
                     bccRecipients,
                     request.Subject,
                     request.Body,
+                    request.HtmlBody,
                     request.Attachments,
                     account.EmailAddress,
                     credential.Password,
@@ -323,7 +324,7 @@ public sealed class MailKitSendService :
 
         if (credential is null ||
             string.IsNullOrWhiteSpace(
-                credential.Password))
+                    credential.Password))
         {
             throw new InvalidOperationException(
                 "Für das Mailkonto sind keine Zugangsdaten gespeichert.");
@@ -355,6 +356,7 @@ public sealed class MailKitSendService :
                 bccRecipients,
                 request.Subject,
                 request.Body,
+                request.HtmlBody,
                 request.Attachments,
                 account.EmailAddress,
                 credential.Password,
@@ -535,6 +537,7 @@ public sealed class MailKitSendService :
             IReadOnlyList<MailboxAddress> bccRecipients,
             string? subject,
             string? body,
+            string? htmlBody,
             IReadOnlyList<MailSendAttachmentData>? attachments,
             string userName,
             string password,
@@ -594,11 +597,36 @@ public sealed class MailKitSendService :
                         ?? string.Empty
                 };
 
+            MimeEntity messageBody =
+                textBody;
+
+            if (!string.IsNullOrWhiteSpace(
+                    htmlBody))
+            {
+                var alternativeBody =
+                    new Multipart(
+                        "alternative");
+
+                alternativeBody.Add(
+                    textBody);
+
+                alternativeBody.Add(
+                    new TextPart(
+                        "html")
+                    {
+                        Text =
+                            htmlBody
+                    });
+
+                messageBody =
+                    alternativeBody;
+            }
+
             if (attachments is null ||
                 attachments.Count == 0)
             {
                 message.Body =
-                    textBody;
+                    messageBody;
 
                 return message;
             }
@@ -610,13 +638,18 @@ public sealed class MailKitSendService :
              * Falls beim dritten oder vierten Anhang etwas
              * scheitert, räumt message.Dispose() dadurch
              * auch bereits geöffnete lokale Dateistreams auf.
+             *
+             * Wenn HTML vorhanden ist, liegt an erster Stelle
+             * ein multipart/alternative mit Plaintext- und
+             * HTML-Version. Ohne HTML bleibt die bisherige
+             * Plaintext-Struktur unverändert.
              */
             var mixedBody =
                 new Multipart(
                     "mixed");
 
             mixedBody.Add(
-                textBody);
+                messageBody);
 
             message.Body =
                 mixedBody;
