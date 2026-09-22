@@ -61,6 +61,9 @@ public sealed class ComposeMailViewModel : BaseViewModel
 
     private string? _htmlBody;
 
+    private MailImportanceLevel _importance =
+        MailImportanceLevel.Normal;
+
     private bool _showCcField;
     private bool _showBccField;
     private bool _focusBodyOnLoad;
@@ -260,6 +263,24 @@ public sealed class ComposeMailViewModel : BaseViewModel
 
             OnPropertyChanged();
             OnPropertyChanged(nameof(CanSaveDraft));
+        }
+    }
+
+    public MailImportanceLevel Importance
+    {
+        get => _importance;
+
+        set
+        {
+            if (_importance == value)
+            {
+                return;
+            }
+
+            _importance =
+                value;
+
+            OnPropertyChanged();
         }
     }
 
@@ -700,6 +721,9 @@ public sealed class ComposeMailViewModel : BaseViewModel
         HtmlBody =
             null;
 
+        Importance =
+            MailImportanceLevel.Normal;
+
         FocusBodyOnLoad =
             false;
     }
@@ -772,6 +796,9 @@ public sealed class ComposeMailViewModel : BaseViewModel
 
         HtmlBody =
             null;
+
+        Importance =
+            MailImportanceLevel.Normal;
 
         FocusBodyOnLoad =
             true;
@@ -860,6 +887,9 @@ public sealed class ComposeMailViewModel : BaseViewModel
         HtmlBody =
             draft.HtmlBody;
 
+        Importance =
+            draft.Importance;
+
         FocusBodyOnLoad =
             true;
 
@@ -877,6 +907,9 @@ public sealed class ComposeMailViewModel : BaseViewModel
             draft.SourceFolderId,
             draft.SourceUniqueId,
             draft.SourceMessageId);
+
+        Importance =
+            draft.Importance;
 
         ReplaceAttachments(
             draft.Attachments);
@@ -1685,6 +1718,9 @@ public sealed class ComposeMailViewModel : BaseViewModel
                 Attachments.ToArray(),
 
             HtmlBody:
-                HtmlBody);
+                HtmlBody,
+
+            Importance:
+                Importance);
     }
 }
