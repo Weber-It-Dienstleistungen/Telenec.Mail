@@ -32,7 +32,8 @@ public sealed class MailMessageItemViewModel : BaseViewModel
         IReadOnlyList<string>? references = null,
         IReadOnlyList<string>? toAddresses = null,
         IReadOnlyList<string>? ccAddresses = null,
-        IReadOnlyList<string>? replyToAddresses = null)
+        IReadOnlyList<string>? replyToAddresses = null,
+        MailImportanceLevel importance = MailImportanceLevel.Normal)
     {
         Sender =
             sender;
@@ -114,6 +115,9 @@ public sealed class MailMessageItemViewModel : BaseViewModel
         ReplyToAddresses =
             CreateAddressSnapshot(
                 replyToAddresses);
+
+        Importance =
+            importance;
     }
 
     public string Sender { get; }
@@ -246,6 +250,23 @@ public sealed class MailMessageItemViewModel : BaseViewModel
      * lenken.
      */
     public IReadOnlyList<string> ReplyToAddresses { get; }
+
+    /*
+     * Vom Absender gesetzte Wichtigkeit der Nachricht.
+     *
+     * Normal bleibt der sichere Standard für Nachrichten,
+     * bei denen kein unterstützter Priority-Header vorhanden
+     * ist.
+     */
+    public MailImportanceLevel Importance { get; }
+
+    public bool IsHighImportance =>
+        Importance ==
+        MailImportanceLevel.High;
+
+    public bool IsLowImportance =>
+        Importance ==
+        MailImportanceLevel.Low;
 
     public bool HasHtmlBody =>
         !string.IsNullOrWhiteSpace(
