@@ -42,6 +42,65 @@ internal static class MailImportanceHeaderService
         }
     }
 
+    public static MailImportanceLevel Read(
+        MimeMessage message)
+    {
+        ArgumentNullException.ThrowIfNull(
+            message);
+
+        /*
+         * Unterschiedliche Mailprogramme verwenden
+         * unterschiedliche Header.
+         *
+         * Wir prüfen zuerst "Importance", danach die
+         * verbreiteten Microsoft-/X-Priority-Varianten.
+         *
+         * Sobald ein Header einen eindeutig erkennbaren
+         * Wert liefert, verwenden wir ihn.
+         */
+        var importance =
+            ParseTextImportance(
+                GetHeaderValue(
+                    message,
+                    "Importance"));
+
+        if (importance.HasValue)
+        {
+            return importance.Value;
+        }
+
+        importance =
+            ParseTextImportance(
+                GetHeaderValue(
+                    message,
+                    "X-MSMail-Priority"));
+
+        if (importance.HasValue)
+        {
+            return importance.Value;
+        }
+
+        importance =
+            ParseNumericPriority(
+                GetHeaderValue(
+                    message,
+                    "X-Priority"));
+
+        if (importance.HasValue)
+        {
+            return importance.Value;
+        }
+
+        importance =
+            ParsePriority(
+                GetHeaderValue(
+                    message,
+                    "Priority"));
+
+        return importance
+            ?? MailImportanceLevel.Normal;
+    }
+
     private static void ApplyHighImportance(
         MimeMessage message)
     {
@@ -88,5 +147,129 @@ internal static class MailImportanceHeaderService
         message.Headers.Add(
             "X-MSMail-Priority",
             "Low");
+    }
+
+    private static string? GetHeaderValue(
+        MimeMessage message,
+        string fieldName)
+    {
+        return message
+            .Headers
+            .FirstOrDefault(
+                header =>
+                    string.Equals(
+                        header.Field,
+                        fieldName,
+                        StringComparison.OrdinalIgnoreCase))?
+            .Value;
+    }
+
+    private static MailImportanceLevel?
+        ParseTextImportance(
+            string? value)
+    {
+        if (string.IsNullOrWhiteSpace(
+                value))
+        {
+            return null;
+        }
+
+        return value
+            .Trim()
+            .ToLowerInvariant() switch
+        {
+            "high" =>
+                MailImportanceLevel.High,
+
+            "highest" =>
+                MailImportanceLevel.High,
+
+            "low" =>
+                MailImportanceLevel.Low,
+
+            "lowest" =>
+                MailImportanceLevel.Low,
+
+            "normal" =>
+                MailImportanceLevel.Normal,
+
+            _ =>
+                null
+        };
+    }
+
+    private static MailImportanceLevel?
+        ParsePriority(
+            string? value)
+    {
+        if (string.IsNullOrWhiteSpace(
+                value))
+        {
+            return null;
+        }
+
+        return value
+            .Trim()
+            .ToLowerInvariant() switch
+        {
+            "urgent" =>
+                MailImportanceLevel.High,
+
+            "non-urgent" =>
+                MailImportanceLevel.Low,
+
+            "normal" =>
+                MailImportanceLevel.Normal,
+
+            _ =>
+                null
+        };
+    }
+
+    private static MailImportanceLevel?
+        ParseNumericPriority(
+            string? value)
+    {
+        if (string.IsNullOrWhiteSpace(
+                value))
+        {
+            return null;
+        }
+
+        /*
+         * X-Priority tritt häufig sowohl als reine Zahl
+         *
+         *   1
+         *
+         * als auch mit Beschreibung auf:
+         *
+         *   1 (Highest)
+         *   5 (Lowest)
+         *
+         * Deshalb genügt für die bekannte Prioritätsklasse
+         * das erste nicht-leere Zeichen.
+         */
+        var normalized =
+            value.Trim();
+
+        if (normalized.Length == 0)
+        {
+            return null;
+        }
+
+        return normalized[0] switch
+        {
+            '1' or '2' =>
+                MailImportanceLevel.High,
+
+            '3' =>
+                MailImportanceLevel.Normal,
+
+            '4' or '5' =>
+                MailImportanceLevel.Low,
+
+            _ =>
+                null
+        };
     }
 }

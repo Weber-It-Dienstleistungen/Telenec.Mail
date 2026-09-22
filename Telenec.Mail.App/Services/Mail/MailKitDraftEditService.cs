@@ -267,6 +267,21 @@ public sealed class MailKitDraftEditService :
                 NormalizeMessageId(
                     message.InReplyTo);
 
+            /*
+             * Die Wichtigkeit wird direkt aus der frisch
+             * geladenen MIME-Nachricht gelesen.
+             *
+             * Dadurch bleibt ein im Composer gesetztes
+             * Hoch/Normal/Niedrig auch nach
+             *
+             * Speichern -> Schließen -> erneut öffnen
+             *
+             * erhalten.
+             */
+            var importance =
+                MailImportanceHeaderService.Read(
+                    message);
+
             return new MailDraftEditData(
                 SourceFolderId:
                     folder.FullName,
@@ -304,7 +319,10 @@ public sealed class MailKitDraftEditService :
                     attachments,
 
                 HtmlBody:
-                    supportedHtmlBody);
+                    supportedHtmlBody,
+
+                Importance:
+                    importance);
         }
         catch (OperationCanceledException)
             when (cancellationToken.IsCancellationRequested)
