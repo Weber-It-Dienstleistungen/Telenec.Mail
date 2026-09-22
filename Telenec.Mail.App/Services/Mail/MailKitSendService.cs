@@ -186,6 +186,7 @@ public sealed class MailKitSendService :
                     request.Subject,
                     request.Body,
                     request.HtmlBody,
+                    request.Importance,
                     request.Attachments,
                     account.EmailAddress,
                     credential.Password,
@@ -357,6 +358,7 @@ public sealed class MailKitSendService :
                 request.Subject,
                 request.Body,
                 request.HtmlBody,
+                request.Importance,
                 request.Attachments,
                 account.EmailAddress,
                 credential.Password,
@@ -538,6 +540,7 @@ public sealed class MailKitSendService :
             string? subject,
             string? body,
             string? htmlBody,
+            MailImportanceLevel importance,
             IReadOnlyList<MailSendAttachmentData>? attachments,
             string userName,
             string password,
@@ -587,6 +590,18 @@ public sealed class MailKitSendService :
 
             message.MessageId =
                 MimeUtils.GenerateMessageId();
+
+            /*
+             * Wichtigkeit wird zentral bei der MIME-
+             * Erzeugung gesetzt.
+             *
+             * Dadurch besitzen sowohl direkt versendete
+             * Nachrichten als auch gespeicherte Entwürfe
+             * exakt dieselben Priority-Header.
+             */
+            MailImportanceHeaderService.Apply(
+                message,
+                importance);
 
             var textBody =
                 new TextPart(
