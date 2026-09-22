@@ -788,6 +788,47 @@
                                 Background="{StaticResource Brand.Primary}"
                                 Visibility="Collapsed" />
 
+                            <!--
+                                Wichtigkeitsanzeige.
+
+                                Hoch:
+                                deutliches rotes Ausrufezeichen.
+
+                                Niedrig:
+                                dezenter Pfeil nach unten.
+
+                                Normal:
+                                keine zusätzliche Kennzeichnung.
+                            -->
+
+                            <TextBlock
+                                x:Name="HighImportanceIndicator"
+                                Width="12"
+                                Margin="5,0,0,0"
+                                HorizontalAlignment="Left"
+                                VerticalAlignment="Center"
+                                Text="!"
+                                FontSize="17"
+                                FontWeight="Bold"
+                                Foreground="{StaticResource Status.Error}"
+                                TextAlignment="Center"
+                                Visibility="Collapsed"
+                                IsHitTestVisible="False" />
+
+                            <TextBlock
+                                x:Name="LowImportanceIndicator"
+                                Width="12"
+                                Margin="5,0,0,0"
+                                HorizontalAlignment="Left"
+                                VerticalAlignment="Center"
+                                Text="↓"
+                                FontSize="15"
+                                FontWeight="SemiBold"
+                                Foreground="{StaticResource Text.Muted}"
+                                TextAlignment="Center"
+                                Visibility="Collapsed"
+                                IsHitTestVisible="False" />
+
                             <ContentPresenter
                                 x:Name="MessageContent"
                                 Margin="18,15"
@@ -829,6 +870,28 @@
                                 Value="31,15,18,15" />
 
                         </Trigger>
+
+                        <DataTrigger
+                            Binding="{Binding IsHighImportance}"
+                            Value="True">
+
+                            <Setter
+                                TargetName="HighImportanceIndicator"
+                                Property="Visibility"
+                                Value="Visible" />
+
+                        </DataTrigger>
+
+                        <DataTrigger
+                            Binding="{Binding IsLowImportance}"
+                            Value="True">
+
+                            <Setter
+                                TargetName="LowImportanceIndicator"
+                                Property="Visibility"
+                                Value="Visible" />
+
+                        </DataTrigger>
 
                     </ControlTemplate.Triggers>
 
