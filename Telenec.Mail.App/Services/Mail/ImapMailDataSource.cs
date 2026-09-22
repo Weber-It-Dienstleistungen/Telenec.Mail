@@ -249,6 +249,12 @@ public sealed class ImapMailDataSource : IMailDataSource
              * Erst für die UIDs der tatsächlich angeforderten
              * Seite werden Envelope, BodyStructure und später
              * die konkreten Body-Parts geladen.
+             *
+             * Zusätzlich laden wir ausschließlich die vier
+             * Header, die für die Wichtigkeit relevant sind.
+             *
+             * Damit müssen weder sämtliche MIME-Header noch
+             * komplette Nachrichten zusätzlich geladen werden.
              */
             var summaries =
                 await folder.FetchAsync(
@@ -258,6 +264,7 @@ public sealed class ImapMailDataSource : IMailDataSource
                     MessageSummaryItems.Flags |
                     MessageSummaryItems.BodyStructure |
                     MessageSummaryItems.References,
+                    MailImportanceSummaryService.HeaderFields,
                     cancellationToken);
 
             var orderedSummaries =
@@ -1364,6 +1371,17 @@ public sealed class ImapMailDataSource : IMailDataSource
                 .ToArray()
             ?? Array.Empty<string>();
 
+        /*
+         * Die eigentlichen Header wurden bereits beim
+         * normalen IMAP-FETCH mitgeladen.
+         *
+         * Hier findet ausschließlich die Interpretation
+         * statt. Es entsteht kein weiterer Serverzugriff.
+         */
+        var importance =
+            MailImportanceSummaryService.Read(
+                summary);
+
         return new MailMessageData(
             Sender:
                 senderName,
@@ -1441,7 +1459,10 @@ public sealed class ImapMailDataSource : IMailDataSource
                 ccAddresses,
 
             ReplyToAddresses:
-                replyToAddresses);
+                replyToAddresses,
+
+            Importance:
+                importance);
     }
 
     private static IReadOnlyList<string>
