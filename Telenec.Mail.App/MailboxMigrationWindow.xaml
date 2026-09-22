@@ -1,0 +1,671 @@
+﻿<Window x:Class="Telenec.Mail.App.MailboxMigrationWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Telenec Mail — Postfachmigration"
+        Width="640"
+        Height="820"
+        MinWidth="560"
+        MinHeight="600"
+        MaxWidth="760"
+        MaxHeight="920"
+        SizeToContent="Manual"
+        ResizeMode="CanResize"
+        WindowStartupLocation="CenterOwner"
+        ShowInTaskbar="False"
+        Background="{StaticResource Surface.Background}"
+        Foreground="{StaticResource Text.Primary}"
+        FontFamily="{StaticResource Typography.FontFamily}"
+        UseLayoutRounding="True"
+        SnapsToDevicePixels="True">
+
+    <Grid Margin="32">
+
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" />
+            <RowDefinition Height="Auto" />
+        </Grid.RowDefinitions>
+
+        <StackPanel Grid.Row="0">
+
+            <Image
+                Source="/Assets/Brand/TelenecMailLogo.png"
+                Width="260"
+                Margin="0,0,0,22"
+                HorizontalAlignment="Left"
+                Stretch="Uniform" />
+
+            <TextBlock
+                Text="Postfach migrieren"
+                FontSize="24"
+                FontWeight="SemiBold"
+                Foreground="{StaticResource Text.Primary}" />
+
+            <TextBlock
+                Margin="0,7,0,0"
+                Text="Übertragen Sie Nachrichten, Ordner und Kontakte Ihres bisherigen Postfachs auf die neue Telenec-Mail-Infrastruktur."
+                FontSize="13"
+                TextWrapping="Wrap"
+                Foreground="{StaticResource Text.Secondary}" />
+
+        </StackPanel>
+
+        <ScrollViewer
+            Grid.Row="1"
+            Margin="0,22,0,0"
+            VerticalScrollBarVisibility="Auto"
+            HorizontalScrollBarVisibility="Disabled"
+            CanContentScroll="False">
+
+            <Grid>
+
+                <StackPanel
+                    x:Name="ConnectionStepPanel">
+
+                    <Border
+                        Padding="18"
+                        Background="{StaticResource Surface.Card}"
+                        BorderBrush="{StaticResource Border.Default}"
+                        BorderThickness="1"
+                        CornerRadius="8">
+
+                        <StackPanel>
+
+                            <TextBlock
+                                Text="Neues Postfach"
+                                FontSize="14"
+                                FontWeight="SemiBold"
+                                Foreground="{StaticResource Text.Primary}" />
+
+                            <TextBlock
+                                Margin="0,4,0,10"
+                                Text="Dieses aktuell angemeldete Konto ist das Ziel der Migration."
+                                FontSize="11"
+                                TextWrapping="Wrap"
+                                Foreground="{StaticResource Text.Secondary}" />
+
+                            <TextBox
+                                x:Name="TargetEmailTextBox"
+                                Height="40"
+                                Padding="10,6"
+                                IsReadOnly="True"
+                                IsTabStop="False"
+                                VerticalContentAlignment="Center"
+                                Foreground="{StaticResource Text.Secondary}"
+                                BorderBrush="{StaticResource Border.Default}"
+                                BorderThickness="1" />
+
+                        </StackPanel>
+
+                    </Border>
+
+                    <TextBlock
+                        Margin="0,24,0,0"
+                        Text="Altes Postfach"
+                        FontSize="14"
+                        FontWeight="SemiBold"
+                        Foreground="{StaticResource Text.Primary}" />
+
+                    <TextBlock
+                        Margin="0,12,0,6"
+                        Text="E-Mail-Adresse"
+                        FontSize="12"
+                        FontWeight="SemiBold"
+                        Foreground="{StaticResource Text.Primary}" />
+
+                    <TextBox
+                        x:Name="LegacyEmailTextBox"
+                        Height="42"
+                        Padding="11,8"
+                        VerticalContentAlignment="Center"
+                        FontSize="14"
+                        BorderBrush="{StaticResource Border.Default}"
+                        BorderThickness="1"
+                        TextChanged="LegacyCredentials_OnChanged" />
+
+                    <TextBlock
+                        Margin="0,16,0,6"
+                        Text="Passwort"
+                        FontSize="12"
+                        FontWeight="SemiBold"
+                        Foreground="{StaticResource Text.Primary}" />
+
+                    <PasswordBox
+                        x:Name="LegacyPasswordBox"
+                        Height="42"
+                        Padding="11,8"
+                        VerticalContentAlignment="Center"
+                        FontSize="14"
+                        BorderBrush="{StaticResource Border.Default}"
+                        BorderThickness="1"
+                        PasswordChanged="LegacyCredentials_OnChanged" />
+
+                    <Border
+                        Margin="0,18,0,0"
+                        Padding="14"
+                        Background="{StaticResource Surface.Card}"
+                        BorderBrush="{StaticResource Border.Default}"
+                        BorderThickness="1"
+                        CornerRadius="6">
+
+                        <StackPanel>
+
+                            <TextBlock
+                                Text="Legacy-Mailserver"
+                                FontSize="12"
+                                FontWeight="SemiBold"
+                                Foreground="{StaticResource Text.Primary}" />
+
+                            <TextBlock
+                                Margin="0,4,0,0"
+                                Text="80.79.225.35 · IMAP-Port 143 · STARTTLS-gesicherte Verbindung"
+                                FontSize="11"
+                                TextWrapping="Wrap"
+                                Foreground="{StaticResource Text.Secondary}" />
+
+                            <TextBlock
+                                Margin="0,4,0,0"
+                                Text="Das Passwort wird ausschließlich für diese Migration verwendet und nicht in Telenec Mail gespeichert."
+                                FontSize="11"
+                                TextWrapping="Wrap"
+                                Foreground="{StaticResource Text.Secondary}" />
+
+                        </StackPanel>
+
+                    </Border>
+
+                    <Button
+                        x:Name="TestConnectionButton"
+                        Height="42"
+                        Margin="0,22,0,0"
+                        Content="Verbindung zum alten Postfach prüfen"
+                        IsDefault="True"
+                        Cursor="Hand"
+                        Style="{StaticResource Button.Primary}"
+                        Click="TestConnectionButton_OnClick" />
+
+                    <Button
+                        x:Name="AnalyzeMailboxButton"
+                        Height="42"
+                        Margin="0,10,0,0"
+                        Content="Postfachbestand analysieren"
+                        IsEnabled="False"
+                        Cursor="Hand"
+                        Style="{StaticResource Button.Primary}"
+                        Click="AnalyzeMailboxButton_OnClick" />
+
+                    <TextBlock
+                        x:Name="ConnectionStatusText"
+                        MinHeight="40"
+                        Margin="0,14,0,8"
+                        Text="Es wurden noch keine Daten übertragen oder verändert."
+                        FontSize="12"
+                        TextAlignment="Center"
+                        TextWrapping="Wrap"
+                        Foreground="{StaticResource Text.Secondary}" />
+
+                </StackPanel>
+
+                <StackPanel
+                    x:Name="InventoryStepPanel"
+                    Visibility="Collapsed">
+
+                    <Border
+                        Padding="18"
+                        Background="{StaticResource Surface.Card}"
+                        BorderBrush="{StaticResource Border.Default}"
+                        BorderThickness="1"
+                        CornerRadius="8">
+
+                        <StackPanel>
+
+                            <TextBlock
+                                Text="Bestandsaufnahme abgeschlossen"
+                                FontSize="17"
+                                FontWeight="SemiBold"
+                                Foreground="{StaticResource Text.Primary}" />
+
+                            <TextBlock
+                                x:Name="InventorySummaryText"
+                                Margin="0,6,0,0"
+                                FontSize="13"
+                                TextWrapping="Wrap"
+                                Foreground="{StaticResource Text.Secondary}" />
+
+                        </StackPanel>
+
+                    </Border>
+
+                    <TextBlock
+                        Margin="0,18,0,8"
+                        Text="Gefundene Ordner"
+                        FontSize="14"
+                        FontWeight="SemiBold"
+                        Foreground="{StaticResource Text.Primary}" />
+
+                    <Border
+                        BorderBrush="{StaticResource Border.Default}"
+                        BorderThickness="1"
+                        CornerRadius="8"
+                        Background="{StaticResource Surface.Card}">
+
+                        <ListBox
+                            x:Name="InventoryFolderList"
+                            Height="250"
+                            BorderThickness="0"
+                            Background="Transparent"
+                            ScrollViewer.VerticalScrollBarVisibility="Auto"
+                            ScrollViewer.HorizontalScrollBarVisibility="Disabled">
+
+                            <ListBox.ItemTemplate>
+
+                                <DataTemplate>
+
+                                    <Grid Margin="12,8">
+
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*" />
+                                            <ColumnDefinition Width="Auto" />
+                                        </Grid.ColumnDefinitions>
+
+                                        <TextBlock
+                                            Text="{Binding DisplayName}"
+                                            FontSize="12"
+                                            Foreground="{StaticResource Text.Primary}" />
+
+                                        <TextBlock
+                                            Grid.Column="1"
+                                            Text="{Binding MessageCount, StringFormat={}{0:N0} Nachrichten}"
+                                            FontSize="11"
+                                            Foreground="{StaticResource Text.Secondary}" />
+
+                                    </Grid>
+
+                                </DataTemplate>
+
+                            </ListBox.ItemTemplate>
+
+                        </ListBox>
+
+                    </Border>
+
+                    <Border
+                        Margin="0,14,0,0"
+                        Padding="14"
+                        Background="{StaticResource Surface.Card}"
+                        BorderBrush="{StaticResource Border.Default}"
+                        BorderThickness="1"
+                        CornerRadius="6">
+
+                        <TextBlock
+                            x:Name="MigrationNoticeText"
+                            Text="Bis zu diesem Punkt wurde das alte Postfach ausschließlich gelesen."
+                            FontSize="11"
+                            TextWrapping="Wrap"
+                            Foreground="{StaticResource Text.Secondary}" />
+
+                    </Border>
+
+                    <Button
+                        x:Name="ContactMigrationButton"
+                        Height="42"
+                        Margin="0,12,0,0"
+                        Content="Kontakte übernehmen"
+                        IsEnabled="False"
+                        Cursor="Hand"
+                        Style="{StaticResource Button.Primary}"
+                        Click="ContactMigrationButton_OnClick" />
+
+                    <TextBlock
+                        x:Name="ContactMigrationStatusText"
+                        Margin="0,8,0,0"
+                        FontSize="11"
+                        TextAlignment="Center"
+                        TextWrapping="Wrap"
+                        Foreground="{StaticResource Text.Secondary}" />
+
+                    <Button
+                        x:Name="MailProofOfWorkButton"
+                        Visibility="Collapsed"
+                        Content="Proof-of-Work"
+                        Click="MailProofOfWorkButton_OnClick" />
+
+                    <TextBlock
+                        x:Name="MailProofOfWorkStatusText"
+                        Visibility="Collapsed" />
+
+                    <Button
+                        x:Name="BuildMigrationPlanButton"
+                        Height="42"
+                        Margin="0,16,0,0"
+                        Content="Migrationsplan für alle E-Mails erstellen"
+                        Cursor="Hand"
+                        Style="{StaticResource Button.Primary}"
+                        Click="BuildMigrationPlanButton_OnClick" />
+
+                    <Button
+                        Width="120"
+                        Height="36"
+                        Margin="0,16,0,10"
+                        HorizontalAlignment="Left"
+                        Content="Zurück"
+                        Cursor="Hand"
+                        Click="BackToConnectionButton_OnClick" />
+
+                </StackPanel>
+
+                <StackPanel
+                    x:Name="MigrationPlanStepPanel"
+                    Visibility="Collapsed">
+
+                    <Border
+                        Padding="18"
+                        Background="{StaticResource Surface.Card}"
+                        BorderBrush="{StaticResource Border.Default}"
+                        BorderThickness="1"
+                        CornerRadius="8">
+
+                        <StackPanel>
+
+                            <TextBlock
+                                Text="Migrationsplan"
+                                FontSize="17"
+                                FontWeight="SemiBold"
+                                Foreground="{StaticResource Text.Primary}" />
+
+                            <TextBlock
+                                x:Name="MigrationPlanSummaryText"
+                                Margin="0,6,0,0"
+                                FontSize="12"
+                                TextWrapping="Wrap"
+                                Foreground="{StaticResource Text.Secondary}" />
+
+                        </StackPanel>
+
+                    </Border>
+
+                    <TextBlock
+                        Margin="0,18,0,8"
+                        Text="Ordnerzuordnung"
+                        FontSize="14"
+                        FontWeight="SemiBold"
+                        Foreground="{StaticResource Text.Primary}" />
+
+                    <Border
+                        BorderBrush="{StaticResource Border.Default}"
+                        BorderThickness="1"
+                        CornerRadius="8"
+                        Background="{StaticResource Surface.Card}">
+
+                        <ListBox
+                            x:Name="MigrationPlanList"
+                            Height="350"
+                            BorderThickness="0"
+                            Background="Transparent"
+                            ScrollViewer.VerticalScrollBarVisibility="Auto"
+                            ScrollViewer.HorizontalScrollBarVisibility="Disabled">
+
+                            <ListBox.ItemTemplate>
+
+                                <DataTemplate>
+
+                                    <Grid Margin="12,9">
+
+                                        <Grid.RowDefinitions>
+                                            <RowDefinition Height="Auto" />
+                                            <RowDefinition Height="Auto" />
+                                        </Grid.RowDefinitions>
+
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*" />
+                                            <ColumnDefinition Width="30" />
+                                            <ColumnDefinition Width="*" />
+                                            <ColumnDefinition Width="Auto" />
+                                        </Grid.ColumnDefinitions>
+
+                                        <TextBlock
+                                            Grid.Row="0"
+                                            Grid.Column="0"
+                                            Text="{Binding SourceFolderName}"
+                                            FontSize="12"
+                                            FontWeight="SemiBold"
+                                            TextTrimming="CharacterEllipsis"
+                                            Foreground="{StaticResource Text.Primary}" />
+
+                                        <TextBlock
+                                            Grid.Row="0"
+                                            Grid.Column="1"
+                                            Text="→"
+                                            HorizontalAlignment="Center"
+                                            FontSize="13"
+                                            Foreground="{StaticResource Brand.Primary}" />
+
+                                        <TextBlock
+                                            Grid.Row="0"
+                                            Grid.Column="2"
+                                            Text="{Binding TargetDisplayName}"
+                                            FontSize="12"
+                                            FontWeight="SemiBold"
+                                            TextTrimming="CharacterEllipsis"
+                                            Foreground="{StaticResource Text.Primary}" />
+
+                                        <TextBlock
+                                            Grid.Row="0"
+                                            Grid.Column="3"
+                                            Margin="14,0,0,0"
+                                            Text="{Binding MessageCount, StringFormat={}{0:N0} Mails}"
+                                            FontSize="11"
+                                            Foreground="{StaticResource Text.Secondary}" />
+
+                                        <TextBlock
+                                            Grid.Row="1"
+                                            Grid.Column="0"
+                                            Grid.ColumnSpan="4"
+                                            Margin="0,4,0,0"
+                                            Text="{Binding ActionText}"
+                                            FontSize="10"
+                                            TextWrapping="Wrap"
+                                            Foreground="{StaticResource Text.Secondary}" />
+
+                                    </Grid>
+
+                                </DataTemplate>
+
+                            </ListBox.ItemTemplate>
+
+                        </ListBox>
+
+                    </Border>
+
+                    <Border
+                        Margin="0,14,0,0"
+                        Padding="14"
+                        Background="{StaticResource Surface.Card}"
+                        BorderBrush="{StaticResource Border.Default}"
+                        BorderThickness="1"
+                        CornerRadius="6">
+
+                        <TextBlock
+                            x:Name="MigrationPlanStatusText"
+                            Text="Noch wurde keine Nachricht kopiert oder gelöscht."
+                            FontSize="11"
+                            TextWrapping="Wrap"
+                            Foreground="{StaticResource Text.Secondary}" />
+
+                    </Border>
+
+                    <Button
+                        x:Name="StartMailMigrationButton"
+                        Height="44"
+                        Margin="0,16,0,0"
+                        Content="E-Mail-Migration starten"
+                        IsEnabled="False"
+                        Cursor="Hand"
+                        Style="{StaticResource Button.Primary}"
+                        Click="StartMailMigrationButton_OnClick" />
+
+                    <Button
+                        Width="190"
+                        Height="36"
+                        Margin="0,16,0,10"
+                        HorizontalAlignment="Left"
+                        Content="Zur Bestandsaufnahme"
+                        Cursor="Hand"
+                        Click="BackToInventoryButton_OnClick" />
+
+                </StackPanel>
+
+                <StackPanel
+                    x:Name="MigrationRunStepPanel"
+                    Visibility="Collapsed">
+
+                    <Border
+                        Padding="18"
+                        Background="{StaticResource Surface.Card}"
+                        BorderBrush="{StaticResource Border.Default}"
+                        BorderThickness="1"
+                        CornerRadius="8">
+
+                        <StackPanel>
+
+                            <TextBlock
+                                Text="E-Mail-Migration"
+                                FontSize="17"
+                                FontWeight="SemiBold"
+                                Foreground="{StaticResource Text.Primary}" />
+
+                            <TextBlock
+                                x:Name="MigrationProgressSummaryText"
+                                Margin="0,6,0,0"
+                                FontSize="12"
+                                Foreground="{StaticResource Text.Secondary}" />
+
+                        </StackPanel>
+
+                    </Border>
+
+                    <ProgressBar
+                        x:Name="MigrationProgressBar"
+                        Height="18"
+                        Margin="0,20,0,0"
+                        Minimum="0"
+                        Maximum="100"
+                        Value="0" />
+
+                    <Border
+                        Margin="0,18,0,0"
+                        Padding="16"
+                        Background="{StaticResource Surface.Card}"
+                        BorderBrush="{StaticResource Border.Default}"
+                        BorderThickness="1"
+                        CornerRadius="8">
+
+                        <StackPanel>
+
+                            <TextBlock
+                                Text="Aktueller Ordner"
+                                FontSize="11"
+                                Foreground="{StaticResource Text.Secondary}" />
+
+                            <TextBlock
+                                x:Name="MigrationCurrentFolderText"
+                                Margin="0,4,0,0"
+                                FontSize="13"
+                                FontWeight="SemiBold"
+                                TextWrapping="Wrap"
+                                Foreground="{StaticResource Text.Primary}" />
+
+                            <TextBlock
+                                Margin="0,14,0,0"
+                                Text="Aktuelle Nachricht"
+                                FontSize="11"
+                                Foreground="{StaticResource Text.Secondary}" />
+
+                            <TextBlock
+                                x:Name="MigrationCurrentMessageText"
+                                Margin="0,4,0,0"
+                                FontSize="12"
+                                TextWrapping="Wrap"
+                                Foreground="{StaticResource Text.Primary}" />
+
+                        </StackPanel>
+
+                    </Border>
+
+                    <Border
+                        Margin="0,14,0,0"
+                        Padding="14"
+                        Background="{StaticResource Surface.Card}"
+                        BorderBrush="{StaticResource Border.Default}"
+                        BorderThickness="1"
+                        CornerRadius="6">
+
+                        <TextBlock
+                            x:Name="MigrationOperationStatusText"
+                            FontSize="11"
+                            TextWrapping="Wrap"
+                            Foreground="{StaticResource Text.Secondary}" />
+
+                    </Border>
+
+                    <TextBlock
+                        x:Name="MigrationResultText"
+                        Margin="0,14,0,0"
+                        FontSize="12"
+                        TextWrapping="Wrap"
+                        Foreground="{StaticResource Text.Primary}" />
+
+                    <Button
+                        x:Name="MigrationBackButton"
+                        Width="210"
+                        Height="36"
+                        Margin="0,18,0,10"
+                        HorizontalAlignment="Left"
+                        Content="Neu analysieren"
+                        IsEnabled="False"
+                        Cursor="Hand"
+                        Click="MigrationBackButton_OnClick" />
+
+                </StackPanel>
+
+            </Grid>
+
+        </ScrollViewer>
+
+        <Border
+            Grid.Row="2"
+            Margin="0,14,0,0"
+            Padding="0,14,0,0"
+            BorderBrush="{StaticResource Border.Default}"
+            BorderThickness="0,1,0,0">
+
+            <Grid>
+
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="Auto" />
+                </Grid.ColumnDefinitions>
+
+                <TextBlock
+                    x:Name="StepStatusText"
+                    Grid.Column="0"
+                    Text="Schritt 1 von 4 · Verbindung"
+                    VerticalAlignment="Center"
+                    FontSize="11"
+                    Foreground="{StaticResource Text.Muted}" />
+
+                <Button
+                    Grid.Column="1"
+                    Width="110"
+                    Height="36"
+                    Content="Schließen"
+                    IsCancel="True"
+                    Cursor="Hand" />
+
+            </Grid>
+
+        </Border>
+
+    </Grid>
+
+</Window>
