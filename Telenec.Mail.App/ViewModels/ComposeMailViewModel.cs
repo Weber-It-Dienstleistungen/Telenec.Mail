@@ -59,6 +59,8 @@ public sealed class ComposeMailViewModel : BaseViewModel
     private string _body =
         string.Empty;
 
+    private string? _htmlBody;
+
     private bool _showCcField;
     private bool _showBccField;
     private bool _focusBodyOnLoad;
@@ -243,6 +245,24 @@ public sealed class ComposeMailViewModel : BaseViewModel
         }
     }
 
+    public string? HtmlBody
+    {
+        get => _htmlBody;
+
+        set
+        {
+            if (_htmlBody == value)
+            {
+                return;
+            }
+
+            _htmlBody = value;
+
+            OnPropertyChanged();
+            OnPropertyChanged(nameof(CanSaveDraft));
+        }
+    }
+
     public bool ShowCcField
     {
         get => _showCcField;
@@ -401,6 +421,8 @@ public sealed class ComposeMailViewModel : BaseViewModel
             Subject) ||
         !string.IsNullOrWhiteSpace(
             Body) ||
+        !string.IsNullOrWhiteSpace(
+            HtmlBody) ||
         Attachments.Count > 0;
 
     public string AttachmentSummary =>
@@ -675,6 +697,9 @@ public sealed class ComposeMailViewModel : BaseViewModel
             CreateForwardBody(
                 message);
 
+        HtmlBody =
+            null;
+
         FocusBodyOnLoad =
             false;
     }
@@ -744,6 +769,9 @@ public sealed class ComposeMailViewModel : BaseViewModel
         Body =
             CreateReplyBody(
                 message);
+
+        HtmlBody =
+            null;
 
         FocusBodyOnLoad =
             true;
@@ -828,6 +856,9 @@ public sealed class ComposeMailViewModel : BaseViewModel
 
         Body =
             draft.Body;
+
+        HtmlBody =
+            draft.HtmlBody;
 
         FocusBodyOnLoad =
             true;
@@ -1651,6 +1682,9 @@ public sealed class ComposeMailViewModel : BaseViewModel
                 _parentReferences,
 
             Attachments:
-                Attachments.ToArray());
+                Attachments.ToArray(),
+
+            HtmlBody:
+                HtmlBody);
     }
 }
