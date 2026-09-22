@@ -18,6 +18,9 @@ public sealed class MailKitDraftEditService :
     private const int ImapPort =
         993;
 
+    private const string TelenecRichTextMarker =
+        "<!--telenec-mail-richtext-v1-->";
+
     private static readonly TimeSpan ConnectionTimeout =
         TimeSpan.FromSeconds(15);
 
@@ -224,8 +227,9 @@ public sealed class MailKitDraftEditService :
                 message,
                 account.EmailAddress);
 
-            ValidateSupportedDraftFormat(
-                message);
+            var supportedHtmlBody =
+                GetSupportedHtmlBody(
+                    message);
 
             var attachments =
                 CreateAttachmentData(
@@ -297,7 +301,10 @@ public sealed class MailKitDraftEditService :
                     references,
 
                 Attachments:
-                    attachments);
+                    attachments,
+
+                HtmlBody:
+                    supportedHtmlBody);
         }
         catch (OperationCanceledException)
             when (cancellationToken.IsCancellationRequested)
@@ -355,28 +362,50 @@ public sealed class MailKitDraftEditService :
             "Er wird deshalb nicht automatisch bearbeitet.");
     }
 
-    private static void ValidateSupportedDraftFormat(
+    private static string? GetSupportedHtmlBody(
         MimeMessage message)
     {
+        var htmlBody =
+            message.HtmlBody;
+
         /*
-         * Telenec Mail verfasst Nachrichten momentan als
-         * Plaintext.
-         *
-         * Einen HTML-Entwurf aus Roundcube, Smartphone oder
-         * einem anderen Client stillschweigend als Plaintext
-         * neu zu speichern, würde Formatierungen und unter
-         * Umständen Inline-Inhalte zerstören.
-         *
-         * Deshalb wird dieser Fall vorerst ausdrücklich
-         * abgelehnt.
+         * Plaintext-Entwürfe bleiben vollständig kompatibel
+         * mit dem bisherigen Workflow.
          */
-        if (!string.IsNullOrWhiteSpace(
-                message.HtmlBody))
+        if (string.IsNullOrWhiteSpace(
+                htmlBody))
         {
-            throw new MailDraftEditException(
-                "Dieser Entwurf enthält HTML-Formatierungen.\n\n" +
-                "Telenec Mail bearbeitet HTML-Entwürfe derzeit noch nicht, damit keine Formatierungen verloren gehen.");
+            return null;
         }
+
+        /*
+         * HTML wird ausschließlich dann zur Bearbeitung
+         * freigegeben, wenn es eindeutig von unserem
+         * eigenen Rich-Text-Composer stammt.
+         *
+         * Dadurch verhindern wir weiterhin, dass ein
+         * beliebiger HTML-Entwurf aus Roundcube, Outlook,
+         * Smartphone usw. stillschweigend verändert oder
+         * in ein eingeschränktes Format konvertiert wird.
+         *
+         * Der ComposeHtmlEditor selbst sanitisiert den
+         * Inhalt beim Laden zusätzlich auf die von Telenec
+         * Mail unterstützten Elemente.
+         */
+        var normalizedHtmlBody =
+            htmlBody.TrimStart();
+
+        if (normalizedHtmlBody.StartsWith(
+                TelenecRichTextMarker,
+                StringComparison.Ordinal))
+        {
+            return normalizedHtmlBody;
+        }
+
+        throw new MailDraftEditException(
+            "Dieser Entwurf enthält HTML-Formatierungen.\n\n" +
+            "Telenec Mail kann derzeit nur HTML-Entwürfe bearbeiten, " +
+            "die mit dem eigenen formatierten Editor erstellt wurden.");
     }
 
     private static IReadOnlyList<string>
