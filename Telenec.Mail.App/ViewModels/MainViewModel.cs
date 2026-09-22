@@ -2632,7 +2632,10 @@ public sealed class MainViewModel : BaseViewModel
                 message.CcAddresses,
 
             replyToAddresses:
-                message.ReplyToAddresses);
+                message.ReplyToAddresses,
+
+            importance:
+                message.Importance);
     }
 
     private static void UpdateMessageReadState(
