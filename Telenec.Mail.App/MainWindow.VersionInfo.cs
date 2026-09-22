@@ -58,6 +58,18 @@ public partial class MainWindow
          */
         Loaded +=
             MainWindowExternalImageMemory_OnLoaded;
+
+        /*
+         * Drucken wird bewusst ebenfalls erst nach dem
+         * Aufbau des vollständigen MainWindow ergänzt.
+         *
+         * Dadurch kann sich die Funktion an die bereits
+         * existierende Aktionsleiste der ausgewählten
+         * Nachricht anhängen, ohne MainWindow.xaml selbst
+         * verändern zu müssen.
+         */
+        Loaded +=
+            MainWindowPrinting_OnLoaded;
     }
 
     private void MainWindowVersionInfo_OnLoaded(
