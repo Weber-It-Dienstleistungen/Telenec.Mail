@@ -201,6 +201,10 @@ public partial class ComposeWindow
                 ComposeMailViewModel
                     .HtmlBody):
 
+            case nameof(
+                ComposeMailViewModel
+                    .Importance):
+
                 RestartAutoSaveDebounceTimer();
 
                 break;
@@ -233,18 +237,6 @@ public partial class ComposeWindow
             return;
         }
 
-        /*
-         * Jede neue Änderung beginnt die Schreibpause
-         * von vorne.
-         *
-         * Beispiel:
-         *
-         * Taste
-         *   → 10 Sekunden
-         *
-         * nach 3 Sekunden nächste Taste
-         *   → wieder volle 10 Sekunden
-         */
         timer.Stop();
 
         if (!HasUnsavedChanges())
@@ -267,12 +259,6 @@ public partial class ComposeWindow
             return;
         }
 
-        /*
-         * DispatcherTimer wiederholt normalerweise.
-         *
-         * Unser Debounce ist dagegen bewusst ein
-         * One-Shot-Vorgang.
-         */
         timer.Stop();
 
         if (!_autoSaveDebounceEnabled ||
@@ -284,14 +270,6 @@ public partial class ComposeWindow
             return;
         }
 
-        /*
-         * Läuft gerade ein manueller Speicher- oder
-         * Versandvorgang, greifen wir nicht dazwischen.
-         *
-         * Falls anschließend weiterhin ungespeicherte
-         * Änderungen vorhanden sind, prüfen wir nach
-         * einer weiteren ruhigen Phase erneut.
-         */
         if (_viewModel.IsBusy)
         {
             if (HasUnsavedChanges())
