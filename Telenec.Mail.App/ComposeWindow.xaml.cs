@@ -36,6 +36,8 @@ public partial class ComposeWindow : Window
     private string _baselineBody =
         string.Empty;
 
+    private string? _baselineHtmlBody;
+
     private IReadOnlyList<MailSendAttachmentData>
         _baselineAttachments =
             Array.Empty<MailSendAttachmentData>();
@@ -359,6 +361,9 @@ public partial class ComposeWindow : Window
             Body:
                 _viewModel.Body,
 
+            HtmlBody:
+                _viewModel.HtmlBody,
+
             Attachments:
                 _viewModel.Attachments.ToArray());
     }
@@ -390,6 +395,9 @@ public partial class ComposeWindow : Window
         _baselineBody =
             snapshot.Body;
 
+        _baselineHtmlBody =
+            snapshot.HtmlBody;
+
         _baselineAttachments =
             snapshot.Attachments.ToArray();
 
@@ -417,6 +425,9 @@ public partial class ComposeWindow : Window
 
         _baselineBody =
             savedSnapshot.Body;
+
+        _baselineHtmlBody =
+            savedSnapshot.HtmlBody;
 
         _baselineAttachments =
             _viewModel.Attachments.ToArray();
@@ -467,6 +478,14 @@ public partial class ComposeWindow : Window
         if (!string.Equals(
                 _baselineBody,
                 _viewModel.Body,
+                StringComparison.Ordinal))
+        {
+            return true;
+        }
+
+        if (!string.Equals(
+                _baselineHtmlBody,
+                _viewModel.HtmlBody,
                 StringComparison.Ordinal))
         {
             return true;
@@ -1098,5 +1117,6 @@ public partial class ComposeWindow : Window
         string BccAddress,
         string Subject,
         string Body,
+        string? HtmlBody,
         IReadOnlyList<MailSendAttachmentData> Attachments);
 }
