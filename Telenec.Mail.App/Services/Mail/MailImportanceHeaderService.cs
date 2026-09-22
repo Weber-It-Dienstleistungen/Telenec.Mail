@@ -48,12 +48,26 @@ internal static class MailImportanceHeaderService
         ArgumentNullException.ThrowIfNull(
             message);
 
+        return Read(
+            message.Headers);
+    }
+
+    public static MailImportanceLevel Read(
+        HeaderList headers)
+    {
+        ArgumentNullException.ThrowIfNull(
+            headers);
+
         /*
          * Unterschiedliche Mailprogramme verwenden
          * unterschiedliche Header.
          *
-         * Wir prüfen zuerst "Importance", danach die
-         * verbreiteten Microsoft-/X-Priority-Varianten.
+         * Reihenfolge:
+         *
+         * 1. Importance
+         * 2. X-MSMail-Priority
+         * 3. X-Priority
+         * 4. Priority
          *
          * Sobald ein Header einen eindeutig erkennbaren
          * Wert liefert, verwenden wir ihn.
@@ -61,7 +75,7 @@ internal static class MailImportanceHeaderService
         var importance =
             ParseTextImportance(
                 GetHeaderValue(
-                    message,
+                    headers,
                     "Importance"));
 
         if (importance.HasValue)
@@ -72,7 +86,7 @@ internal static class MailImportanceHeaderService
         importance =
             ParseTextImportance(
                 GetHeaderValue(
-                    message,
+                    headers,
                     "X-MSMail-Priority"));
 
         if (importance.HasValue)
@@ -83,7 +97,7 @@ internal static class MailImportanceHeaderService
         importance =
             ParseNumericPriority(
                 GetHeaderValue(
-                    message,
+                    headers,
                     "X-Priority"));
 
         if (importance.HasValue)
@@ -94,7 +108,7 @@ internal static class MailImportanceHeaderService
         importance =
             ParsePriority(
                 GetHeaderValue(
-                    message,
+                    headers,
                     "Priority"));
 
         return importance
@@ -150,11 +164,10 @@ internal static class MailImportanceHeaderService
     }
 
     private static string? GetHeaderValue(
-        MimeMessage message,
+        HeaderList headers,
         string fieldName)
     {
-        return message
-            .Headers
+        return headers
             .FirstOrDefault(
                 header =>
                     string.Equals(
@@ -245,9 +258,6 @@ internal static class MailImportanceHeaderService
          *
          *   1 (Highest)
          *   5 (Lowest)
-         *
-         * Deshalb genügt für die bekannte Prioritätsklasse
-         * das erste nicht-leere Zeichen.
          */
         var normalized =
             value.Trim();
