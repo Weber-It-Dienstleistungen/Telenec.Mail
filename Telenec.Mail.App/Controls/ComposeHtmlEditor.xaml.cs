@@ -279,10 +279,6 @@ public partial class ComposeHtmlEditor :
         coreWebView.Settings.IsStatusBarEnabled =
             false;
 
-        /*
-         * Der Composer soll niemals selbständig Inhalte
-         * aus dem Internet nachladen.
-         */
         coreWebView.AddWebResourceRequestedFilter(
             "http://*",
             CoreWebView2WebResourceContext.All);
@@ -530,6 +526,9 @@ public partial class ComposeHtmlEditor :
                     let suppressChange =
                         false;
 
+                    let savedRange =
+                        null;
+
                     function sanitizeHtml(html) {
                         const template =
                             document.createElement("template");
@@ -602,6 +601,73 @@ public partial class ComposeHtmlEditor :
                             template.content);
 
                         return template.innerHTML;
+                    }
+
+                    function isRangeInsideEditor(range) {
+                        if (!range) {
+                            return false;
+                        }
+
+                        let container =
+                            range.commonAncestorContainer;
+
+                        if (container.nodeType === Node.TEXT_NODE) {
+                            container =
+                                container.parentNode;
+                        }
+
+                        if (!container) {
+                            return false;
+                        }
+
+                        return container === editor ||
+                            editor.contains(
+                                container);
+                    }
+
+                    function rememberSelection() {
+                        const selection =
+                            window.getSelection();
+
+                        if (!selection ||
+                            selection.rangeCount === 0) {
+                            return;
+                        }
+
+                        const range =
+                            selection.getRangeAt(0);
+
+                        if (!isRangeInsideEditor(
+                                range)) {
+                            return;
+                        }
+
+                        savedRange =
+                            range.cloneRange();
+                    }
+
+                    function restoreSelection() {
+                        if (!savedRange) {
+                            return;
+                        }
+
+                        try {
+                            const selection =
+                                window.getSelection();
+
+                            if (!selection) {
+                                return;
+                            }
+
+                            selection.removeAllRanges();
+
+                            selection.addRange(
+                                savedRange);
+                        }
+                        catch {
+                            savedRange =
+                                null;
+                        }
                     }
 
                     function hasRichFormatting() {
@@ -716,12 +782,29 @@ public partial class ComposeHtmlEditor :
 
                             selection.addRange(
                                 range);
+
+                            rememberSelection();
                         }
                     }
 
+                    document.addEventListener(
+                        "selectionchange",
+                        rememberSelection);
+
+                    editor.addEventListener(
+                        "keyup",
+                        rememberSelection);
+
+                    editor.addEventListener(
+                        "mouseup",
+                        rememberSelection);
+
                     editor.addEventListener(
                         "input",
-                        notifyChanged);
+                        () => {
+                            rememberSelection();
+                            notifyChanged();
+                        });
 
                     editor.addEventListener(
                         "paste",
@@ -762,6 +845,9 @@ public partial class ComposeHtmlEditor :
                             plainText) => {
                             suppressChange =
                                 true;
+
+                            savedRange =
+                                null;
 
                             try {
                                 if (typeof htmlBody === "string" &&
@@ -815,12 +901,8 @@ public partial class ComposeHtmlEditor :
                             value) => {
                             editor.focus();
 
-                            /*
-                             * Chromium soll möglichst klassische
-                             * HTML-Elemente erzeugen. Dadurch
-                             * bleibt unser erlaubtes HTML klein
-                             * und vorhersehbar.
-                             */
+                            restoreSelection();
+
                             document.execCommand(
                                 "styleWithCSS",
                                 false,
@@ -830,6 +912,8 @@ public partial class ComposeHtmlEditor :
                                 command,
                                 false,
                                 value ?? null);
+
+                            rememberSelection();
 
                             notifyChanged();
                         }
