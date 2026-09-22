@@ -8,4 +8,5 @@ public sealed record MailSendRequest(
     string? BccAddress = null,
     string? ParentMessageId = null,
     IReadOnlyList<string>? ParentReferences = null,
-    IReadOnlyList<MailSendAttachmentData>? Attachments = null);
+    IReadOnlyList<MailSendAttachmentData>? Attachments = null,
+    string? HtmlBody = null);
