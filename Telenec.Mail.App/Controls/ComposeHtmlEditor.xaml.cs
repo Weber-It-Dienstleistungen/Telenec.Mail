@@ -521,9 +521,9 @@ public partial class ComposeHtmlEditor :
 
                         window.chrome.webview.postMessage(
                             JSON.stringify({
-                                type: "contentChanged",
-                                plainText: editor.innerText ?? "",
-                                htmlBody: editor.innerHTML ?? ""
+                                Type: "contentChanged",
+                                PlainText: editor.innerText ?? "",
+                                HtmlBody: editor.innerHTML ?? ""
                             }));
                     }
 
@@ -646,10 +646,10 @@ public partial class ComposeHtmlEditor :
                         },
 
                         getContent: () => ({
-                            plainText:
+                            PlainText:
                                 editor.innerText ?? "",
 
-                            htmlBody:
+                            HtmlBody:
                                 editor.innerHTML ?? ""
                         }),
 
