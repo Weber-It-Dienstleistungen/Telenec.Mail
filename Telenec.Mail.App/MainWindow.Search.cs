@@ -3230,7 +3230,10 @@ public partial class MainWindow
                 message.CcAddresses,
 
             replyToAddresses:
-                message.ReplyToAddresses);
+                message.ReplyToAddresses,
+
+            importance:
+                message.Importance);
     }
 
     private bool TryGetSearchAttachmentContext(
