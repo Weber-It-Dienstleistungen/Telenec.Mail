@@ -1,6 +1,4 @@
-﻿using Telenec.Mail.App.Models;
-
-namespace Telenec.Mail.App.Models;
+﻿namespace Telenec.Mail.App.Models;
 
 public sealed record MailDraftEditData(
     string SourceFolderId,
@@ -14,4 +12,5 @@ public sealed record MailDraftEditData(
     string? ParentMessageId,
     IReadOnlyList<string> ParentReferences,
     IReadOnlyList<MailSendAttachmentData> Attachments,
-    string? HtmlBody = null);
+    string? HtmlBody = null,
+    MailImportanceLevel Importance = MailImportanceLevel.Normal);

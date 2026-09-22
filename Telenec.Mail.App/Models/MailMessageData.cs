@@ -25,4 +25,5 @@ public sealed record MailMessageData(
     IReadOnlyList<string>? References = null,
     IReadOnlyList<string>? ToAddresses = null,
     IReadOnlyList<string>? CcAddresses = null,
-    IReadOnlyList<string>? ReplyToAddresses = null);
+    IReadOnlyList<string>? ReplyToAddresses = null,
+    MailImportanceLevel Importance = MailImportanceLevel.Normal);
