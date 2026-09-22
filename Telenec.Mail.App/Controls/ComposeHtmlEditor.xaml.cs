@@ -282,9 +282,6 @@ public partial class ComposeHtmlEditor :
         /*
          * Der Composer soll niemals selbständig Inhalte
          * aus dem Internet nachladen.
-         *
-         * Das ist besonders wichtig, sobald später HTML-
-         * Entwürfe aus anderen Clients bearbeitet werden.
          */
         coreWebView.AddWebResourceRequestedFilter(
             "http://*",
@@ -512,18 +509,102 @@ public partial class ComposeHtmlEditor :
                     const editor =
                         document.getElementById("editor");
 
+                    const richTextMarker =
+                        "<!--telenec-mail-richtext-v1-->";
+
+                    const allowedTags =
+                        new Set([
+                            "B",
+                            "STRONG",
+                            "I",
+                            "EM",
+                            "U",
+                            "UL",
+                            "LI",
+                            "DIV",
+                            "P",
+                            "BR",
+                            "FONT"
+                        ]);
+
                     let suppressChange =
                         false;
 
+                    function sanitizeHtml(html) {
+                        const template =
+                            document.createElement("template");
+
+                        template.innerHTML =
+                            html ?? "";
+
+                        function sanitizeChildren(parent) {
+                            const children =
+                                Array.from(
+                                    parent.childNodes);
+
+                            for (const child of children) {
+                                if (child.nodeType === Node.TEXT_NODE) {
+                                    continue;
+                                }
+
+                                if (child.nodeType === Node.COMMENT_NODE) {
+                                    child.remove();
+
+                                    continue;
+                                }
+
+                                if (child.nodeType !== Node.ELEMENT_NODE) {
+                                    child.remove();
+
+                                    continue;
+                                }
+
+                                sanitizeChildren(
+                                    child);
+
+                                const tagName =
+                                    child.tagName
+                                        .toUpperCase();
+
+                                if (!allowedTags.has(
+                                        tagName)) {
+                                    child.replaceWith(
+                                        ...Array.from(
+                                            child.childNodes));
+
+                                    continue;
+                                }
+
+                                for (const attribute of
+                                     Array.from(
+                                         child.attributes)) {
+                                    const attributeName =
+                                        attribute.name
+                                            .toLowerCase();
+
+                                    const isAllowedFontAttribute =
+                                        tagName === "FONT" &&
+                                        (
+                                            attributeName === "color" ||
+                                            attributeName === "face" ||
+                                            attributeName === "size"
+                                        );
+
+                                    if (!isAllowedFontAttribute) {
+                                        child.removeAttribute(
+                                            attribute.name);
+                                    }
+                                }
+                            }
+                        }
+
+                        sanitizeChildren(
+                            template.content);
+
+                        return template.innerHTML;
+                    }
+
                     function hasRichFormatting() {
-                        /*
-                         * DIV, P und BR werden von contenteditable
-                         * auch bei völlig normalem Plaintext für
-                         * Absatz- und Zeilenumbrüche erzeugt.
-                         *
-                         * Diese Elemente allein machen aus einer
-                         * Nachricht deshalb noch keine HTML-Mail.
-                         */
                         const elements =
                             editor.querySelectorAll("*");
 
@@ -545,11 +626,6 @@ public partial class ComposeHtmlEditor :
                                 return true;
                             }
 
-                            /*
-                             * Jeder andere HTML-Knoten stellt
-                             * entweder Formatierung oder einen
-                             * sonstigen Rich-Content-Inhalt dar.
-                             */
                             return true;
                         }
 
@@ -562,13 +638,15 @@ public partial class ComposeHtmlEditor :
                         }
 
                         const html =
-                            editor.innerHTML ?? "";
+                            sanitizeHtml(
+                                editor.innerHTML ?? "");
 
                         if (html.trim().length === 0) {
                             return null;
                         }
 
-                        return html;
+                        return richTextMarker +
+                            html;
                     }
 
                     function notifyChanged() {
@@ -688,8 +766,19 @@ public partial class ComposeHtmlEditor :
                             try {
                                 if (typeof htmlBody === "string" &&
                                     htmlBody.trim().length > 0) {
+                                    let html =
+                                        htmlBody.trim();
+
+                                    if (html.startsWith(
+                                            richTextMarker)) {
+                                        html =
+                                            html.substring(
+                                                richTextMarker.length);
+                                    }
+
                                     editor.innerHTML =
-                                        htmlBody;
+                                        sanitizeHtml(
+                                            html);
                                 }
                                 else {
                                     editor.textContent =
@@ -725,6 +814,17 @@ public partial class ComposeHtmlEditor :
                             command,
                             value) => {
                             editor.focus();
+
+                            /*
+                             * Chromium soll möglichst klassische
+                             * HTML-Elemente erzeugen. Dadurch
+                             * bleibt unser erlaubtes HTML klein
+                             * und vorhersehbar.
+                             */
+                            document.execCommand(
+                                "styleWithCSS",
+                                false,
+                                false);
 
                             document.execCommand(
                                 command,
