@@ -514,6 +514,62 @@ public partial class ComposeHtmlEditor :
                     let suppressChange =
                         false;
 
+                    function hasRichFormatting() {
+                        /*
+                         * DIV, P und BR werden von contenteditable
+                         * auch bei völlig normalem Plaintext für
+                         * Absatz- und Zeilenumbrüche erzeugt.
+                         *
+                         * Diese Elemente allein machen aus einer
+                         * Nachricht deshalb noch keine HTML-Mail.
+                         */
+                        const elements =
+                            editor.querySelectorAll("*");
+
+                        for (const element of elements) {
+                            const tagName =
+                                element.tagName
+                                    .toUpperCase();
+
+                            if (tagName === "BR") {
+                                continue;
+                            }
+
+                            if (tagName === "DIV" ||
+                                tagName === "P") {
+                                if (element.attributes.length === 0) {
+                                    continue;
+                                }
+
+                                return true;
+                            }
+
+                            /*
+                             * Jeder andere HTML-Knoten stellt
+                             * entweder Formatierung oder einen
+                             * sonstigen Rich-Content-Inhalt dar.
+                             */
+                            return true;
+                        }
+
+                        return false;
+                    }
+
+                    function getHtmlBody() {
+                        if (!hasRichFormatting()) {
+                            return null;
+                        }
+
+                        const html =
+                            editor.innerHTML ?? "";
+
+                        if (html.trim().length === 0) {
+                            return null;
+                        }
+
+                        return html;
+                    }
+
                     function notifyChanged() {
                         if (suppressChange) {
                             return;
@@ -523,7 +579,7 @@ public partial class ComposeHtmlEditor :
                             JSON.stringify({
                                 Type: "contentChanged",
                                 PlainText: editor.innerText ?? "",
-                                HtmlBody: editor.innerHTML ?? ""
+                                HtmlBody: getHtmlBody()
                             }));
                     }
 
@@ -650,7 +706,7 @@ public partial class ComposeHtmlEditor :
                                 editor.innerText ?? "",
 
                             HtmlBody:
-                                editor.innerHTML ?? ""
+                                getHtmlBody()
                         }),
 
                         setReadOnly: isReadOnly => {
