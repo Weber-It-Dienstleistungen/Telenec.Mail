@@ -3,6 +3,7 @@ using Microsoft.Extensions.Logging;
 using System.IO;
 using System.Net.Sockets;
 using Telenec.Mail.App.Models;
+using Telenec.Mail.App.Services.Storage;
 
 namespace Telenec.Mail.App.Services.Mail;
 
@@ -12,21 +13,41 @@ public sealed class LoggingMailDataSource :
     private readonly ImapMailDataSource
         _inner;
 
+    private readonly IMailAccountStore
+        _mailAccountStore;
+
+    private readonly IMailReadReceiptStore
+        _mailReadReceiptStore;
+
     private readonly ILogger<LoggingMailDataSource>
         _logger;
 
     public LoggingMailDataSource(
         ImapMailDataSource inner,
+        IMailAccountStore mailAccountStore,
+        IMailReadReceiptStore mailReadReceiptStore,
         ILogger<LoggingMailDataSource> logger)
     {
         ArgumentNullException.ThrowIfNull(
             inner);
 
         ArgumentNullException.ThrowIfNull(
+            mailAccountStore);
+
+        ArgumentNullException.ThrowIfNull(
+            mailReadReceiptStore);
+
+        ArgumentNullException.ThrowIfNull(
             logger);
 
         _inner =
             inner;
+
+        _mailAccountStore =
+            mailAccountStore;
+
+        _mailReadReceiptStore =
+            mailReadReceiptStore;
 
         _logger =
             logger;
@@ -41,32 +62,46 @@ public sealed class LoggingMailDataSource :
                 cancellationToken);
     }
 
-    public Task<IReadOnlyList<MailMessageData>>
+    public async Task<IReadOnlyList<MailMessageData>>
         GetMessagesAsync(
             string folderId,
             int maximumMessageCount = 20,
             CancellationToken cancellationToken = default)
     {
-        return _inner
-            .GetMessagesAsync(
-                folderId,
-                maximumMessageCount,
-                cancellationToken);
+        var messages =
+            await _inner
+                .GetMessagesAsync(
+                    folderId,
+                    maximumMessageCount,
+                    cancellationToken);
+
+        await PersistReadReceiptsAsync(
+            messages,
+            cancellationToken);
+
+        return messages;
     }
 
-    public Task<IReadOnlyList<MailMessageData>>
+    public async Task<IReadOnlyList<MailMessageData>>
         GetMessagePageAsync(
             string folderId,
             int skipMessageCount,
             int maximumMessageCount,
             CancellationToken cancellationToken = default)
     {
-        return _inner
-            .GetMessagePageAsync(
-                folderId,
-                skipMessageCount,
-                maximumMessageCount,
-                cancellationToken);
+        var messages =
+            await _inner
+                .GetMessagePageAsync(
+                    folderId,
+                    skipMessageCount,
+                    maximumMessageCount,
+                    cancellationToken);
+
+        await PersistReadReceiptsAsync(
+            messages,
+            cancellationToken);
+
+        return messages;
     }
 
     public Task DownloadAttachmentAsync(
@@ -184,6 +219,133 @@ public sealed class LoggingMailDataSource :
 
             cancellationToken:
                 cancellationToken);
+    }
+
+    private async Task PersistReadReceiptsAsync(
+        IReadOnlyList<MailMessageData> messages,
+        CancellationToken cancellationToken)
+    {
+        var readReceipts =
+            messages
+                .Select(
+                    message =>
+                        message.ReadReceipt)
+                .Where(
+                    readReceipt =>
+                        readReceipt is not null)
+                .Cast<MailReadReceiptData>()
+                .Where(
+                    CanPersistReadReceipt)
+                .ToList();
+
+        if (readReceipts.Count == 0)
+        {
+            return;
+        }
+
+        try
+        {
+            var account =
+                await _mailAccountStore
+                    .GetActiveAccountAsync(
+                        cancellationToken);
+
+            if (account is null ||
+                account.AccountId == Guid.Empty)
+            {
+                _logger.LogWarning(
+                    "Detected read receipts could not be persisted because no active mail account was available. ReceiptCount={ReceiptCount}.",
+                    readReceipts.Count);
+
+                return;
+            }
+
+            foreach (var readReceipt in
+                     readReceipts)
+            {
+                cancellationToken
+                    .ThrowIfCancellationRequested();
+
+                try
+                {
+                    await _mailReadReceiptStore
+                        .SaveAsync(
+                            account.AccountId,
+                            readReceipt,
+                            cancellationToken);
+                }
+                catch (OperationCanceledException)
+                    when (cancellationToken.IsCancellationRequested)
+                {
+                    throw;
+                }
+                catch (Exception exception)
+                {
+                    /*
+                     * Die Persistenz einer Lesebestätigung ist
+                     * eine Zusatzfunktion.
+                     *
+                     * Ein lokaler SQLite-Fehler darf niemals
+                     * verhindern, dass der Benutzer seine
+                     * Nachrichten weiterhin laden und lesen
+                     * kann.
+                     *
+                     * Personenbezogene Daten wie Mailadresse,
+                     * Message-ID oder Betreff werden bewusst
+                     * nicht protokolliert.
+                     */
+                    var exceptionType =
+                        exception.GetType().FullName
+                        ?? exception.GetType().Name;
+
+                    _logger.LogWarning(
+                        "A detected read receipt could not be persisted. ExceptionType={ExceptionType}.",
+                        exceptionType);
+                }
+            }
+        }
+        catch (OperationCanceledException)
+            when (cancellationToken.IsCancellationRequested)
+        {
+            throw;
+        }
+        catch (Exception exception)
+        {
+            /*
+             * Auch ein Fehler beim Ermitteln des aktiven
+             * Accounts darf den normalen Mailabruf nicht
+             * beeinträchtigen.
+             */
+            var exceptionType =
+                exception.GetType().FullName
+                ?? exception.GetType().Name;
+
+            _logger.LogWarning(
+                "Detected read receipts could not be persisted. ReceiptCount={ReceiptCount}, ExceptionType={ExceptionType}.",
+                readReceipts.Count,
+                exceptionType);
+        }
+    }
+
+    private static bool CanPersistReadReceipt(
+        MailReadReceiptData readReceipt)
+    {
+        /*
+         * Der SQLite-Store ist bewusst streng.
+         *
+         * Eine Lesebestätigung ohne sichere Zuordnung zur
+         * ursprünglichen Nachricht wird zwar weiterhin als
+         * empfangene Nachricht angezeigt, aber nicht als
+         * dauerhafter Status einer gesendeten Mail gespeichert.
+         */
+        return
+            !string.IsNullOrWhiteSpace(
+                readReceipt.OriginalMessageId) &&
+            !string.IsNullOrWhiteSpace(
+                readReceipt.SenderAddress) &&
+            readReceipt.ReceiptDate.HasValue &&
+            !string.IsNullOrWhiteSpace(
+                readReceipt.Disposition);
     }
 
     private async Task<MailMoveResult>
