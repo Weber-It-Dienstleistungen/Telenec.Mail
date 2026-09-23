@@ -32,7 +32,7 @@ public sealed class MailKitSearchService :
     private readonly ICredentialStore
         _credentialStore;
 
-    private readonly ImapMailDataSource
+    private readonly IMailDataSource
         _mailDataSource;
 
     private readonly ILogger<MailKitSearchService>
@@ -41,7 +41,7 @@ public sealed class MailKitSearchService :
     public MailKitSearchService(
         IMailAccountStore mailAccountStore,
         ICredentialStore credentialStore,
-        ImapMailDataSource mailDataSource,
+        IMailDataSource mailDataSource,
         ILogger<MailKitSearchService> logger)
     {
         ArgumentNullException.ThrowIfNull(
