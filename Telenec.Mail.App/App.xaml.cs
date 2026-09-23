@@ -166,6 +166,18 @@ public partial class App : Application
                         IMailAccountStore,
                         SqliteMailAccountStore>();
 
+                    /*
+                     * Erkannte Lesebestätigungen werden lokal
+                     * pro Mailkonto und ursprünglicher
+                     * Message-ID gespeichert.
+                     *
+                     * Die Registrierung allein löst noch
+                     * keinerlei Schreib- oder Leseoperation aus.
+                     */
+                    services.AddSingleton<
+                        IMailReadReceiptStore,
+                        SqliteMailReadReceiptStore>();
+
                     services.AddSingleton<
                         ICredentialStore,
                         WindowsCredentialStore>();
