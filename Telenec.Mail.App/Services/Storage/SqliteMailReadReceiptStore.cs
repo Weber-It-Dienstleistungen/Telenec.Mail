@@ -28,7 +28,7 @@ public sealed class SqliteMailReadReceiptStore
             accountId);
 
         var originalMessageId =
-            NormalizeRequiredText(
+            NormalizeRequiredMessageId(
                 readReceipt.OriginalMessageId,
                 nameof(
                     readReceipt.OriginalMessageId));
@@ -162,13 +162,70 @@ public sealed class SqliteMailReadReceiptStore
             string originalMessageId,
             CancellationToken cancellationToken = default)
     {
+        var results =
+            await GetByOriginalMessageIdsAsync(
+                accountId,
+                new[]
+                {
+                    originalMessageId
+                },
+                cancellationToken);
+
+        var normalizedMessageId =
+            NormalizeRequiredMessageId(
+                originalMessageId,
+                nameof(originalMessageId));
+
+        if (results.TryGetValue(
+                normalizedMessageId,
+                out var readReceipts))
+        {
+            return readReceipts;
+        }
+
+        return Array.Empty<MailReadReceiptData>();
+    }
+
+    public async Task<IReadOnlyDictionary<
+        string,
+        IReadOnlyList<MailReadReceiptData>>>
+        GetByOriginalMessageIdsAsync(
+            Guid accountId,
+            IReadOnlyCollection<string> originalMessageIds,
+            CancellationToken cancellationToken = default)
+    {
         ValidateAccountId(
             accountId);
 
-        var normalizedMessageId =
-            NormalizeRequiredText(
-                originalMessageId,
-                nameof(originalMessageId));
+        ArgumentNullException.ThrowIfNull(
+            originalMessageIds);
+
+        var normalizedMessageIds =
+            originalMessageIds
+                .Where(
+                    messageId =>
+                        !string.IsNullOrWhiteSpace(
+                            messageId))
+                .Select(
+                    NormalizeMessageId)
+                .Where(
+                    messageId =>
+                        !string.IsNullOrWhiteSpace(
+                            messageId))
+                .Select(
+                    messageId =>
+                        messageId!)
+                .Distinct(
+                    StringComparer.Ordinal)
+                .ToArray();
+
+        if (normalizedMessageIds.Length == 0)
+        {
+            return new Dictionary<
+                string,
+                IReadOnlyList<MailReadReceiptData>>(
+                    StringComparer.Ordinal);
+        }
 
         await using var connection =
             CreateConnection();
@@ -179,8 +236,31 @@ public sealed class SqliteMailReadReceiptStore
         await using var command =
             connection.CreateCommand();
 
+        var parameterNames =
+            new string[
+                normalizedMessageIds.Length];
+
+        for (var index = 0;
+             index < normalizedMessageIds.Length;
+             index++)
+        {
+            var parameterName =
+                $"$messageId{index}";
+
+            parameterNames[index] =
+                parameterName;
+
+            command.Parameters.AddWithValue(
+                parameterName,
+                normalizedMessageIds[index]);
+        }
+
+        command.Parameters.AddWithValue(
+            "$accountId",
+            accountId.ToString("D"));
+
         command.CommandText =
-            """
+            $"""
             SELECT
                 OriginalMessageId,
                 ReceiptSenderAddress,
@@ -189,24 +269,26 @@ public sealed class SqliteMailReadReceiptStore
                 Disposition
             FROM ReadReceipts
             WHERE AccountId = $accountId
-              AND OriginalMessageId = $originalMessageId
-            ORDER BY ReceiptAtUtc ASC;
+              AND OriginalMessageId IN
+              (
+                  {string.Join(
+                      ", ",
+                      parameterNames)}
+              )
+            ORDER BY
+                OriginalMessageId ASC,
+                ReceiptAtUtc ASC;
             """;
-
-        command.Parameters.AddWithValue(
-            "$accountId",
-            accountId.ToString("D"));
-
-        command.Parameters.AddWithValue(
-            "$originalMessageId",
-            normalizedMessageId);
 
         await using var reader =
             await command.ExecuteReaderAsync(
                 cancellationToken);
 
-        var results =
-            new List<MailReadReceiptData>();
+        var mutableResults =
+            new Dictionary<
+                string,
+                List<MailReadReceiptData>>(
+                    StringComparer.Ordinal);
 
         while (await reader.ReadAsync(
                    cancellationToken))
@@ -238,10 +320,27 @@ public sealed class SqliteMailReadReceiptStore
                     "Der gespeicherte Zeitpunkt einer Lesebestätigung ist ungültig.");
             }
 
-            results.Add(
+            var normalizedStoredMessageId =
+                NormalizeRequiredMessageId(
+                    storedOriginalMessageId,
+                    nameof(storedOriginalMessageId));
+
+            if (!mutableResults.TryGetValue(
+                    normalizedStoredMessageId,
+                    out var messageReadReceipts))
+            {
+                messageReadReceipts =
+                    new List<MailReadReceiptData>();
+
+                mutableResults.Add(
+                    normalizedStoredMessageId,
+                    messageReadReceipts);
+            }
+
+            messageReadReceipts.Add(
                 new MailReadReceiptData(
                     OriginalMessageId:
-                        storedOriginalMessageId,
+                        normalizedStoredMessageId,
 
                     Sender:
                         string.IsNullOrWhiteSpace(
@@ -257,6 +356,20 @@ public sealed class SqliteMailReadReceiptStore
 
                     Disposition:
                         disposition));
+        }
+
+        var results =
+            new Dictionary<
+                string,
+                IReadOnlyList<MailReadReceiptData>>(
+                    StringComparer.Ordinal);
+
+        foreach (var pair in
+                 mutableResults)
+        {
+            results.Add(
+                pair.Key,
+                pair.Value.ToArray());
         }
 
         return results;
@@ -313,5 +426,63 @@ public sealed class SqliteMailReadReceiptStore
         }
 
         return value.Trim();
+    }
+
+    private static string
+        NormalizeRequiredMessageId(
+            string? value,
+            string parameterName)
+    {
+        var normalized =
+            NormalizeMessageId(
+                value);
+
+        if (string.IsNullOrWhiteSpace(
+                normalized))
+        {
+            throw new ArgumentException(
+                "Die Message-ID darf nicht leer sein.",
+                parameterName);
+        }
+
+        return normalized;
+    }
+
+    private static string?
+        NormalizeMessageId(
+            string? messageId)
+    {
+        if (string.IsNullOrWhiteSpace(
+                messageId))
+        {
+            return null;
+        }
+
+        var normalized =
+            messageId.Trim();
+
+        /*
+         * Empfangene MDNs enthalten Original-Message-ID
+         * teilweise mit spitzen Klammern, während MailKit
+         * Envelope.MessageId üblicherweise bereits nur den
+         * eigentlichen Message-ID-Wert liefert.
+         *
+         * Für die lokale Zuordnung bringen wir beide
+         * Varianten deshalb auf dieselbe Form.
+         */
+        if (normalized.Length >= 2 &&
+            normalized[0] == '<' &&
+            normalized[^1] == '>')
+        {
+            normalized =
+                normalized[
+                    1..^1]
+                    .Trim();
+        }
+
+        return string.IsNullOrWhiteSpace(
+                normalized)
+            ? null
+            : normalized;
     }
 }

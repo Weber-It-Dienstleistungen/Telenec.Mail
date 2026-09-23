@@ -14,4 +14,12 @@ public interface IMailReadReceiptStore
             Guid accountId,
             string originalMessageId,
             CancellationToken cancellationToken = default);
+
+    Task<IReadOnlyDictionary<
+        string,
+        IReadOnlyList<MailReadReceiptData>>>
+        GetByOriginalMessageIdsAsync(
+            Guid accountId,
+            IReadOnlyCollection<string> originalMessageIds,
+            CancellationToken cancellationToken = default);
 }
