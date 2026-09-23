@@ -246,8 +246,23 @@ public sealed class SqliteMailAccountStore : IMailAccountStore
         var connectionString =
             new SqliteConnectionStringBuilder
             {
-                DataSource = _paths.DatabasePath,
-                Mode = SqliteOpenMode.ReadWrite
+                DataSource =
+                    _paths.DatabasePath,
+
+                Mode =
+                    SqliteOpenMode.ReadWrite,
+
+                /*
+                 * Foreign-Key-Verhalten ist bei SQLite
+                 * verbindungsbezogen.
+                 *
+                 * Besonders wichtig ist dies beim Löschen
+                 * eines Accounts, damit abhängige lokale
+                 * Datensätze mit ON DELETE CASCADE ebenfalls
+                 * entfernt werden.
+                 */
+                ForeignKeys =
+                    true
             }.ToString();
 
         return new SqliteConnection(

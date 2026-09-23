@@ -271,7 +271,18 @@ public sealed class SqliteMailReadReceiptStore
                     _paths.DatabasePath,
 
                 Mode =
-                    SqliteOpenMode.ReadWrite
+                    SqliteOpenMode.ReadWrite,
+
+                /*
+                 * SQLite aktiviert Foreign-Key-Prüfungen
+                 * verbindungsbezogen.
+                 *
+                 * Dadurch werden insbesondere das
+                 * ReadReceipts-FK und ON DELETE CASCADE
+                 * tatsächlich wirksam.
+                 */
+                ForeignKeys =
+                    true
             }.ToString();
 
         return new SqliteConnection(
