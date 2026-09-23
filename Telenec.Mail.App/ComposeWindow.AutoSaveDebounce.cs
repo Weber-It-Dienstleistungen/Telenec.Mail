@@ -205,6 +205,10 @@ public partial class ComposeWindow
                 ComposeMailViewModel
                     .Importance):
 
+            case nameof(
+                ComposeMailViewModel
+                    .RequestReadReceipt):
+
                 RestartAutoSaveDebounceTimer();
 
                 break;
