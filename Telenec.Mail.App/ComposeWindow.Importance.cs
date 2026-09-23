@@ -42,8 +42,11 @@ public partial class ComposeWindow
          * Dort ergänzen wir rechts eine dritte Spalte
          * für die Wichtigkeit.
          *
-         * Dadurch bleibt die Funktion unabhängig vom
-         * Rich-Text-Editor und funktioniert auch im
+         * Direkt darunter sitzt zusätzlich die optionale
+         * Anforderung einer Lesebestätigung.
+         *
+         * Dadurch bleiben beide Versandoptionen unabhängig
+         * vom Rich-Text-Editor und funktionieren auch im
          * Plaintext-Fallback.
          */
         var attachmentBorder =
@@ -229,6 +232,82 @@ public partial class ComposeWindow
             .Children
             .Add(
                 importancePanel);
+
+        /*
+         * Die Lesebestätigung ist bewusst als optionale
+         * Anforderung formuliert.
+         *
+         * Ein gesetzter Haken bedeutet nicht, dass der
+         * Empfänger die Nachricht tatsächlich bestätigt.
+         * Der Empfänger bzw. dessen Mailprogramm kann die
+         * MDN-Anforderung ablehnen oder ignorieren.
+         */
+        var readReceiptCheckBox =
+            new CheckBox
+            {
+                Content =
+                    "Lesebestätigung anfordern",
+
+                Margin =
+                    new Thickness(
+                        0,
+                        10,
+                        0,
+                        0),
+
+                FontSize =
+                    12,
+
+                VerticalAlignment =
+                    VerticalAlignment.Center,
+
+                ToolTip =
+                    "Fordert beim Empfänger eine Lesebestätigung an. " +
+                    "Der Empfänger oder dessen Mailprogramm kann die Bestätigung ablehnen oder ignorieren."
+            };
+
+        readReceiptCheckBox.SetResourceReference(
+            Control.ForegroundProperty,
+            "Text.Primary");
+
+        readReceiptCheckBox.SetBinding(
+            CheckBox.IsCheckedProperty,
+            new Binding(
+                nameof(
+                    ComposeMailViewModel
+                        .RequestReadReceipt))
+            {
+                Mode =
+                    BindingMode.TwoWay,
+
+                UpdateSourceTrigger =
+                    UpdateSourceTrigger.PropertyChanged
+            });
+
+        /*
+         * Während Versand oder Speicherung darf auch
+         * diese Versandoption nicht mehr geändert werden.
+         */
+        readReceiptCheckBox.SetBinding(
+            UIElement.IsEnabledProperty,
+            new Binding(
+                nameof(
+                    ComposeMailViewModel
+                        .CanModifyAttachments)));
+
+        /*
+         * Der erste Eintrag des StackPanels ist das
+         * Header-Grid, danach folgt bisher die Liste der
+         * Anhänge.
+         *
+         * Die Versandoption wird deshalb dazwischen
+         * eingefügt.
+         */
+        attachmentPanel
+            .Children
+            .Insert(
+                1,
+                readReceiptCheckBox);
     }
 
     private sealed record MailImportanceOption(
