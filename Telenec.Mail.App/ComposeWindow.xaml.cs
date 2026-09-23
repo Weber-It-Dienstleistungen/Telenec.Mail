@@ -41,6 +41,8 @@ public partial class ComposeWindow : Window
     private MailImportanceLevel _baselineImportance =
         MailImportanceLevel.Normal;
 
+    private bool _baselineRequestReadReceipt;
+
     private IReadOnlyList<MailSendAttachmentData>
         _baselineAttachments =
             Array.Empty<MailSendAttachmentData>();
@@ -370,6 +372,9 @@ public partial class ComposeWindow : Window
             Importance:
                 _viewModel.Importance,
 
+            RequestReadReceipt:
+                _viewModel.RequestReadReceipt,
+
             Attachments:
                 _viewModel.Attachments.ToArray());
     }
@@ -407,6 +412,9 @@ public partial class ComposeWindow : Window
         _baselineImportance =
             snapshot.Importance;
 
+        _baselineRequestReadReceipt =
+            snapshot.RequestReadReceipt;
+
         _baselineAttachments =
             snapshot.Attachments.ToArray();
 
@@ -440,6 +448,9 @@ public partial class ComposeWindow : Window
 
         _baselineImportance =
             savedSnapshot.Importance;
+
+        _baselineRequestReadReceipt =
+            savedSnapshot.RequestReadReceipt;
 
         _baselineAttachments =
             _viewModel.Attachments.ToArray();
@@ -505,6 +516,12 @@ public partial class ComposeWindow : Window
 
         if (_baselineImportance !=
             _viewModel.Importance)
+        {
+            return true;
+        }
+
+        if (_baselineRequestReadReceipt !=
+            _viewModel.RequestReadReceipt)
         {
             return true;
         }
@@ -1137,5 +1154,6 @@ public partial class ComposeWindow : Window
         string Body,
         string? HtmlBody,
         MailImportanceLevel Importance,
+        bool RequestReadReceipt,
         IReadOnlyList<MailSendAttachmentData> Attachments);
 }
