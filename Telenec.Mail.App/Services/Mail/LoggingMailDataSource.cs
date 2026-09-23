@@ -1,6 +1,5 @@
 ﻿using MailKit.Security;
 using Microsoft.Extensions.Logging;
-using System.Globalization;
 using System.IO;
 using System.Net.Sockets;
 using Telenec.Mail.App.Models;
@@ -419,28 +418,11 @@ public sealed class LoggingMailDataSource :
                     continue;
                 }
 
-                /*
-                 * ReceivedReadReceipts ist der eigentliche
-                 * Datenzustand für die spätere endgültige UI.
-                 *
-                 * HighlightTitle/HighlightText werden hier
-                 * vorübergehend zusätzlich gesetzt, damit wir
-                 * die komplette Verknüpfung im laufenden Client
-                 * sichtbar E2E testen können, ohne dafür bereits
-                 * die finale Statusoberfläche zu bauen.
-                 */
                 enrichedMessages[index] =
                     message with
                     {
                         ReceivedReadReceipts =
-                            readReceipts,
-
-                        HighlightTitle =
-                            "Lesebestätigung erhalten",
-
-                        HighlightText =
-                            CreateReceivedReadReceiptHighlightText(
-                                readReceipts)
+                            readReceipts
                     };
 
                 hasChanges =
@@ -479,74 +461,6 @@ public sealed class LoggingMailDataSource :
 
             return messages;
         }
-    }
-
-    private static string
-        CreateReceivedReadReceiptHighlightText(
-            IReadOnlyList<MailReadReceiptData> readReceipts)
-    {
-        if (readReceipts.Count == 0)
-        {
-            return string.Empty;
-        }
-
-        if (readReceipts.Count == 1)
-        {
-            var readReceipt =
-                readReceipts[0];
-
-            var sender =
-                !string.IsNullOrWhiteSpace(
-                    readReceipt.Sender)
-                    ? readReceipt.Sender.Trim()
-                    : readReceipt.SenderAddress.Trim();
-
-            if (readReceipt.ReceiptDate.HasValue)
-            {
-                var localReceiptDate =
-                    readReceipt
-                        .ReceiptDate
-                        .Value
-                        .ToLocalTime();
-
-                return
-                    $"Bestätigung von {sender} · " +
-                    $"{localReceiptDate.ToString(
-                        "dd.MM.yyyy HH:mm",
-                        CultureInfo.CurrentCulture)} Uhr";
-            }
-
-            return
-                $"Bestätigung von {sender}";
-        }
-
-        var datedReadReceipts =
-            readReceipts
-                .Where(
-                    readReceipt =>
-                        readReceipt.ReceiptDate.HasValue)
-                .Select(
-                    readReceipt =>
-                        readReceipt
-                            .ReceiptDate!
-                            .Value
-                            .ToLocalTime())
-                .ToArray();
-
-        if (datedReadReceipts.Length == 0)
-        {
-            return
-                $"{readReceipts.Count} Lesebestätigungen erhalten";
-        }
-
-        var latestReceiptDate =
-            datedReadReceipts.Max();
-
-        return
-            $"{readReceipts.Count} Lesebestätigungen erhalten · " +
-            $"zuletzt {latestReceiptDate.ToString(
-                "dd.MM.yyyy HH:mm",
-                CultureInfo.CurrentCulture)} Uhr";
     }
 
     private static string?
