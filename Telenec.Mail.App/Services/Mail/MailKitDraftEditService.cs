@@ -282,6 +282,21 @@ public sealed class MailKitDraftEditService :
                 MailImportanceHeaderService.Read(
                     message);
 
+            /*
+             * Auch die Anforderung einer Lesebestätigung
+             * wird direkt aus der gespeicherten MIME-
+             * Nachricht wiederhergestellt.
+             *
+             * Entscheidend ist nur, ob ein standardisierter
+             * Disposition-Notification-To-Header vorhanden
+             * ist. Die darin gespeicherte Adresse wird nicht
+             * übernommen; beim erneuten Speichern erzeugt
+             * Telenec Mail sie wieder aus dem aktiven Konto.
+             */
+            var requestReadReceipt =
+                MailReadReceiptHeaderService.Read(
+                    message);
+
             return new MailDraftEditData(
                 SourceFolderId:
                     folder.FullName,
@@ -322,7 +337,10 @@ public sealed class MailKitDraftEditService :
                     supportedHtmlBody,
 
                 Importance:
-                    importance);
+                    importance,
+
+                RequestReadReceipt:
+                    requestReadReceipt);
         }
         catch (OperationCanceledException)
             when (cancellationToken.IsCancellationRequested)
