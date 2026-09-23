@@ -5,8 +5,14 @@ namespace Telenec.Mail.App.ViewModels;
 
 public sealed class MailMessageItemViewModel : BaseViewModel
 {
+    public const string RedCategoryKeyword =
+        "TelenecCategory-Red";
+
     private bool _isUnread;
     private bool _emphasizeSender;
+
+    private IReadOnlyList<string> _keywords =
+        Array.Empty<string>();
 
     public MailMessageItemViewModel(
         string sender,
@@ -138,7 +144,7 @@ public sealed class MailMessageItemViewModel : BaseViewModel
             CreateReceivedReadReceiptDetails(
                 ReceivedReadReceipts);
 
-        Keywords =
+        _keywords =
             CreateKeywordSnapshot(
                 keywords);
     }
@@ -223,80 +229,20 @@ public sealed class MailMessageItemViewModel : BaseViewModel
         Attachments
     { get; }
 
-    /*
-     * Bedeutet ausschließlich:
-     *
-     * In der MIME-Struktur wurde ein S/MIME-Signaturpart
-     * erkannt.
-     *
-     * Es bedeutet ausdrücklich noch NICHT:
-     *
-     * - Signatur kryptografisch gültig
-     * - Zertifikat vertrauenswürdig
-     * - Zertifikat nicht abgelaufen
-     * - Absenderidentität bestätigt
-     */
     public bool HasSmimeSignature { get; }
 
-    /*
-     * Globale Message-ID der ursprünglichen Nachricht.
-     *
-     * Sie ist unabhängig von der IMAP-UID und wird für
-     * RFC-konformes Reply-Threading verwendet.
-     */
     public string? MessageId { get; }
 
-    /*
-     * Bereits vorhandene References-Kette der Nachricht.
-     *
-     * Beim Antworten wird diese Kette übernommen und um
-     * die Message-ID der aktuellen Nachricht erweitert.
-     */
     public IReadOnlyList<string> References { get; }
 
-    /*
-     * Vollständige ursprüngliche Empfängerlisten.
-     *
-     * RecipientAddress bleibt zusätzlich bestehen, weil die
-     * bestehende UI bisher einen einzelnen Hauptempfänger
-     * anzeigt.
-     */
     public IReadOnlyList<string> ToAddresses { get; }
 
     public IReadOnlyList<string> CcAddresses { get; }
 
-    /*
-     * Reply-To hat beim Antworten Vorrang vor From.
-     *
-     * Das ist insbesondere für Mailinglisten und Systeme
-     * wichtig, die Antworten bewusst an eine andere Adresse
-     * lenken.
-     */
     public IReadOnlyList<string> ReplyToAddresses { get; }
 
-    /*
-     * Vom Absender gesetzte Wichtigkeit der Nachricht.
-     *
-     * Normal bleibt der sichere Standard für Nachrichten,
-     * bei denen kein unterstützter Priority-Header vorhanden
-     * ist.
-     */
     public MailImportanceLevel Importance { get; }
 
-    /*
-     * Enthält ausschließlich dann Daten, wenn die geladene
-     * Nachricht selbst als positive Lesebestätigung erkannt
-     * wurde.
-     *
-     * null bedeutet dabei lediglich:
-     *
-     * "Diese Nachricht wurde nicht als Lesebestätigung
-     * erkannt."
-     *
-     * Es bedeutet ausdrücklich nicht, dass eine zuvor
-     * angeforderte Lesebestätigung abgelehnt wurde oder
-     * dass die Ursprungsnachricht ungelesen ist.
-     */
     public MailReadReceiptData? ReadReceipt { get; }
 
     public bool IsReadReceipt =>
@@ -304,24 +250,6 @@ public sealed class MailMessageItemViewModel : BaseViewModel
 
     public string ReadReceiptDetail { get; }
 
-    /*
-     * Enthält positive Lesebestätigungen, die sich über ihre
-     * Original-Message-ID auf genau diese Nachricht beziehen.
-     *
-     * Bei mehreren Empfängern können deshalb mehrere
-     * Bestätigungen vorhanden sein.
-     *
-     * Eine leere Liste bedeutet ausschließlich:
-     *
-     * "Für diese Nachricht ist lokal keine positive
-     * Lesebestätigung gespeichert."
-     *
-     * Sie bedeutet ausdrücklich NICHT:
-     *
-     * - Nachricht wurde nicht gelesen
-     * - Empfänger hat die Bestätigung abgelehnt
-     * - Empfänger unterstützt keine Lesebestätigungen
-     */
     public IReadOnlyList<MailReadReceiptData>
         ReceivedReadReceipts
     { get; }
@@ -336,15 +264,16 @@ public sealed class MailMessageItemViewModel : BaseViewModel
     public int ReceivedReadReceiptCount =>
         ReceivedReadReceipts.Count;
 
-    /*
-     * Benutzerdefinierte IMAP-Keywords der Nachricht.
-     *
-     * Sie werden zunächst bewusst unverändert bis ins
-     * ViewModel durchgereicht. Die spätere Telenec-
-     * Kategorisierung interpretiert ausschließlich die
-     * dafür reservierten eigenen Keyword-Namen.
-     */
-    public IReadOnlyList<string> Keywords { get; }
+    public IReadOnlyList<string> Keywords =>
+        _keywords;
+
+    public bool HasRedCategory =>
+        _keywords.Any(
+            keyword =>
+                string.Equals(
+                    keyword,
+                    RedCategoryKeyword,
+                    StringComparison.OrdinalIgnoreCase));
 
     public bool IsHighImportance =>
         Importance ==
@@ -402,6 +331,49 @@ public sealed class MailMessageItemViewModel : BaseViewModel
 
         EmphasizeSender =
             true;
+    }
+
+    public void SetKeywordState(
+        string keyword,
+        bool isEnabled)
+    {
+        if (string.IsNullOrWhiteSpace(
+                keyword))
+        {
+            throw new ArgumentException(
+                "Das IMAP-Keyword darf nicht leer sein.",
+                nameof(keyword));
+        }
+
+        var normalizedKeyword =
+            keyword.Trim();
+
+        var updatedKeywords =
+            new HashSet<string>(
+                _keywords,
+                StringComparer.OrdinalIgnoreCase);
+
+        var changed =
+            isEnabled
+                ? updatedKeywords.Add(
+                    normalizedKeyword)
+                : updatedKeywords.Remove(
+                    normalizedKeyword);
+
+        if (!changed)
+        {
+            return;
+        }
+
+        _keywords =
+            updatedKeywords
+                .ToArray();
+
+        OnPropertyChanged(
+            nameof(Keywords));
+
+        OnPropertyChanged(
+            nameof(HasRedCategory));
     }
 
     private static IReadOnlyList<string>

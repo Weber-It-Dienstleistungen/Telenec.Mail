@@ -203,6 +203,18 @@ public sealed class DemoMailDataSource : IMailDataSource
         return Task.CompletedTask;
     }
 
+    public Task SetKeywordAsync(
+        string folderId,
+        uint uniqueId,
+        string keyword,
+        bool isEnabled,
+        CancellationToken cancellationToken = default)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+
+        return Task.CompletedTask;
+    }
+
     public Task<MailMoveResult> MoveToTrashAsync(
         string folderId,
         uint uniqueId,

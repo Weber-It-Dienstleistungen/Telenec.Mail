@@ -148,6 +148,33 @@ public sealed class LoggingMailDataSource :
                 cancellationToken);
     }
 
+    public Task SetKeywordAsync(
+        string folderId,
+        uint uniqueId,
+        string keyword,
+        bool isEnabled,
+        CancellationToken cancellationToken = default)
+    {
+        return ExecuteMutationAsync(
+            operation:
+                "Message keyword update",
+
+            messageCount:
+                1,
+
+            action:
+                () =>
+                    _inner.SetKeywordAsync(
+                        folderId,
+                        uniqueId,
+                        keyword,
+                        isEnabled,
+                        cancellationToken),
+
+            cancellationToken:
+                cancellationToken);
+    }
+
     public Task<MailMoveResult> MoveToTrashAsync(
         string folderId,
         uint uniqueId,
@@ -511,6 +538,47 @@ public sealed class LoggingMailDataSource :
             readReceipt.ReceiptDate.HasValue &&
             !string.IsNullOrWhiteSpace(
                 readReceipt.Disposition);
+    }
+
+    private async Task ExecuteMutationAsync(
+        string operation,
+        int messageCount,
+        Func<Task> action,
+        CancellationToken cancellationToken)
+    {
+        _logger.LogInformation(
+            "{Operation} started. MessageCount={MessageCount}.",
+            operation,
+            messageCount);
+
+        try
+        {
+            await action();
+
+            _logger.LogInformation(
+                "{Operation} completed successfully. MessageCount={MessageCount}.",
+                operation,
+                messageCount);
+        }
+        catch (OperationCanceledException)
+            when (cancellationToken.IsCancellationRequested)
+        {
+            _logger.LogInformation(
+                "{Operation} was cancelled. MessageCount={MessageCount}.",
+                operation,
+                messageCount);
+
+            throw;
+        }
+        catch (Exception exception)
+        {
+            LogMutationFailure(
+                operation,
+                messageCount,
+                exception);
+
+            throw;
+        }
     }
 
     private async Task<MailMoveResult>

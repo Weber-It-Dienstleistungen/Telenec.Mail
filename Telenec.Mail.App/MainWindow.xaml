@@ -475,6 +475,18 @@
                                             IsEnabled="{Binding CanMarkAsUnread}"
                                             Click="MarkAsUnreadMenuItem_OnClick" />
 
+                                        <MenuItem
+                                            Header="Kategorie"
+                                            SubmenuOpened="CategoryMenuItem_OnSubmenuOpened">
+
+                                            <MenuItem
+                                                Header="Rot"
+                                                Tag="RedCategory"
+                                                IsCheckable="True"
+                                                Click="RedCategoryMenuItem_OnClick" />
+
+                                        </MenuItem>
+
                                         <Separator />
 
                                         <MenuItem
@@ -536,6 +548,23 @@
                                     Foreground="{StaticResource Text.Secondary}"
                                     TextTrimming="CharacterEllipsis" />
 
+                                <Border
+                                    x:Name="RedCategoryBadge"
+                                    Margin="0,6,0,0"
+                                    Padding="6,2"
+                                    HorizontalAlignment="Left"
+                                    CornerRadius="3"
+                                    Background="{StaticResource Status.Error}"
+                                    Visibility="Collapsed">
+
+                                    <TextBlock
+                                        Text="Rot"
+                                        FontSize="10"
+                                        FontWeight="SemiBold"
+                                        Foreground="White" />
+
+                                </Border>
+
                             </StackPanel>
 
                             <DataTemplate.Triggers>
@@ -558,6 +587,17 @@
                                         TargetName="SubjectText"
                                         Property="FontWeight"
                                         Value="SemiBold" />
+
+                                </DataTrigger>
+
+                                <DataTrigger
+                                    Binding="{Binding HasRedCategory}"
+                                    Value="True">
+
+                                    <Setter
+                                        TargetName="RedCategoryBadge"
+                                        Property="Visibility"
+                                        Value="Visible" />
 
                                 </DataTrigger>
 
@@ -593,11 +633,6 @@
                 <Grid
                     Grid.Row="0"
                     Margin="32,26,32,22">
-
-                    <!--
-                        Der komplette Mail-Kopf wird ausgeblendet,
-                        solange keine Nachricht ausgewählt ist.
-                    -->
 
                     <Grid.Style>
 
@@ -826,8 +861,6 @@
                             Margin="18,0,0,0" />
 
                     </Grid>
-
-                    <!-- SICHTBARE MAILAKTIONEN -->
 
                     <StackPanel
                         Grid.Row="3"
@@ -1084,8 +1117,6 @@
 
                 </Border>
 
-                <!-- ANHÄNGE -->
-
                 <Border
                     Grid.Row="3"
                     Margin="20,12,20,0"
@@ -1289,8 +1320,6 @@
 
                 </Border>
 
-                <!-- LESEBESTÄTIGUNGSSTATUS -->
-
                 <StackPanel
                     Grid.Row="4">
 
@@ -1417,8 +1446,6 @@
                     </Border>
 
                 </StackPanel>
-
-                <!-- MAILINHALT -->
 
                 <Grid Grid.Row="5">
 

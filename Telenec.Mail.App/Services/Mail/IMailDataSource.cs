@@ -36,6 +36,13 @@ public interface IMailDataSource
         uint uniqueId,
         CancellationToken cancellationToken = default);
 
+    Task SetKeywordAsync(
+        string folderId,
+        uint uniqueId,
+        string keyword,
+        bool isEnabled,
+        CancellationToken cancellationToken = default);
+
     Task<MailMoveResult> MoveToTrashAsync(
         string folderId,
         uint uniqueId,

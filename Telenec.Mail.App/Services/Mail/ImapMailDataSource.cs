@@ -158,13 +158,6 @@ public sealed class ImapMailDataSource : IMailDataSource
         }
     }
 
-    /*
-     * Der bestehende Aufruf bleibt vollständig kompatibel.
-     *
-     * Er entspricht schlicht der ersten Seite:
-     *
-     * Skip 0 / Take maximumMessageCount.
-     */
     public Task<IReadOnlyList<MailMessageData>> GetMessagesAsync(
         string folderId,
         int maximumMessageCount = 20,
@@ -177,16 +170,6 @@ public sealed class ImapMailDataSource : IMailDataSource
             cancellationToken);
     }
 
-    /*
-     * Echtes serverseitiges Paging der Nachrichtenansicht.
-     *
-     * Wichtig:
-     *
-     * Bei Skip 20 / Take 20 werden nur die Nachrichten der
-     * zweiten Seite vollständig geladen.
-     *
-     * Die ersten 20 Bodies werden dabei nicht erneut abgerufen.
-     */
     public async Task<IReadOnlyList<MailMessageData>> GetMessagePageAsync(
         string folderId,
         int skipMessageCount,
@@ -245,17 +228,6 @@ public sealed class ImapMailDataSource : IMailDataSource
                     MailMessageData>();
             }
 
-            /*
-             * Erst für die UIDs der tatsächlich angeforderten
-             * Seite werden Envelope, BodyStructure und später
-             * die konkreten Body-Parts geladen.
-             *
-             * Zusätzlich laden wir ausschließlich die vier
-             * Header, die für die Wichtigkeit relevant sind.
-             *
-             * Damit müssen weder sämtliche MIME-Header noch
-             * komplette Nachrichten zusätzlich geladen werden.
-             */
             var summaries =
                 await folder.FetchAsync(
                     uniqueIds,
@@ -421,18 +393,6 @@ public sealed class ImapMailDataSource : IMailDataSource
         }
     }
 
-    /*
-     * Es wird weiterhin die serverseitige Sortierreihenfolge
-     * verwendet.
-     *
-     * Der entscheidende Unterschied zum bisherigen Verfahren:
-     *
-     * Statt nur Take(...) können wir jetzt gezielt eine
-     * Seitenposition mit Skip(...).Take(...) bestimmen.
-     *
-     * SORT liefert dabei lediglich die UID-Reihenfolge.
-     * Nachrichteninhalte werden dadurch noch nicht geladen.
-     */
     private static async Task<IList<UniqueId>>
         GetMessagePageUniqueIdsAsync(
             IMailFolder folder,
@@ -460,13 +420,6 @@ public sealed class ImapMailDataSource : IMailDataSource
         }
         catch (NotSupportedException)
         {
-            /*
-             * Falls der Server SORT nicht unterstützt, müssen
-             * wir für die Sortierung leichte Metadaten lesen.
-             *
-             * Auch hier werden aber ausdrücklich keine
-             * Nachrichten-Bodies geladen.
-             */
             var lightweightSummaries =
                 await folder.FetchAsync(
                     0,
@@ -581,6 +534,127 @@ public sealed class ImapMailDataSource : IMailDataSource
                 MessageFlags.Seen,
                 silent: true,
                 cancellationToken);
+        }
+        finally
+        {
+            await DisconnectSafelyAsync(
+                client);
+        }
+    }
+
+    public async Task SetKeywordAsync(
+        string folderId,
+        uint uniqueId,
+        string keyword,
+        bool isEnabled,
+        CancellationToken cancellationToken = default)
+    {
+        ValidateFolderId(
+            folderId,
+            nameof(folderId));
+
+        if (uniqueId == 0)
+        {
+            throw new ArgumentOutOfRangeException(
+                nameof(uniqueId),
+                "Die Nachrichten-ID muss größer als 0 sein.");
+        }
+
+        var normalizedKeyword =
+            NormalizeKeyword(
+                keyword);
+
+        using var client =
+            await CreateAuthenticatedClientAsync(
+                cancellationToken);
+
+        try
+        {
+            var folder =
+                await client.GetFolderAsync(
+                    folderId,
+                    cancellationToken);
+
+            await folder.OpenAsync(
+                FolderAccess.ReadWrite,
+                cancellationToken);
+
+            if (!folder.PermanentFlags.HasFlag(
+                    MessageFlags.UserDefined))
+            {
+                throw new NotSupportedException(
+                    "Der Mailserver unterstützt in diesem Ordner keine benutzerdefinierten Kategorien.");
+            }
+
+            var uniqueIdValue =
+                new UniqueId(
+                    uniqueId);
+
+            var keywords =
+                new HashSet<string>(
+                    StringComparer.OrdinalIgnoreCase)
+                {
+                    normalizedKeyword
+                };
+
+            if (isEnabled)
+            {
+                await folder.AddFlagsAsync(
+                    uniqueIdValue,
+                    MessageFlags.None,
+                    keywords,
+                    silent: true,
+                    cancellationToken);
+            }
+            else
+            {
+                await folder.RemoveFlagsAsync(
+                    uniqueIdValue,
+                    MessageFlags.None,
+                    keywords,
+                    silent: true,
+                    cancellationToken);
+            }
+
+            var summaries =
+                await folder.FetchAsync(
+                    new[]
+                    {
+                        uniqueIdValue
+                    },
+                    MessageSummaryItems.UniqueId |
+                    MessageSummaryItems.Flags,
+                    cancellationToken);
+
+            var summary =
+                summaries.FirstOrDefault(
+                    current =>
+                        current.UniqueId.IsValid &&
+                        current.UniqueId ==
+                            uniqueIdValue);
+
+            if (summary is null)
+            {
+                throw new InvalidOperationException(
+                    "Die Nachricht konnte nach der Kategorieänderung nicht mehr eindeutig bestätigt werden.");
+            }
+
+            var keywordIsPresent =
+                summary.Keywords?
+                    .Any(
+                        currentKeyword =>
+                            string.Equals(
+                                currentKeyword,
+                                normalizedKeyword,
+                                StringComparison.OrdinalIgnoreCase))
+                == true;
+
+            if (keywordIsPresent !=
+                isEnabled)
+            {
+                throw new InvalidOperationException(
+                    "Der Mailserver hat die Kategorieänderung nicht bestätigt.");
+            }
         }
         finally
         {
@@ -772,6 +846,33 @@ public sealed class ImapMailDataSource : IMailDataSource
 
             UidMappings:
                 mappings);
+    }
+
+    private static string NormalizeKeyword(
+        string keyword)
+    {
+        if (string.IsNullOrWhiteSpace(
+                keyword))
+        {
+            throw new ArgumentException(
+                "Das IMAP-Keyword darf nicht leer sein.",
+                nameof(keyword));
+        }
+
+        var normalized =
+            keyword.Trim();
+
+        if (!Regex.IsMatch(
+                normalized,
+                "^[A-Za-z0-9][A-Za-z0-9._-]*$",
+                RegexOptions.CultureInvariant))
+        {
+            throw new ArgumentException(
+                "Das IMAP-Keyword enthält unzulässige Zeichen.",
+                nameof(keyword));
+        }
+
+        return normalized;
     }
 
     private static void ValidateFolderId(
@@ -1272,14 +1373,6 @@ public sealed class ImapMailDataSource : IMailDataSource
         }
         catch
         {
-            /*
-             * Die Erkennung einer Lesebestätigung ist eine
-             * Zusatzfunktion.
-             *
-             * Eine beschädigte oder ungewöhnliche
-             * Empfangsbestätigung darf deshalb niemals das
-             * Laden des Posteingangs verhindern.
-             */
             return null;
         }
     }
@@ -1308,16 +1401,6 @@ public sealed class ImapMailDataSource : IMailDataSource
                 return true;
             }
 
-            /*
-             * Outlook/Exchange kann die eigentliche
-             * TNEF-Lesebestätigung in eine message/rfc822-
-             * Struktur einbetten.
-             *
-             * BODYSTRUCTURE liefert uns dafür bereits den
-             * inneren MIME-Baum. Dadurch müssen normale
-             * angehängte E-Mails nicht vollständig geladen
-             * werden.
-             */
             return MayContainReadReceipt(
                 messagePart.Body);
         }
@@ -1492,13 +1575,6 @@ public sealed class ImapMailDataSource : IMailDataSource
                 .ToArray()
             ?? Array.Empty<string>();
 
-        /*
-         * Die eigentlichen Header wurden bereits beim
-         * normalen IMAP-FETCH mitgeladen.
-         *
-         * Hier findet ausschließlich die Interpretation
-         * statt. Es entsteht kein weiterer Serverzugriff.
-         */
         var importance =
             MailImportanceSummaryService.Read(
                 summary);
@@ -1646,28 +1722,6 @@ public sealed class ImapMailDataSource : IMailDataSource
             IMessageSummary summary,
             IReadOnlySet<string> inlinePartSpecifiers)
     {
-        /*
-         * MailKit summary.Attachments enthält nur MIME-Parts,
-         * deren Content-Disposition ausdrücklich "attachment"
-         * lautet.
-         *
-         * Einige Mailclients - insbesondere Apple Mail auf
-         * iPhone/iPad - versenden Bilder jedoch als
-         * Content-Disposition: inline, auch wenn kein HTML-
-         * Body vorhanden ist, der dieses Bild per cid:
-         * referenziert.
-         *
-         * Solche Bilder würden sonst vollständig aus der
-         * Oberfläche verschwinden:
-         *
-         * - nicht im HTML gerendert
-         * - nicht in summary.Attachments enthalten
-         *
-         * Deshalb betrachten wir zusätzlich alle image/*-
-         * BodyParts als Fallback-Anhänge, sofern sie nicht
-         * bereits erfolgreich als echtes Inline-Bild
-         * aufgelöst wurden.
-         */
         var attachmentCandidates =
             summary
                 .BodyParts
