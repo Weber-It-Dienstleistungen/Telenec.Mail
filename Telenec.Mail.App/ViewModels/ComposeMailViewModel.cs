@@ -64,6 +64,8 @@ public sealed class ComposeMailViewModel : BaseViewModel
     private MailImportanceLevel _importance =
         MailImportanceLevel.Normal;
 
+    private bool _requestReadReceipt;
+
     private bool _showCcField;
     private bool _showBccField;
     private bool _focusBodyOnLoad;
@@ -278,6 +280,24 @@ public sealed class ComposeMailViewModel : BaseViewModel
             }
 
             _importance =
+                value;
+
+            OnPropertyChanged();
+        }
+    }
+
+    public bool RequestReadReceipt
+    {
+        get => _requestReadReceipt;
+
+        set
+        {
+            if (_requestReadReceipt == value)
+            {
+                return;
+            }
+
+            _requestReadReceipt =
                 value;
 
             OnPropertyChanged();
@@ -724,6 +744,9 @@ public sealed class ComposeMailViewModel : BaseViewModel
         Importance =
             MailImportanceLevel.Normal;
 
+        RequestReadReceipt =
+            false;
+
         FocusBodyOnLoad =
             false;
     }
@@ -799,6 +822,9 @@ public sealed class ComposeMailViewModel : BaseViewModel
 
         Importance =
             MailImportanceLevel.Normal;
+
+        RequestReadReceipt =
+            false;
 
         FocusBodyOnLoad =
             true;
@@ -889,6 +915,9 @@ public sealed class ComposeMailViewModel : BaseViewModel
 
         Importance =
             draft.Importance;
+
+        RequestReadReceipt =
+            false;
 
         FocusBodyOnLoad =
             true;
@@ -1721,6 +1750,9 @@ public sealed class ComposeMailViewModel : BaseViewModel
                 HtmlBody,
 
             Importance:
-                Importance);
+                Importance,
+
+            RequestReadReceipt:
+                RequestReadReceipt);
     }
 }
