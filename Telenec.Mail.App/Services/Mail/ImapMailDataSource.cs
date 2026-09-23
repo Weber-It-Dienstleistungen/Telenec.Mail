@@ -1503,6 +1503,20 @@ public sealed class ImapMailDataSource : IMailDataSource
             MailImportanceSummaryService.Read(
                 summary);
 
+        var keywords =
+            summary.Keywords?
+                .Where(
+                    keyword =>
+                        !string.IsNullOrWhiteSpace(
+                            keyword))
+                .Select(
+                    keyword =>
+                        keyword.Trim())
+                .Distinct(
+                    StringComparer.OrdinalIgnoreCase)
+                .ToArray()
+            ?? Array.Empty<string>();
+
         return new MailMessageData(
             Sender:
                 senderName,
@@ -1586,7 +1600,10 @@ public sealed class ImapMailDataSource : IMailDataSource
                 importance,
 
             ReadReceipt:
-                readReceipt);
+                readReceipt,
+
+            Keywords:
+                keywords);
     }
 
     private static IReadOnlyList<string>

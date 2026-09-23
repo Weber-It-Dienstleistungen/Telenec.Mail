@@ -28,4 +28,5 @@ public sealed record MailMessageData(
     IReadOnlyList<string>? ReplyToAddresses = null,
     MailImportanceLevel Importance = MailImportanceLevel.Normal,
     MailReadReceiptData? ReadReceipt = null,
-    IReadOnlyList<MailReadReceiptData>? ReceivedReadReceipts = null);
+    IReadOnlyList<MailReadReceiptData>? ReceivedReadReceipts = null,
+    IReadOnlyList<string>? Keywords = null);

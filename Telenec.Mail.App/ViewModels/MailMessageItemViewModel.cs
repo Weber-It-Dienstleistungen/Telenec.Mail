@@ -36,7 +36,8 @@ public sealed class MailMessageItemViewModel : BaseViewModel
         IReadOnlyList<string>? replyToAddresses = null,
         MailImportanceLevel importance = MailImportanceLevel.Normal,
         MailReadReceiptData? readReceipt = null,
-        IReadOnlyList<MailReadReceiptData>? receivedReadReceipts = null)
+        IReadOnlyList<MailReadReceiptData>? receivedReadReceipts = null,
+        IReadOnlyList<string>? keywords = null)
     {
         Sender =
             sender;
@@ -136,6 +137,10 @@ public sealed class MailMessageItemViewModel : BaseViewModel
         ReceivedReadReceiptDetails =
             CreateReceivedReadReceiptDetails(
                 ReceivedReadReceipts);
+
+        Keywords =
+            CreateKeywordSnapshot(
+                keywords);
     }
 
     public string Sender { get; }
@@ -331,6 +336,16 @@ public sealed class MailMessageItemViewModel : BaseViewModel
     public int ReceivedReadReceiptCount =>
         ReceivedReadReceipts.Count;
 
+    /*
+     * Benutzerdefinierte IMAP-Keywords der Nachricht.
+     *
+     * Sie werden zunächst bewusst unverändert bis ins
+     * ViewModel durchgereicht. Die spätere Telenec-
+     * Kategorisierung interpretiert ausschließlich die
+     * dafür reservierten eigenen Keyword-Namen.
+     */
+    public IReadOnlyList<string> Keywords { get; }
+
     public bool IsHighImportance =>
         Importance ==
         MailImportanceLevel.High;
@@ -443,6 +458,29 @@ public sealed class MailMessageItemViewModel : BaseViewModel
             $"{localReceiptDate.ToString(
                 "dd.MM.yyyy HH:mm",
                 CultureInfo.CurrentCulture)} Uhr";
+    }
+
+    private static IReadOnlyList<string>
+        CreateKeywordSnapshot(
+            IReadOnlyList<string>? keywords)
+    {
+        if (keywords is null ||
+            keywords.Count == 0)
+        {
+            return Array.Empty<string>();
+        }
+
+        return keywords
+            .Where(
+                keyword =>
+                    !string.IsNullOrWhiteSpace(
+                        keyword))
+            .Select(
+                keyword =>
+                    keyword.Trim())
+            .Distinct(
+                StringComparer.OrdinalIgnoreCase)
+            .ToArray();
     }
 
     private static IReadOnlyList<string>
