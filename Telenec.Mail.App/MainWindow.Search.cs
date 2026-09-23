@@ -1533,6 +1533,86 @@ public partial class MainWindow
         stack.Children.Add(
             metaText);
 
+        var assignedCategories =
+            MailCategoryCatalog
+                .All
+                .Where(
+                    category =>
+                        result.Keywords?
+                            .Any(
+                                keyword =>
+                                    string.Equals(
+                                        keyword,
+                                        category.Keyword,
+                                        StringComparison.OrdinalIgnoreCase))
+                        == true)
+                .ToList();
+
+        if (assignedCategories.Count > 0)
+        {
+            var categoryPanel =
+                new WrapPanel
+                {
+                    Margin =
+                        new Thickness(
+                            0,
+                            6,
+                            0,
+                            0)
+                };
+
+            foreach (var category in
+                     assignedCategories)
+            {
+                var categoryBadge =
+                    new Border
+                    {
+                        Margin =
+                            new Thickness(
+                                0,
+                                0,
+                                6,
+                                0),
+
+                        Padding =
+                            new Thickness(
+                                6,
+                                2,
+                                6,
+                                2),
+
+                        CornerRadius =
+                            new CornerRadius(
+                                3),
+
+                        Background =
+                            category.Background,
+
+                        Child =
+                            new TextBlock
+                            {
+                                Text =
+                                    category.DisplayName,
+
+                                FontSize =
+                                    10,
+
+                                FontWeight =
+                                    FontWeights.SemiBold,
+
+                                Foreground =
+                                    category.Foreground
+                            }
+                    };
+
+                categoryPanel.Children.Add(
+                    categoryBadge);
+            }
+
+            stack.Children.Add(
+                categoryPanel);
+        }
+
         container.Child =
             stack;
 
