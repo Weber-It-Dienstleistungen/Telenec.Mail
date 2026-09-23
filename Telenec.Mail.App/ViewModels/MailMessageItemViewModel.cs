@@ -34,7 +34,8 @@ public sealed class MailMessageItemViewModel : BaseViewModel
         IReadOnlyList<string>? ccAddresses = null,
         IReadOnlyList<string>? replyToAddresses = null,
         MailImportanceLevel importance = MailImportanceLevel.Normal,
-        MailReadReceiptData? readReceipt = null)
+        MailReadReceiptData? readReceipt = null,
+        IReadOnlyList<MailReadReceiptData>? receivedReadReceipts = null)
     {
         Sender =
             sender;
@@ -122,6 +123,10 @@ public sealed class MailMessageItemViewModel : BaseViewModel
 
         ReadReceipt =
             readReceipt;
+
+        ReceivedReadReceipts =
+            receivedReadReceipts?.ToArray()
+            ?? Array.Empty<MailReadReceiptData>();
     }
 
     public string Sender { get; }
@@ -266,7 +271,8 @@ public sealed class MailMessageItemViewModel : BaseViewModel
 
     /*
      * Enthält ausschließlich dann Daten, wenn die geladene
-     * Nachricht als positive Lesebestätigung erkannt wurde.
+     * Nachricht selbst als positive Lesebestätigung erkannt
+     * wurde.
      *
      * null bedeutet dabei lediglich:
      *
@@ -281,6 +287,34 @@ public sealed class MailMessageItemViewModel : BaseViewModel
 
     public bool IsReadReceipt =>
         ReadReceipt is not null;
+
+    /*
+     * Enthält positive Lesebestätigungen, die sich über ihre
+     * Original-Message-ID auf genau diese Nachricht beziehen.
+     *
+     * Bei mehreren Empfängern können deshalb mehrere
+     * Bestätigungen vorhanden sein.
+     *
+     * Eine leere Liste bedeutet ausschließlich:
+     *
+     * "Für diese Nachricht ist lokal keine positive
+     * Lesebestätigung gespeichert."
+     *
+     * Sie bedeutet ausdrücklich NICHT:
+     *
+     * - Nachricht wurde nicht gelesen
+     * - Empfänger hat die Bestätigung abgelehnt
+     * - Empfänger unterstützt keine Lesebestätigungen
+     */
+    public IReadOnlyList<MailReadReceiptData>
+        ReceivedReadReceipts
+    { get; }
+
+    public bool HasReceivedReadReceipts =>
+        ReceivedReadReceipts.Count > 0;
+
+    public int ReceivedReadReceiptCount =>
+        ReceivedReadReceipts.Count;
 
     public bool IsHighImportance =>
         Importance ==
