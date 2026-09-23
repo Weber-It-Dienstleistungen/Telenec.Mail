@@ -13,4 +13,5 @@ public sealed record MailDraftEditData(
     IReadOnlyList<string> ParentReferences,
     IReadOnlyList<MailSendAttachmentData> Attachments,
     string? HtmlBody = null,
-    MailImportanceLevel Importance = MailImportanceLevel.Normal);
+    MailImportanceLevel Importance = MailImportanceLevel.Normal,
+    bool RequestReadReceipt = false);
