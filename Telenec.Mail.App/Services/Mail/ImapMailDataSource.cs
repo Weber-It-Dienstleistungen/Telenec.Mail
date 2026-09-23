@@ -1355,37 +1355,6 @@ public sealed class ImapMailDataSource : IMailDataSource
                 StringComparison.OrdinalIgnoreCase);
     }
 
-    private static string? CreateReadReceiptHighlightText(
-        MailReadReceiptData? readReceipt)
-    {
-        if (readReceipt is null)
-        {
-            return null;
-        }
-
-        var sender =
-            !string.IsNullOrWhiteSpace(
-                readReceipt.SenderAddress)
-                ? readReceipt.SenderAddress
-                : readReceipt.Sender;
-
-        var originalMessageId =
-            readReceipt.OriginalMessageId;
-
-        if (!string.IsNullOrWhiteSpace(
-                originalMessageId))
-        {
-            return
-                $"Bestätigung von {sender}. " +
-                $"Original-Message-ID: {originalMessageId}";
-        }
-
-        return string.IsNullOrWhiteSpace(
-                sender)
-            ? "Eine positive Lesebestätigung wurde erkannt."
-            : $"Positive Lesebestätigung von {sender}.";
-    }
-
     private static string NormalizeContentId(
         string? contentId)
     {
@@ -1617,16 +1586,7 @@ public sealed class ImapMailDataSource : IMailDataSource
                 importance,
 
             ReadReceipt:
-                readReceipt,
-
-            HighlightTitle:
-                readReceipt is null
-                    ? null
-                    : "Lesebestätigung erkannt",
-
-            HighlightText:
-                CreateReadReceiptHighlightText(
-                    readReceipt));
+                readReceipt);
     }
 
     private static IReadOnlyList<string>
