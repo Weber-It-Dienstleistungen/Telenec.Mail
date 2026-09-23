@@ -187,6 +187,7 @@ public sealed class MailKitSendService :
                     request.Body,
                     request.HtmlBody,
                     request.Importance,
+                    request.RequestReadReceipt,
                     request.Attachments,
                     account.EmailAddress,
                     credential.Password,
@@ -359,6 +360,7 @@ public sealed class MailKitSendService :
                 request.Body,
                 request.HtmlBody,
                 request.Importance,
+                request.RequestReadReceipt,
                 request.Attachments,
                 account.EmailAddress,
                 credential.Password,
@@ -541,6 +543,7 @@ public sealed class MailKitSendService :
             string? body,
             string? htmlBody,
             MailImportanceLevel importance,
+            bool requestReadReceipt,
             IReadOnlyList<MailSendAttachmentData>? attachments,
             string userName,
             string password,
@@ -602,6 +605,18 @@ public sealed class MailKitSendService :
             MailImportanceHeaderService.Apply(
                 message,
                 importance);
+
+            /*
+             * Auch die Anforderung einer Lesebestätigung wird
+             * zentral bei der MIME-Erzeugung gesetzt.
+             *
+             * Dadurch kann derselbe Zustand später ebenfalls
+             * in einem gespeicherten Entwurf erhalten bleiben.
+             */
+            MailReadReceiptHeaderService.Apply(
+                message,
+                sender,
+                requestReadReceipt);
 
             var textBody =
                 new TextPart(
