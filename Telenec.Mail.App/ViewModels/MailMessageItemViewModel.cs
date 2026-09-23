@@ -33,7 +33,8 @@ public sealed class MailMessageItemViewModel : BaseViewModel
         IReadOnlyList<string>? toAddresses = null,
         IReadOnlyList<string>? ccAddresses = null,
         IReadOnlyList<string>? replyToAddresses = null,
-        MailImportanceLevel importance = MailImportanceLevel.Normal)
+        MailImportanceLevel importance = MailImportanceLevel.Normal,
+        MailReadReceiptData? readReceipt = null)
     {
         Sender =
             sender;
@@ -118,6 +119,9 @@ public sealed class MailMessageItemViewModel : BaseViewModel
 
         Importance =
             importance;
+
+        ReadReceipt =
+            readReceipt;
     }
 
     public string Sender { get; }
@@ -259,6 +263,24 @@ public sealed class MailMessageItemViewModel : BaseViewModel
      * ist.
      */
     public MailImportanceLevel Importance { get; }
+
+    /*
+     * Enthält ausschließlich dann Daten, wenn die geladene
+     * Nachricht als positive Lesebestätigung erkannt wurde.
+     *
+     * null bedeutet dabei lediglich:
+     *
+     * "Diese Nachricht wurde nicht als Lesebestätigung
+     * erkannt."
+     *
+     * Es bedeutet ausdrücklich nicht, dass eine zuvor
+     * angeforderte Lesebestätigung abgelehnt wurde oder
+     * dass die Ursprungsnachricht ungelesen ist.
+     */
+    public MailReadReceiptData? ReadReceipt { get; }
+
+    public bool IsReadReceipt =>
+        ReadReceipt is not null;
 
     public bool IsHighImportance =>
         Importance ==
