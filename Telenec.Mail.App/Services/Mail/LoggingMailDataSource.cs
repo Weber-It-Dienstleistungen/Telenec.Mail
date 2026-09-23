@@ -1,5 +1,6 @@
 ﻿using MailKit.Security;
 using Microsoft.Extensions.Logging;
+using System.Globalization;
 using System.IO;
 using System.Net.Sockets;
 using Telenec.Mail.App.Models;
@@ -79,7 +80,9 @@ public sealed class LoggingMailDataSource :
             messages,
             cancellationToken);
 
-        return messages;
+        return await AttachPersistedReadReceiptsAsync(
+            messages,
+            cancellationToken);
     }
 
     public async Task<IReadOnlyList<MailMessageData>>
@@ -101,7 +104,9 @@ public sealed class LoggingMailDataSource :
             messages,
             cancellationToken);
 
-        return messages;
+        return await AttachPersistedReadReceiptsAsync(
+            messages,
+            cancellationToken);
     }
 
     public Task DownloadAttachmentAsync(
@@ -325,6 +330,252 @@ public sealed class LoggingMailDataSource :
                 readReceipts.Count,
                 exceptionType);
         }
+    }
+
+    private async Task<IReadOnlyList<MailMessageData>>
+        AttachPersistedReadReceiptsAsync(
+            IReadOnlyList<MailMessageData> messages,
+            CancellationToken cancellationToken)
+    {
+        if (messages.Count == 0)
+        {
+            return messages;
+        }
+
+        var messageIds =
+            messages
+                .Select(
+                    message =>
+                        NormalizeMessageId(
+                            message.MessageId))
+                .Where(
+                    messageId =>
+                        !string.IsNullOrWhiteSpace(
+                            messageId))
+                .Select(
+                    messageId =>
+                        messageId!)
+                .Distinct(
+                    StringComparer.Ordinal)
+                .ToArray();
+
+        if (messageIds.Length == 0)
+        {
+            return messages;
+        }
+
+        try
+        {
+            var account =
+                await _mailAccountStore
+                    .GetActiveAccountAsync(
+                        cancellationToken);
+
+            if (account is null ||
+                account.AccountId == Guid.Empty)
+            {
+                return messages;
+            }
+
+            var readReceiptsByMessageId =
+                await _mailReadReceiptStore
+                    .GetByOriginalMessageIdsAsync(
+                        account.AccountId,
+                        messageIds,
+                        cancellationToken);
+
+            if (readReceiptsByMessageId.Count == 0)
+            {
+                return messages;
+            }
+
+            var enrichedMessages =
+                new MailMessageData[
+                    messages.Count];
+
+            var hasChanges =
+                false;
+
+            for (var index = 0;
+                 index < messages.Count;
+                 index++)
+            {
+                var message =
+                    messages[index];
+
+                var normalizedMessageId =
+                    NormalizeMessageId(
+                        message.MessageId);
+
+                if (normalizedMessageId is null ||
+                    !readReceiptsByMessageId.TryGetValue(
+                        normalizedMessageId,
+                        out var readReceipts) ||
+                    readReceipts.Count == 0)
+                {
+                    enrichedMessages[index] =
+                        message;
+
+                    continue;
+                }
+
+                /*
+                 * ReceivedReadReceipts ist der eigentliche
+                 * Datenzustand für die spätere endgültige UI.
+                 *
+                 * HighlightTitle/HighlightText werden hier
+                 * vorübergehend zusätzlich gesetzt, damit wir
+                 * die komplette Verknüpfung im laufenden Client
+                 * sichtbar E2E testen können, ohne dafür bereits
+                 * die finale Statusoberfläche zu bauen.
+                 */
+                enrichedMessages[index] =
+                    message with
+                    {
+                        ReceivedReadReceipts =
+                            readReceipts,
+
+                        HighlightTitle =
+                            "Lesebestätigung erhalten",
+
+                        HighlightText =
+                            CreateReceivedReadReceiptHighlightText(
+                                readReceipts)
+                    };
+
+                hasChanges =
+                    true;
+            }
+
+            return hasChanges
+                ? enrichedMessages
+                : messages;
+        }
+        catch (OperationCanceledException)
+            when (cancellationToken.IsCancellationRequested)
+        {
+            throw;
+        }
+        catch (Exception exception)
+        {
+            /*
+             * Das Anreichern mit lokal gespeicherten
+             * Lesebestätigungen ist eine Zusatzfunktion.
+             *
+             * Ein Fehler in SQLite darf den normalen
+             * Mailabruf nicht verhindern.
+             *
+             * Auch hier werden bewusst weder Message-IDs noch
+             * Mailadressen oder Betreffzeilen protokolliert.
+             */
+            var exceptionType =
+                exception.GetType().FullName
+                ?? exception.GetType().Name;
+
+            _logger.LogWarning(
+                "Stored read receipt state could not be attached to loaded messages. MessageCount={MessageCount}, ExceptionType={ExceptionType}.",
+                messages.Count,
+                exceptionType);
+
+            return messages;
+        }
+    }
+
+    private static string
+        CreateReceivedReadReceiptHighlightText(
+            IReadOnlyList<MailReadReceiptData> readReceipts)
+    {
+        if (readReceipts.Count == 0)
+        {
+            return string.Empty;
+        }
+
+        if (readReceipts.Count == 1)
+        {
+            var readReceipt =
+                readReceipts[0];
+
+            var sender =
+                !string.IsNullOrWhiteSpace(
+                    readReceipt.Sender)
+                    ? readReceipt.Sender.Trim()
+                    : readReceipt.SenderAddress.Trim();
+
+            if (readReceipt.ReceiptDate.HasValue)
+            {
+                var localReceiptDate =
+                    readReceipt
+                        .ReceiptDate
+                        .Value
+                        .ToLocalTime();
+
+                return
+                    $"Bestätigung von {sender} · " +
+                    $"{localReceiptDate.ToString(
+                        "dd.MM.yyyy HH:mm",
+                        CultureInfo.CurrentCulture)} Uhr";
+            }
+
+            return
+                $"Bestätigung von {sender}";
+        }
+
+        var datedReadReceipts =
+            readReceipts
+                .Where(
+                    readReceipt =>
+                        readReceipt.ReceiptDate.HasValue)
+                .Select(
+                    readReceipt =>
+                        readReceipt
+                            .ReceiptDate!
+                            .Value
+                            .ToLocalTime())
+                .ToArray();
+
+        if (datedReadReceipts.Length == 0)
+        {
+            return
+                $"{readReceipts.Count} Lesebestätigungen erhalten";
+        }
+
+        var latestReceiptDate =
+            datedReadReceipts.Max();
+
+        return
+            $"{readReceipts.Count} Lesebestätigungen erhalten · " +
+            $"zuletzt {latestReceiptDate.ToString(
+                "dd.MM.yyyy HH:mm",
+                CultureInfo.CurrentCulture)} Uhr";
+    }
+
+    private static string?
+        NormalizeMessageId(
+            string? messageId)
+    {
+        if (string.IsNullOrWhiteSpace(
+                messageId))
+        {
+            return null;
+        }
+
+        var normalized =
+            messageId.Trim();
+
+        if (normalized.Length >= 2 &&
+            normalized[0] == '<' &&
+            normalized[^1] == '>')
+        {
+            normalized =
+                normalized[
+                    1..^1]
+                    .Trim();
+        }
+
+        return string.IsNullOrWhiteSpace(
+                normalized)
+            ? null
+            : normalized;
     }
 
     private static bool CanPersistReadReceipt(
