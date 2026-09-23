@@ -10,4 +10,5 @@ public sealed record MailSearchHitData(
     string RecipientAddress,
     string Subject,
     DateTimeOffset Date,
-    bool IsUnread);
+    bool IsUnread,
+    IReadOnlyList<string>? Keywords = null);

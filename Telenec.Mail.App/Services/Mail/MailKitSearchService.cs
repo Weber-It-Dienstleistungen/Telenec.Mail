@@ -774,15 +774,6 @@ public sealed class MailKitSearchService :
                 targetFolder,
                 cancellationToken);
 
-        /*
-         * Der Server muss bestätigen, dass die Quell-UID aus
-         * dem Ursprungsordner verschwunden ist.
-         *
-         * Wird die Verbindung genau nach MOVE unterbrochen,
-         * kann der Zustand mehrdeutig sein. In diesem Fall
-         * werfen wir und die UI synchronisiert anschließend,
-         * statt die Operation automatisch zu wiederholen.
-         */
         var remainingSourceMessages =
             await sourceFolder.FetchAsync(
                 new[]
@@ -819,13 +810,6 @@ public sealed class MailKitSearchService :
                     TargetUniqueId:
                         targetUniqueId.Id));
 
-            /*
-             * Wenn der Server eine Ziel-UID geliefert hat,
-             * prüfen wir auch dort noch einmal die Message-ID.
-             *
-             * Die Quell-UID ist zu diesem Zeitpunkt bereits
-             * bestätigt verschwunden.
-             */
             await targetFolder.OpenAsync(
                 FolderAccess.ReadOnly,
                 cancellationToken);
@@ -1264,6 +1248,20 @@ public sealed class MailKitSearchService :
             !summary.Flags.Value.HasFlag(
                 MessageFlags.Seen);
 
+        var keywords =
+            summary.Keywords?
+                .Where(
+                    keyword =>
+                        !string.IsNullOrWhiteSpace(
+                            keyword))
+                .Select(
+                    keyword =>
+                        keyword.Trim())
+                .Distinct(
+                    StringComparer.OrdinalIgnoreCase)
+                .ToArray()
+            ?? Array.Empty<string>();
+
         return new MailSearchHitData(
             FolderId:
                 folderId,
@@ -1294,7 +1292,10 @@ public sealed class MailKitSearchService :
                 date,
 
             IsUnread:
-                isUnread);
+                isUnread,
+
+            Keywords:
+                keywords);
     }
 
     private static bool MessageIdsMatch(
@@ -1309,10 +1310,6 @@ public sealed class MailKitSearchService :
             NormalizeMessageId(
                 actualMessageId);
 
-        /*
-         * Fehlt beim ursprünglichen Treffer eine Message-ID,
-         * bleiben UID + UIDVALIDITY die Identitätsanker.
-         */
         if (expected is null)
         {
             return true;
