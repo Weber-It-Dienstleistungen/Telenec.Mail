@@ -40,4 +40,29 @@ internal static class MailReadReceiptHeaderService
                     encode:
                         true);
     }
+
+    public static bool Read(
+        MimeMessage message)
+    {
+        ArgumentNullException.ThrowIfNull(
+            message);
+
+        /*
+         * Für unseren Composer ist entscheidend, ob die
+         * Nachricht überhaupt eine MDN-Anforderung enthält.
+         *
+         * Der konkrete Zielwert wird beim späteren erneuten
+         * Speichern ohnehin wieder aus dem aktuell aktiven
+         * Absenderkonto erzeugt.
+         *
+         * Dadurch übernehmen wir keine möglicherweise alte
+         * oder fremde Bestätigungsadresse aus einem Entwurf.
+         */
+        var dispositionNotificationTo =
+            message.Headers[
+                HeaderId.DispositionNotificationTo];
+
+        return !string.IsNullOrWhiteSpace(
+            dispositionNotificationTo);
+    }
 }
