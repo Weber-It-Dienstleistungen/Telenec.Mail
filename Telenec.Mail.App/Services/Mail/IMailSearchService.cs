@@ -37,6 +37,12 @@ public interface IMailSearchService
         MailSearchHitData searchHit,
         CancellationToken cancellationToken = default);
 
+    Task<bool> SetKeywordAsync(
+        MailSearchHitData searchHit,
+        string keyword,
+        bool isEnabled,
+        CancellationToken cancellationToken = default);
+
     Task<MailMoveResult> MoveToTrashAsync(
         MailSearchHitData searchHit,
         CancellationToken cancellationToken = default);

@@ -5,6 +5,7 @@ using MailKit.Security;
 using Microsoft.Extensions.Logging;
 using MimeKit;
 using System.IO;
+using System.Text.RegularExpressions;
 using Telenec.Mail.App.Models;
 using Telenec.Mail.App.Services.Security;
 using Telenec.Mail.App.Services.Storage;
@@ -417,6 +418,160 @@ public sealed class MailKitSearchService :
             searchHit,
             markAsSeen: false,
             cancellationToken);
+    }
+
+    public async Task<bool> SetKeywordAsync(
+        MailSearchHitData searchHit,
+        string keyword,
+        bool isEnabled,
+        CancellationToken cancellationToken = default)
+    {
+        ValidateSearchHit(
+            searchHit);
+
+        var normalizedKeyword =
+            NormalizeKeyword(
+                keyword);
+
+        using var client =
+            await CreateAuthenticatedClientAsync(
+                cancellationToken);
+
+        try
+        {
+            var folder =
+                await client.GetFolderAsync(
+                    searchHit.FolderId,
+                    cancellationToken);
+
+            if (folder.Attributes.HasFlag(
+                    FolderAttributes.NoSelect))
+            {
+                throw new InvalidOperationException(
+                    "Der Ursprungsordner des Suchtreffers kann nicht geöffnet werden.");
+            }
+
+            await folder.OpenAsync(
+                FolderAccess.ReadWrite,
+                cancellationToken);
+
+            ValidateFolderIdentity(
+                folder,
+                searchHit);
+
+            if (!folder.PermanentFlags.HasFlag(
+                    MessageFlags.UserDefined))
+            {
+                throw new NotSupportedException(
+                    "Der Mailserver unterstützt in diesem Ordner keine benutzerdefinierten Kategorien.");
+            }
+
+            var summaryBefore =
+                await GetSearchHitSummaryAsync(
+                    folder,
+                    searchHit,
+                    includeFlags: true,
+                    cancellationToken);
+
+            if (summaryBefore is null ||
+                !MessageIdsMatch(
+                    searchHit.MessageId,
+                    summaryBefore.Envelope?.MessageId))
+            {
+                throw new InvalidOperationException(
+                    "Die E-Mail ist in diesem Serverzustand nicht mehr eindeutig verfügbar.");
+            }
+
+            var keywordIsPresentBefore =
+                summaryBefore.Keywords?
+                    .Any(
+                        currentKeyword =>
+                            string.Equals(
+                                currentKeyword,
+                                normalizedKeyword,
+                                StringComparison.OrdinalIgnoreCase))
+                == true;
+
+            if (keywordIsPresentBefore ==
+                isEnabled)
+            {
+                return false;
+            }
+
+            var uniqueId =
+                new UniqueId(
+                    searchHit.UniqueId);
+
+            var keywords =
+                new HashSet<string>(
+                    StringComparer.OrdinalIgnoreCase)
+                {
+                    normalizedKeyword
+                };
+
+            if (isEnabled)
+            {
+                await folder.AddFlagsAsync(
+                    uniqueId,
+                    MessageFlags.None,
+                    keywords,
+                    silent: true,
+                    cancellationToken);
+            }
+            else
+            {
+                await folder.RemoveFlagsAsync(
+                    uniqueId,
+                    MessageFlags.None,
+                    keywords,
+                    silent: true,
+                    cancellationToken);
+            }
+
+            ValidateFolderIdentity(
+                folder,
+                searchHit);
+
+            var summaryAfter =
+                await GetSearchHitSummaryAsync(
+                    folder,
+                    searchHit,
+                    includeFlags: true,
+                    cancellationToken);
+
+            if (summaryAfter is null ||
+                !MessageIdsMatch(
+                    searchHit.MessageId,
+                    summaryAfter.Envelope?.MessageId))
+            {
+                throw new InvalidOperationException(
+                    "Die Kategorieänderung konnte nicht eindeutig bestätigt werden.");
+            }
+
+            var keywordIsPresentAfter =
+                summaryAfter.Keywords?
+                    .Any(
+                        currentKeyword =>
+                            string.Equals(
+                                currentKeyword,
+                                normalizedKeyword,
+                                StringComparison.OrdinalIgnoreCase))
+                == true;
+
+            if (keywordIsPresentAfter !=
+                isEnabled)
+            {
+                throw new InvalidOperationException(
+                    "Der Mailserver hat die Kategorieänderung nicht bestätigt.");
+            }
+
+            return true;
+        }
+        finally
+        {
+            await DisconnectSafelyAsync(
+                client);
+        }
     }
 
     /*
@@ -1448,6 +1603,33 @@ public sealed class MailKitSearchService :
             "geloeschte elemente" => true,
             _ => false
         };
+    }
+
+    private static string NormalizeKeyword(
+        string keyword)
+    {
+        if (string.IsNullOrWhiteSpace(
+                keyword))
+        {
+            throw new ArgumentException(
+                "Das IMAP-Keyword darf nicht leer sein.",
+                nameof(keyword));
+        }
+
+        var normalized =
+            keyword.Trim();
+
+        if (!Regex.IsMatch(
+                normalized,
+                "^[A-Za-z0-9][A-Za-z0-9._-]*$",
+                RegexOptions.CultureInvariant))
+        {
+            throw new ArgumentException(
+                "Das IMAP-Keyword enthält unzulässige Zeichen.",
+                nameof(keyword));
+        }
+
+        return normalized;
     }
 
     private static string NormalizeSearchText(
