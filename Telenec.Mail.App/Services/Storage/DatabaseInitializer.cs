@@ -5,7 +5,7 @@ namespace Telenec.Mail.App.Services.Storage;
 
 public sealed class DatabaseInitializer
 {
-    private const int CurrentSchemaVersion = 2;
+    private const int CurrentSchemaVersion = 3;
 
     private readonly AppDataPaths _paths;
 
@@ -75,6 +75,16 @@ public sealed class DatabaseInitializer
 
             schemaVersion =
                 2;
+        }
+
+        if (schemaVersion == 2)
+        {
+            await UpgradeToSchemaVersion3Async(
+                connection,
+                cancellationToken);
+
+            schemaVersion =
+                3;
         }
 
         if (schemaVersion !=
@@ -191,6 +201,71 @@ public sealed class DatabaseInitializer
             );
 
             PRAGMA user_version = 2;
+            """;
+
+        await command.ExecuteNonQueryAsync(
+            cancellationToken);
+
+        await transaction.CommitAsync(
+            cancellationToken);
+    }
+
+    private static async Task UpgradeToSchemaVersion3Async(
+        SqliteConnection connection,
+        CancellationToken cancellationToken)
+    {
+        await using var transaction =
+            await connection.BeginTransactionAsync(
+                cancellationToken);
+
+        await using var command =
+            connection.CreateCommand();
+
+        command.Transaction =
+            (SqliteTransaction)transaction;
+
+        command.CommandText =
+            """
+            CREATE TABLE ReadReceipts
+            (
+                AccountId TEXT NOT NULL,
+
+                OriginalMessageId TEXT NOT NULL,
+
+                ReceiptSenderAddress TEXT NOT NULL
+                    COLLATE NOCASE,
+
+                ReceiptSenderName TEXT NULL,
+
+                ReceiptAtUtc TEXT NOT NULL,
+
+                Disposition TEXT NOT NULL,
+
+                RecordedAtUtc TEXT NOT NULL,
+
+                PRIMARY KEY
+                (
+                    AccountId,
+                    OriginalMessageId,
+                    ReceiptSenderAddress
+                ),
+
+                FOREIGN KEY
+                (
+                    AccountId
+                )
+                REFERENCES Accounts(AccountId)
+                ON DELETE CASCADE
+            );
+
+            CREATE INDEX IX_ReadReceipts_OriginalMessage
+                ON ReadReceipts
+                (
+                    AccountId,
+                    OriginalMessageId
+                );
+
+            PRAGMA user_version = 3;
             """;
 
         await command.ExecuteNonQueryAsync(
