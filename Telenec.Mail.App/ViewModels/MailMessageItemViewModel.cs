@@ -5,9 +5,6 @@ namespace Telenec.Mail.App.ViewModels;
 
 public sealed class MailMessageItemViewModel : BaseViewModel
 {
-    public const string RedCategoryKeyword =
-        "TelenecCategory-Red";
-
     private bool _isUnread;
     private bool _emphasizeSender;
 
@@ -267,13 +264,13 @@ public sealed class MailMessageItemViewModel : BaseViewModel
     public IReadOnlyList<string> Keywords =>
         _keywords;
 
-    public bool HasRedCategory =>
-        _keywords.Any(
-            keyword =>
-                string.Equals(
-                    keyword,
-                    RedCategoryKeyword,
-                    StringComparison.OrdinalIgnoreCase));
+    public IReadOnlyList<MailCategoryDefinition>
+        AssignedCategories =>
+            MailCategoryCatalog
+                .All
+                .Where(
+                    HasCategory)
+                .ToArray();
 
     public bool IsHighImportance =>
         Importance ==
@@ -333,6 +330,20 @@ public sealed class MailMessageItemViewModel : BaseViewModel
             true;
     }
 
+    public bool HasCategory(
+        MailCategoryDefinition category)
+    {
+        ArgumentNullException.ThrowIfNull(
+            category);
+
+        return _keywords.Any(
+            keyword =>
+                string.Equals(
+                    keyword,
+                    category.Keyword,
+                    StringComparison.OrdinalIgnoreCase));
+    }
+
     public void SetKeywordState(
         string keyword,
         bool isEnabled)
@@ -373,7 +384,7 @@ public sealed class MailMessageItemViewModel : BaseViewModel
             nameof(Keywords));
 
         OnPropertyChanged(
-            nameof(HasRedCategory));
+            nameof(AssignedCategories));
     }
 
     private static IReadOnlyList<string>

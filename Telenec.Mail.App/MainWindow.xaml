@@ -480,10 +480,8 @@
                                             SubmenuOpened="CategoryMenuItem_OnSubmenuOpened">
 
                                             <MenuItem
-                                                Header="Rot"
-                                                Tag="RedCategory"
-                                                IsCheckable="True"
-                                                Click="RedCategoryMenuItem_OnClick" />
+                                                Header="Kategorien werden geladen…"
+                                                IsEnabled="False" />
 
                                         </MenuItem>
 
@@ -548,22 +546,40 @@
                                     Foreground="{StaticResource Text.Secondary}"
                                     TextTrimming="CharacterEllipsis" />
 
-                                <Border
-                                    x:Name="RedCategoryBadge"
-                                    Margin="0,6,0,0"
-                                    Padding="6,2"
-                                    HorizontalAlignment="Left"
-                                    CornerRadius="3"
-                                    Background="{StaticResource Status.Error}"
-                                    Visibility="Collapsed">
+                                <ItemsControl
+                                    ItemsSource="{Binding AssignedCategories}">
 
-                                    <TextBlock
-                                        Text="Rot"
-                                        FontSize="10"
-                                        FontWeight="SemiBold"
-                                        Foreground="White" />
+                                    <ItemsControl.ItemsPanel>
 
-                                </Border>
+                                        <ItemsPanelTemplate>
+                                            <WrapPanel />
+                                        </ItemsPanelTemplate>
+
+                                    </ItemsControl.ItemsPanel>
+
+                                    <ItemsControl.ItemTemplate>
+
+                                        <DataTemplate>
+
+                                            <Border
+                                                Margin="0,6,6,0"
+                                                Padding="6,2"
+                                                CornerRadius="3"
+                                                Background="{Binding Background}">
+
+                                                <TextBlock
+                                                    Text="{Binding DisplayName}"
+                                                    FontSize="10"
+                                                    FontWeight="SemiBold"
+                                                    Foreground="{Binding Foreground}" />
+
+                                            </Border>
+
+                                        </DataTemplate>
+
+                                    </ItemsControl.ItemTemplate>
+
+                                </ItemsControl>
 
                             </StackPanel>
 
@@ -587,17 +603,6 @@
                                         TargetName="SubjectText"
                                         Property="FontWeight"
                                         Value="SemiBold" />
-
-                                </DataTrigger>
-
-                                <DataTrigger
-                                    Binding="{Binding HasRedCategory}"
-                                    Value="True">
-
-                                    <Setter
-                                        TargetName="RedCategoryBadge"
-                                        Property="Visibility"
-                                        Value="Visible" />
 
                                 </DataTrigger>
 

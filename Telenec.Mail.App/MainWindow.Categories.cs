@@ -1,5 +1,4 @@
 ﻿using Microsoft.Extensions.DependencyInjection;
-using System.Linq;
 using System.Windows;
 using System.Windows.Controls;
 using Telenec.Mail.App.Services.Mail;
@@ -21,50 +20,62 @@ public partial class MainWindow
             return;
         }
 
-        var redCategoryMenuItem =
-            categoryMenuItem
-                .Items
-                .OfType<MenuItem>()
-                .FirstOrDefault(
-                    item =>
-                        string.Equals(
-                            item.Tag?.ToString(),
-                            "RedCategory",
-                            StringComparison.Ordinal));
-
-        if (redCategoryMenuItem is null)
-        {
-            return;
-        }
+        categoryMenuItem.Items.Clear();
 
         if (categoryMenuItem.DataContext
             is not MailMessageItemViewModel message)
         {
-            redCategoryMenuItem.IsChecked =
-                false;
-
-            redCategoryMenuItem.IsEnabled =
-                false;
-
             return;
         }
 
-        redCategoryMenuItem.IsChecked =
-            message.HasRedCategory;
-
-        redCategoryMenuItem.IsEnabled =
+        var isEnabled =
             !_categoryMutationIsRunning &&
             !_viewModel.IsLoading &&
             message.UniqueId > 0;
+
+        foreach (var category in
+                 MailCategoryCatalog.All)
+        {
+            var menuItem =
+                new MenuItem
+                {
+                    Header =
+                        category.DisplayName,
+
+                    Tag =
+                        category,
+
+                    DataContext =
+                        message,
+
+                    IsCheckable =
+                        true,
+
+                    IsChecked =
+                        message.HasCategory(
+                            category),
+
+                    IsEnabled =
+                        isEnabled
+                };
+
+            menuItem.Click +=
+                CategoryMenuEntry_OnClick;
+
+            categoryMenuItem.Items.Add(
+                menuItem);
+        }
     }
 
-    private async void RedCategoryMenuItem_OnClick(
+    private async void CategoryMenuEntry_OnClick(
         object sender,
         RoutedEventArgs e)
     {
         if (_categoryMutationIsRunning ||
             _viewModel.IsLoading ||
             sender is not MenuItem menuItem ||
+            menuItem.Tag
+                is not MailCategoryDefinition category ||
             menuItem.DataContext
                 is not MailMessageItemViewModel message ||
             message.UniqueId == 0 ||
@@ -83,7 +94,8 @@ public partial class MainWindow
         }
 
         var shouldEnable =
-            !message.HasRedCategory;
+            !message.HasCategory(
+                category);
 
         _categoryMutationIsRunning =
             true;
@@ -102,22 +114,22 @@ public partial class MainWindow
                 .SetKeywordAsync(
                     folder.FolderId,
                     message.UniqueId,
-                    MailMessageItemViewModel
-                        .RedCategoryKeyword,
+                    category.Keyword,
                     shouldEnable);
 
             message.SetKeywordState(
-                MailMessageItemViewModel
-                    .RedCategoryKeyword,
+                category.Keyword,
                 shouldEnable);
 
             menuItem.IsChecked =
-                message.HasRedCategory;
+                message.HasCategory(
+                    category);
         }
         catch (NotSupportedException)
         {
             menuItem.IsChecked =
-                message.HasRedCategory;
+                message.HasCategory(
+                    category);
 
             MessageBox.Show(
                 this,
@@ -129,7 +141,8 @@ public partial class MainWindow
         catch
         {
             menuItem.IsChecked =
-                message.HasRedCategory;
+                message.HasCategory(
+                    category);
 
             MessageBox.Show(
                 this,
