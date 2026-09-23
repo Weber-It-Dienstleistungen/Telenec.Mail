@@ -290,10 +290,17 @@ public sealed class ImapMailDataSource : IMailDataSource
                         summary,
                         cancellationToken);
 
+                var readReceipt =
+                    await TryDetectReadReceiptAsync(
+                        folder,
+                        summary,
+                        cancellationToken);
+
                 messages.Add(
                     CreateMessageData(
                         summary,
-                        bodyContent));
+                        bodyContent,
+                        readReceipt));
             }
 
             return messages;
@@ -1235,6 +1242,150 @@ public sealed class ImapMailDataSource : IMailDataSource
                 inlinePartSpecifiers);
     }
 
+    private static async Task<MailReadReceiptData?>
+        TryDetectReadReceiptAsync(
+            IMailFolder folder,
+            IMessageSummary summary,
+            CancellationToken cancellationToken)
+    {
+        if (!MayContainReadReceipt(
+                summary.Body))
+        {
+            return null;
+        }
+
+        try
+        {
+            using var message =
+                await folder.GetMessageAsync(
+                    summary.UniqueId,
+                    cancellationToken);
+
+            return MailReadReceiptDetectionService
+                .Detect(
+                    message);
+        }
+        catch (OperationCanceledException)
+            when (cancellationToken.IsCancellationRequested)
+        {
+            throw;
+        }
+        catch
+        {
+            /*
+             * Die Erkennung einer Lesebestätigung ist eine
+             * Zusatzfunktion.
+             *
+             * Eine beschädigte oder ungewöhnliche
+             * Empfangsbestätigung darf deshalb niemals das
+             * Laden des Posteingangs verhindern.
+             */
+            return null;
+        }
+    }
+
+    private static bool MayContainReadReceipt(
+        BodyPart? bodyPart)
+    {
+        if (bodyPart is null)
+        {
+            return false;
+        }
+
+        if (bodyPart is BodyPartMultipart multipart)
+        {
+            return multipart
+                .BodyParts
+                .Any(
+                    MayContainReadReceipt);
+        }
+
+        if (bodyPart is BodyPartMessage messagePart)
+        {
+            if (IsReadReceiptMimeType(
+                    messagePart.ContentType.MimeType))
+            {
+                return true;
+            }
+
+            /*
+             * Outlook/Exchange kann die eigentliche
+             * TNEF-Lesebestätigung in eine message/rfc822-
+             * Struktur einbetten.
+             *
+             * BODYSTRUCTURE liefert uns dafür bereits den
+             * inneren MIME-Baum. Dadurch müssen normale
+             * angehängte E-Mails nicht vollständig geladen
+             * werden.
+             */
+            return MayContainReadReceipt(
+                messagePart.Body);
+        }
+
+        if (bodyPart is not BodyPartBasic basicPart)
+        {
+            return false;
+        }
+
+        return IsReadReceiptMimeType(
+            basicPart.ContentType.MimeType);
+    }
+
+    private static bool IsReadReceiptMimeType(
+        string? mimeType)
+    {
+        if (string.IsNullOrWhiteSpace(
+                mimeType))
+        {
+            return false;
+        }
+
+        return
+            string.Equals(
+                mimeType,
+                "message/disposition-notification",
+                StringComparison.OrdinalIgnoreCase) ||
+            string.Equals(
+                mimeType,
+                "application/ms-tnef",
+                StringComparison.OrdinalIgnoreCase) ||
+            string.Equals(
+                mimeType,
+                "application/vnd.ms-tnef",
+                StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static string? CreateReadReceiptHighlightText(
+        MailReadReceiptData? readReceipt)
+    {
+        if (readReceipt is null)
+        {
+            return null;
+        }
+
+        var sender =
+            !string.IsNullOrWhiteSpace(
+                readReceipt.SenderAddress)
+                ? readReceipt.SenderAddress
+                : readReceipt.Sender;
+
+        var originalMessageId =
+            readReceipt.OriginalMessageId;
+
+        if (!string.IsNullOrWhiteSpace(
+                originalMessageId))
+        {
+            return
+                $"Bestätigung von {sender}. " +
+                $"Original-Message-ID: {originalMessageId}";
+        }
+
+        return string.IsNullOrWhiteSpace(
+                sender)
+            ? "Eine positive Lesebestätigung wurde erkannt."
+            : $"Positive Lesebestätigung von {sender}.";
+    }
+
     private static string NormalizeContentId(
         string? contentId)
     {
@@ -1269,7 +1420,8 @@ public sealed class ImapMailDataSource : IMailDataSource
 
     private static MailMessageData CreateMessageData(
         IMessageSummary summary,
-        MessageBodyContent bodyContent)
+        MessageBodyContent bodyContent,
+        MailReadReceiptData? readReceipt)
     {
         var senderMailbox =
             summary.Envelope?
@@ -1462,7 +1614,19 @@ public sealed class ImapMailDataSource : IMailDataSource
                 replyToAddresses,
 
             Importance:
-                importance);
+                importance,
+
+            ReadReceipt:
+                readReceipt,
+
+            HighlightTitle:
+                readReceipt is null
+                    ? null
+                    : "Lesebestätigung erkannt",
+
+            HighlightText:
+                CreateReadReceiptHighlightText(
+                    readReceipt));
     }
 
     private static IReadOnlyList<string>
