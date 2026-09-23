@@ -74,6 +74,45 @@ public sealed class ReleaseNotesService
     {
         return version switch
         {
+            "0.1.0-test.7" =>
+                new ReleaseNotesInfo(
+                    Version:
+                        "0.1.0-test.7",
+                    Title:
+                        "Telenec Mail wurde aktualisiert",
+                    Intro:
+                        "Diese Testversion setzt zahlreiche Wünsche aus dem Betatest um " +
+                        "und erweitert vor allem das Schreiben, Organisieren und " +
+                        "Nachverfolgen von E-Mails.",
+                    Changes:
+                    [
+                        "Beim Schreiben stehen jetzt deutlich mehr Formatierungen zur Verfügung: " +
+                        "Fett, Kursiv, Unterstrichen, Aufzählungen, verschiedene Schriftarten " +
+                        "und Schriftgrößen sowie unterschiedliche Textfarben.",
+
+                        "Das automatische Speichern von Entwürfen wurde beruhigt. " +
+                        "Während des Schreibens wartet Telenec Mail jetzt kurz, bevor ein " +
+                        "Entwurf erneut gespeichert wird. Formatierte Entwürfe bleiben beim " +
+                        "erneuten Öffnen erhalten.",
+
+                        "E-Mails können jetzt direkt aus Telenec Mail gedruckt werden. " +
+                        "Auch die Darstellung großer eingebetteter Bilder wurde verbessert.",
+
+                        "Beim Schreiben kann die Wichtigkeit einer Nachricht festgelegt werden. " +
+                        "Außerdem können Lesebestätigungen angefordert werden. Eingehende " +
+                        "Lesebestätigungen werden der ursprünglichen gesendeten Nachricht " +
+                        "zugeordnet und dort angezeigt.",
+
+                        "E-Mails können jetzt mit mehreren farbigen Kategorien versehen werden. " +
+                        "Die Kategorien werden serverseitig gespeichert und erscheinen auch " +
+                        "in den Suchergebnissen, wo sie ebenfalls geändert werden können.",
+
+                        "Die Darstellung und Navigation von Unterordnern wurde verbessert. " +
+                        "Zusätzlich wurden weitere Fehler aus dem laufenden Betatest behoben."
+                    ],
+                    Footer:
+                        "Vielen Dank fürs Testen und für euer Feedback!"),
+
             "0.1.0-test.6" =>
                 new ReleaseNotesInfo(
                     Version:
