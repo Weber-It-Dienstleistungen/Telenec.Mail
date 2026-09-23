@@ -1,4 +1,5 @@
-﻿using Telenec.Mail.App.Models;
+﻿using System.Globalization;
+using Telenec.Mail.App.Models;
 
 namespace Telenec.Mail.App.ViewModels;
 
@@ -127,6 +128,10 @@ public sealed class MailMessageItemViewModel : BaseViewModel
         ReceivedReadReceipts =
             receivedReadReceipts?.ToArray()
             ?? Array.Empty<MailReadReceiptData>();
+
+        ReceivedReadReceiptDetails =
+            CreateReceivedReadReceiptDetails(
+                ReceivedReadReceipts);
     }
 
     public string Sender { get; }
@@ -310,6 +315,10 @@ public sealed class MailMessageItemViewModel : BaseViewModel
         ReceivedReadReceipts
     { get; }
 
+    public IReadOnlyList<string>
+        ReceivedReadReceiptDetails
+    { get; }
+
     public bool HasReceivedReadReceipts =>
         ReceivedReadReceipts.Count > 0;
 
@@ -372,6 +381,57 @@ public sealed class MailMessageItemViewModel : BaseViewModel
 
         EmphasizeSender =
             true;
+    }
+
+    private static IReadOnlyList<string>
+        CreateReceivedReadReceiptDetails(
+            IReadOnlyList<MailReadReceiptData> readReceipts)
+    {
+        if (readReceipts.Count == 0)
+        {
+            return Array.Empty<string>();
+        }
+
+        return readReceipts
+            .Select(
+                CreateReceivedReadReceiptDetail)
+            .ToArray();
+    }
+
+    private static string
+        CreateReceivedReadReceiptDetail(
+            MailReadReceiptData readReceipt)
+    {
+        var sender =
+            !string.IsNullOrWhiteSpace(
+                readReceipt.Sender)
+                ? readReceipt.Sender.Trim()
+                : readReceipt.SenderAddress.Trim();
+
+        if (string.IsNullOrWhiteSpace(
+                sender))
+        {
+            sender =
+                "unbekanntem Empfänger";
+        }
+
+        if (!readReceipt.ReceiptDate.HasValue)
+        {
+            return
+                $"Bestätigung von {sender}";
+        }
+
+        var localReceiptDate =
+            readReceipt
+                .ReceiptDate
+                .Value
+                .ToLocalTime();
+
+        return
+            $"Bestätigung von {sender} · " +
+            $"{localReceiptDate.ToString(
+                "dd.MM.yyyy HH:mm",
+                CultureInfo.CurrentCulture)} Uhr";
     }
 
     private static IReadOnlyList<string>

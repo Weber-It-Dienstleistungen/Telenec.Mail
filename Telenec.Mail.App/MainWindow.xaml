@@ -586,6 +586,7 @@
                     <RowDefinition Height="1" />
                     <RowDefinition Height="Auto" />
                     <RowDefinition Height="Auto" />
+                    <RowDefinition Height="Auto" />
                     <RowDefinition Height="*" />
                 </Grid.RowDefinitions>
 
@@ -1288,9 +1289,80 @@
 
                 </Border>
 
+                <!-- LESEBESTÄTIGUNGSSTATUS -->
+
+                <Border
+                    Grid.Row="4"
+                    Margin="20,12,20,0"
+                    Padding="14,12"
+                    CornerRadius="6"
+                    BorderBrush="{StaticResource Border.Default}"
+                    BorderThickness="1"
+                    Background="{StaticResource Brand.PrimaryLight}"
+                    ToolTip="Angezeigt werden ausschließlich positive Lesebestätigungen, die der Empfänger zurückgesendet hat.">
+
+                    <Border.Style>
+
+                        <Style TargetType="Border">
+
+                            <Setter
+                                Property="Visibility"
+                                Value="Collapsed" />
+
+                            <Style.Triggers>
+
+                                <DataTrigger
+                                    Binding="{Binding SelectedMessage.HasReceivedReadReceipts}"
+                                    Value="True">
+
+                                    <Setter
+                                        Property="Visibility"
+                                        Value="Visible" />
+
+                                </DataTrigger>
+
+                            </Style.Triggers>
+
+                        </Style>
+
+                    </Border.Style>
+
+                    <StackPanel>
+
+                        <TextBlock
+                            Text="Lesebestätigung erhalten"
+                            FontSize="12"
+                            FontWeight="SemiBold"
+                            Foreground="{StaticResource Text.Primary}" />
+
+                        <ItemsControl
+                            Margin="0,3,0,0"
+                            ItemsSource="{Binding SelectedMessage.ReceivedReadReceiptDetails}">
+
+                            <ItemsControl.ItemTemplate>
+
+                                <DataTemplate>
+
+                                    <TextBlock
+                                        Margin="0,2,0,0"
+                                        Text="{Binding}"
+                                        FontSize="11"
+                                        Foreground="{StaticResource Text.Secondary}"
+                                        TextWrapping="Wrap" />
+
+                                </DataTemplate>
+
+                            </ItemsControl.ItemTemplate>
+
+                        </ItemsControl>
+
+                    </StackPanel>
+
+                </Border>
+
                 <!-- MAILINHALT -->
 
-                <Grid Grid.Row="4">
+                <Grid Grid.Row="5">
 
                     <ScrollViewer
                         x:Name="PlainTextMailView"
