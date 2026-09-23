@@ -125,6 +125,10 @@ public sealed class MailMessageItemViewModel : BaseViewModel
         ReadReceipt =
             readReceipt;
 
+        ReadReceiptDetail =
+            CreateReadReceiptDetail(
+                ReadReceipt);
+
         ReceivedReadReceipts =
             receivedReadReceipts?.ToArray()
             ?? Array.Empty<MailReadReceiptData>();
@@ -293,6 +297,8 @@ public sealed class MailMessageItemViewModel : BaseViewModel
     public bool IsReadReceipt =>
         ReadReceipt is not null;
 
+    public string ReadReceiptDetail { get; }
+
     /*
      * Enthält positive Lesebestätigungen, die sich über ihre
      * Original-Message-ID auf genau diese Nachricht beziehen.
@@ -394,14 +400,19 @@ public sealed class MailMessageItemViewModel : BaseViewModel
 
         return readReceipts
             .Select(
-                CreateReceivedReadReceiptDetail)
+                CreateReadReceiptDetail)
             .ToArray();
     }
 
     private static string
-        CreateReceivedReadReceiptDetail(
-            MailReadReceiptData readReceipt)
+        CreateReadReceiptDetail(
+            MailReadReceiptData? readReceipt)
     {
+        if (readReceipt is null)
+        {
+            return string.Empty;
+        }
+
         var sender =
             !string.IsNullOrWhiteSpace(
                 readReceipt.Sender)
