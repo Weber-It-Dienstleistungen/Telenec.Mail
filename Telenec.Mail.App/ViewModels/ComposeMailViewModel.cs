@@ -917,7 +917,7 @@ public sealed class ComposeMailViewModel : BaseViewModel
             draft.Importance;
 
         RequestReadReceipt =
-            false;
+            draft.RequestReadReceipt;
 
         FocusBodyOnLoad =
             true;
@@ -939,6 +939,9 @@ public sealed class ComposeMailViewModel : BaseViewModel
 
         Importance =
             draft.Importance;
+
+        RequestReadReceipt =
+            draft.RequestReadReceipt;
 
         ReplaceAttachments(
             draft.Attachments);
