@@ -12,7 +12,8 @@
         Foreground="{StaticResource Text.Primary}"
         FontFamily="{StaticResource Typography.FontFamily}"
         UseLayoutRounding="True"
-        SnapsToDevicePixels="True">
+        SnapsToDevicePixels="True"
+        Loaded="SettingsWindow_OnLoaded">
 
     <Window.Resources>
 
@@ -327,23 +328,81 @@
                         <StackPanel>
 
                             <TextBlock
-                                Text="Kontobezogene Einstellungen"
+                                Text="Signatur"
                                 FontSize="14"
                                 FontWeight="SemiBold"
                                 Foreground="{StaticResource Text.Primary}" />
 
                             <TextBlock
+                                x:Name="SignatureAccountText"
                                 Margin="0,7,0,0"
-                                Text="Einstellungen in diesem Bereich gelten für das aktuell angemeldete Telenec-Mail-Konto."
-                                FontSize="13"
+                                Text="Aktuelles Konto wird geladen …"
+                                FontSize="12"
                                 Foreground="{StaticResource Text.Secondary}"
                                 TextWrapping="Wrap" />
 
-                            <TextBlock
-                                Margin="0,18,0,0"
-                                Text="Noch keine Einstellungen verfügbar."
-                                FontSize="13"
-                                Foreground="{StaticResource Text.Secondary}" />
+                            <StackPanel
+                                x:Name="SignatureSettingsControls"
+                                Margin="0,20,0,0"
+                                IsEnabled="False">
+
+                                <CheckBox
+                                    x:Name="SignatureEnabledCheckBox"
+                                    Content="Signatur verwenden"
+                                    Foreground="{StaticResource Text.Primary}"
+                                    FontSize="13"
+                                    FontWeight="SemiBold"
+                                    Checked="SignatureSetting_OnChanged"
+                                    Unchecked="SignatureSetting_OnChanged" />
+
+                                <TextBlock
+                                    Margin="0,18,0,6"
+                                    Text="Signaturtext"
+                                    FontSize="12"
+                                    Foreground="{StaticResource Text.Secondary}" />
+
+                                <TextBox
+                                    x:Name="SignatureTextBox"
+                                    Height="160"
+                                    Padding="10,8"
+                                    AcceptsReturn="True"
+                                    AcceptsTab="True"
+                                    TextWrapping="Wrap"
+                                    VerticalScrollBarVisibility="Auto"
+                                    Background="{StaticResource Surface.Background}"
+                                    Foreground="{StaticResource Text.Primary}"
+                                    BorderBrush="{StaticResource Border.Default}"
+                                    TextChanged="SignatureTextBox_OnTextChanged" />
+
+                                <Grid Margin="0,16,0,0">
+
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="Auto" />
+                                    </Grid.ColumnDefinitions>
+
+                                    <TextBlock
+                                        x:Name="SignatureStatusText"
+                                        Grid.Column="0"
+                                        Margin="0,0,16,0"
+                                        VerticalAlignment="Center"
+                                        FontSize="12"
+                                        Foreground="{StaticResource Text.Secondary}"
+                                        TextWrapping="Wrap" />
+
+                                    <Button
+                                        x:Name="SaveSignatureButton"
+                                        Grid.Column="1"
+                                        Width="120"
+                                        Height="38"
+                                        Content="Speichern"
+                                        Cursor="Hand"
+                                        Style="{StaticResource Button.Primary}"
+                                        Click="SaveSignatureButton_OnClick" />
+
+                                </Grid>
+
+                            </StackPanel>
 
                         </StackPanel>
 
