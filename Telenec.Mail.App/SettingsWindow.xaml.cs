@@ -1,7 +1,9 @@
-﻿using System.Windows;
+﻿using Microsoft.Extensions.Logging;
+using System.Windows;
 using System.Windows.Controls;
 using Telenec.Mail.App.Controls;
 using Telenec.Mail.App.Services.Mail;
+using Telenec.Mail.App.Services.Security;
 using Telenec.Mail.App.Services.Storage;
 
 namespace Telenec.Mail.App;
@@ -29,7 +31,9 @@ public partial class SettingsWindow : Window
     public SettingsWindow(
         ISettingsStore settingsStore,
         IMailAccountStore mailAccountStore,
-        IMailDataSource mailDataSource)
+        IMailDataSource mailDataSource,
+        ICredentialStore credentialStore,
+        ILogger<MailRuleExecutionService> ruleExecutionLogger)
     {
         _settingsStore =
             settingsStore;
@@ -40,9 +44,6 @@ public partial class SettingsWindow : Window
         /*
          * Die Regelverwaltung verwendet denselben bereits
          * vorhandenen Settings-Store.
-         *
-         * Für 5B ist deshalb keine zusätzliche
-         * DI-Registrierung notwendig.
          */
         _mailRuleStore =
             new MailRuleStore(
@@ -51,9 +52,31 @@ public partial class SettingsWindow : Window
         _ruleMailDataSource =
             mailDataSource;
 
+        /*
+         * Die Regelausführung benötigt für ihren leichten
+         * Header-Scan eine eigene IMAP-Verbindung.
+         *
+         * Sie verwendet dieselben sicheren Zugangsdaten wie
+         * der restliche Mailclient.
+         */
+        _mailRuleExecutionService =
+            new MailRuleExecutionService(
+                mailAccountStore,
+                credentialStore,
+                ruleExecutionLogger);
+
         InitializeComponent();
 
         InitializeRuleSettingsUi();
+
+        /*
+         * Die Ausführungsoberfläche wird bewusst separat
+         * ergänzt.
+         *
+         * Dadurch bleibt die bereits getestete
+         * Regelverwaltung selbst unangetastet.
+         */
+        InitializeRuleExecutionUi();
     }
 
     private async void SettingsWindow_OnLoaded(
