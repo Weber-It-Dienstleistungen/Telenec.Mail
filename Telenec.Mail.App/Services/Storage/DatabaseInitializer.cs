@@ -5,7 +5,7 @@ namespace Telenec.Mail.App.Services.Storage;
 
 public sealed class DatabaseInitializer
 {
-    private const int CurrentSchemaVersion = 3;
+    private const int CurrentSchemaVersion = 4;
 
     private readonly AppDataPaths _paths;
 
@@ -85,6 +85,16 @@ public sealed class DatabaseInitializer
 
             schemaVersion =
                 3;
+        }
+
+        if (schemaVersion == 3)
+        {
+            await UpgradeToSchemaVersion4Async(
+                connection,
+                cancellationToken);
+
+            schemaVersion =
+                4;
         }
 
         if (schemaVersion !=
@@ -266,6 +276,58 @@ public sealed class DatabaseInitializer
                 );
 
             PRAGMA user_version = 3;
+            """;
+
+        await command.ExecuteNonQueryAsync(
+            cancellationToken);
+
+        await transaction.CommitAsync(
+            cancellationToken);
+    }
+
+    private static async Task UpgradeToSchemaVersion4Async(
+        SqliteConnection connection,
+        CancellationToken cancellationToken)
+    {
+        await using var transaction =
+            await connection.BeginTransactionAsync(
+                cancellationToken);
+
+        await using var command =
+            connection.CreateCommand();
+
+        command.Transaction =
+            (SqliteTransaction)transaction;
+
+        command.CommandText =
+            """
+            CREATE TABLE ApplicationSettings
+            (
+                SettingKey TEXT NOT NULL PRIMARY KEY,
+                SettingValue TEXT NOT NULL
+            );
+
+            CREATE TABLE AccountSettings
+            (
+                AccountId TEXT NOT NULL,
+                SettingKey TEXT NOT NULL,
+                SettingValue TEXT NOT NULL,
+
+                PRIMARY KEY
+                (
+                    AccountId,
+                    SettingKey
+                ),
+
+                FOREIGN KEY
+                (
+                    AccountId
+                )
+                REFERENCES Accounts(AccountId)
+                ON DELETE CASCADE
+            );
+
+            PRAGMA user_version = 4;
             """;
 
         await command.ExecuteNonQueryAsync(

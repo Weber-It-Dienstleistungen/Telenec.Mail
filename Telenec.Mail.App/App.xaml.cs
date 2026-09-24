@@ -167,6 +167,21 @@ public partial class App : Application
                         SqliteMailAccountStore>();
 
                     /*
+                     * Programmeinstellungen und
+                     * kontobezogene Einstellungen werden
+                     * bewusst über denselben lokalen
+                     * SQLite-Speicher wie die übrigen
+                     * Programmdaten persistiert.
+                     *
+                     * Die Trennung zwischen beiden Bereichen
+                     * erfolgt innerhalb des Stores über
+                     * separate Tabellen.
+                     */
+                    services.AddSingleton<
+                        ISettingsStore,
+                        SqliteSettingsStore>();
+
+                    /*
                      * Erkannte Lesebestätigungen werden lokal
                      * pro Mailkonto und ursprünglicher
                      * Message-ID gespeichert.
