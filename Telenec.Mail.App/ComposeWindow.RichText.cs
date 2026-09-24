@@ -95,15 +95,18 @@ public partial class ComposeWindow
              * Eine automatisch eingesetzte Signatur benötigt
              * eine eigene initiale DOM-Struktur.
              *
-             * Normale Nachrichten, Antworten, Weiterleitungen
-             * und Entwürfe verwenden unverändert den bisherigen
-             * SetContentAsync-Pfad.
+             * Das gilt sowohl für neue Nachrichten als auch
+             * für Antworten und Weiterleitungen.
+             *
+             * Bestehende Entwürfe verwenden weiterhin
+             * unverändert den normalen SetContentAsync-Pfad.
              */
-            if (_signatureAppliedToNewMessage)
+            if (_signatureApplied)
             {
                 await editor
-                    .SetNewMessageSignatureContentAsync(
-                        _newMessageSignatureText);
+                    .SetSignatureContentAsync(
+                        _signatureText,
+                        _signatureFollowingPlainText);
             }
             else
             {

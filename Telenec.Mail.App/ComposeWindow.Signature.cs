@@ -15,18 +15,28 @@ public partial class ComposeWindow
             true;
 
     private bool
-        _signatureAppliedToNewMessage;
+        _signatureApplied;
 
     private string
-        _newMessageSignatureText =
+        _signatureText =
             string.Empty;
+
+    private string?
+        _signatureFollowingPlainText;
 
     private Task?
         _signaturePreparationTask;
 
     private Task EnsureSignaturePreparedAsync()
     {
-        if (!_isNewMessage)
+        /*
+         * Bestehende Entwürfe enthalten bereits ihren
+         * vollständigen Nachrichtentext.
+         *
+         * Sie dürfen deshalb niemals beim erneuten Öffnen
+         * automatisch eine weitere Signatur erhalten.
+         */
+        if (_viewModel.IsEditingDraft)
         {
             return Task.CompletedTask;
         }
@@ -40,20 +50,40 @@ public partial class ComposeWindow
     private async Task LoadAndApplySignatureAsync()
     {
         /*
-         * Die Signatur darf bestehende Inhalte niemals
-         * überschreiben.
+         * Neue Nachrichten dürfen nur dann automatisch
+         * vorbereitet werden, wenn ihr Body tatsächlich
+         * noch leer ist.
          *
-         * Das ist insbesondere eine zusätzliche defensive
-         * Absicherung für spätere neue Aufrufwege, die
-         * eventuell bereits Text in einer neuen Nachricht
-         * vorbereiten.
+         * Antworten und Weiterleitungen besitzen dagegen
+         * bereits den automatisch erzeugten Original- bzw.
+         * Zitatbereich.
          */
-        if (!string.IsNullOrEmpty(
-                _viewModel.Body) ||
-            !string.IsNullOrWhiteSpace(
-                _viewModel.HtmlBody))
+        if (_isNewMessage)
         {
-            return;
+            if (!string.IsNullOrEmpty(
+                    _viewModel.Body) ||
+                !string.IsNullOrWhiteSpace(
+                    _viewModel.HtmlBody))
+            {
+                return;
+            }
+        }
+        else
+        {
+            /*
+             * Antworten und Weiterleitungen werden aktuell
+             * bewusst als Klartext aufgebaut.
+             *
+             * Sollte dieser Bereich später selbst HTML
+             * enthalten, greifen wir hier defensiv nicht ein,
+             * bis dafür eine eigene HTML-Signaturlogik
+             * implementiert wurde.
+             */
+            if (!string.IsNullOrWhiteSpace(
+                    _viewModel.HtmlBody))
+            {
+                return;
+            }
         }
 
         try
@@ -93,45 +123,84 @@ public partial class ComposeWindow
                 return;
             }
 
-            _newMessageSignatureText =
+            _signatureText =
                 signatureText;
 
-            /*
-             * Das ViewModel behält die vollständige
-             * Klartextrepräsentation der Nachricht.
-             *
-             * Zwei Zeilenumbrüche bedeuten:
-             *
-             * Nachricht
-             * <Leerzeile>
-             * Signatur
-             *
-             * Der Rich-Text-Editor stellt diesen Inhalt
-             * anschließend strukturiert dar, damit kein
-             * führender Leerraum oberhalb der Nachricht
-             * entsteht.
-             */
+            if (_isNewMessage)
+            {
+                _signatureFollowingPlainText =
+                    null;
+            }
+            else
+            {
+                /*
+                 * Antworten und Weiterleitungen besitzen
+                 * bereits zwei freie Anfangszeilen als
+                 * Schreibbereich.
+                 *
+                 * Diese werden entfernt und anschließend
+                 * strukturiert neu aufgebaut:
+                 *
+                 * Schreibbereich
+                 * Leerzeile
+                 * Signatur
+                 * Leerzeile
+                 * Original / Weiterleitung
+                 */
+                var existingBody =
+                    _viewModel.Body
+                    ?? string.Empty;
+
+                _signatureFollowingPlainText =
+                    existingBody
+                        .TrimStart(
+                            '\r',
+                            '\n');
+            }
+
             _viewModel.Body =
-                Environment.NewLine +
-                Environment.NewLine +
-                signatureText;
+                CreateSignaturePlainTextBody(
+                    _signatureText,
+                    _signatureFollowingPlainText);
 
             _viewModel.HtmlBody =
                 null;
 
-            _signatureAppliedToNewMessage =
+            _signatureApplied =
                 true;
         }
         catch
         {
             /*
              * Eine lokal nicht lesbare Signatur darf niemals
-             * verhindern, dass eine neue E-Mail geschrieben
-             * werden kann.
+             * verhindern, dass eine E-Mail geschrieben,
+             * beantwortet oder weitergeleitet werden kann.
              *
-             * Im Fehlerfall startet der Composer deshalb
-             * einfach ohne Signatur.
+             * Im Fehlerfall bleibt deshalb einfach der
+             * bisherige Nachrichtentext erhalten.
              */
         }
+    }
+
+    private static string CreateSignaturePlainTextBody(
+        string signatureText,
+        string? followingPlainText)
+    {
+        var result =
+            Environment.NewLine +
+            Environment.NewLine +
+            signatureText;
+
+        if (string.IsNullOrEmpty(
+                followingPlainText))
+        {
+            return result;
+        }
+
+        return
+            result +
+            Environment.NewLine +
+            Environment.NewLine +
+            followingPlainText;
     }
 }

@@ -4,8 +4,9 @@ namespace Telenec.Mail.App.Controls;
 
 public partial class ComposeHtmlEditor
 {
-    public async Task SetNewMessageSignatureContentAsync(
+    public async Task SetSignatureContentAsync(
         string signatureText,
+        string? followingPlainText,
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(
@@ -17,25 +18,24 @@ public partial class ComposeHtmlEditor
         cancellationToken
             .ThrowIfCancellationRequested();
 
-        /*
-         * Die Klartextrepräsentation bleibt mit derjenigen
-         * des ComposeMailViewModel identisch:
-         *
-         * <Nachricht>
-         * <Leerzeile>
-         * <Signatur>
-         *
-         * Im DOM verwenden wir dafür jedoch echte Zeilen-
-         * Elemente statt führender Newline-Zeichen.
-         *
-         * Das verhindert, dass Chromium beim Schreiben vor
-         * einem führenden Newline eine zusätzliche optische
-         * Leerzeile erzeugt.
-         */
+        var normalizedFollowingPlainText =
+            string.IsNullOrEmpty(
+                followingPlainText)
+                ? null
+                : followingPlainText;
+
         PlainText =
             Environment.NewLine +
             Environment.NewLine +
             signatureText;
+
+        if (normalizedFollowingPlainText is not null)
+        {
+            PlainText +=
+                Environment.NewLine +
+                Environment.NewLine +
+                normalizedFollowingPlainText;
+        }
 
         HtmlBody =
             null;
@@ -43,6 +43,10 @@ public partial class ComposeHtmlEditor
         var signatureTextJson =
             JsonSerializer.Serialize(
                 signatureText);
+
+        var followingPlainTextJson =
+            JsonSerializer.Serialize(
+                normalizedFollowingPlainText);
 
         var script =
             $$"""
@@ -57,15 +61,17 @@ public partial class ComposeHtmlEditor
                 const signatureText =
                     {{signatureTextJson}};
 
+                const followingPlainText =
+                    {{followingPlainTextJson}};
+
                 editor.replaceChildren();
 
                 /*
                  * Erste Zeile:
                  * eigentlicher Nachrichtentext.
                  *
-                 * Sie ist zunächst leer und enthält deshalb
-                 * ein <br>. Der Cursor wird beim ersten Fokus
-                 * direkt in diese Zeile gesetzt.
+                 * Sie ist zunächst leer. Der Benutzer beginnt
+                 * beim ersten Fokus genau an dieser Stelle.
                  */
                 const messageLine =
                     document.createElement("div");
@@ -77,49 +83,72 @@ public partial class ComposeHtmlEditor
                     messageLine);
 
                 /*
-                 * Zweite Zeile:
-                 * bewusster Abstand zwischen Nachricht und
+                 * Abstand zwischen neuem Nachrichtentext und
                  * Signatur.
                  */
-                const spacerLine =
+                const signatureSpacerLine =
                     document.createElement("div");
 
-                spacerLine.appendChild(
+                signatureSpacerLine.appendChild(
                     document.createElement("br"));
 
                 editor.appendChild(
-                    spacerLine);
+                    signatureSpacerLine);
+
+                function appendPlainTextLines(text) {
+                    const normalizedText =
+                        (text ?? "")
+                            .replace(/\r\n/g, "\n")
+                            .replace(/\r/g, "\n");
+
+                    const lines =
+                        normalizedText.split("\n");
+
+                    for (const line of lines) {
+                        const lineElement =
+                            document.createElement("div");
+
+                        if (line.length === 0) {
+                            lineElement.appendChild(
+                                document.createElement("br"));
+                        }
+                        else {
+                            lineElement.textContent =
+                                line;
+                        }
+
+                        editor.appendChild(
+                            lineElement);
+                    }
+                }
 
                 /*
-                 * Die Signatur wird zeilenweise als reiner
-                 * Text aufgebaut.
+                 * Signatur ausschließlich als Text einsetzen.
                  *
-                 * Dadurch kann kein Signaturinhalt als HTML
+                 * Dadurch kann Signaturinhalt nicht als HTML
                  * oder Script interpretiert werden.
                  */
-                const normalizedSignature =
-                    (signatureText ?? "")
-                        .replace(/\r\n/g, "\n")
-                        .replace(/\r/g, "\n");
+                appendPlainTextLines(
+                    signatureText);
 
-                const signatureLines =
-                    normalizedSignature.split("\n");
-
-                for (const line of signatureLines) {
-                    const lineElement =
+                if (typeof followingPlainText === "string" &&
+                    followingPlainText.length > 0) {
+                    /*
+                     * Zwischen Signatur und vorhandenem
+                     * Antwort-/Weiterleitungsblock bleibt
+                     * genau eine Leerzeile.
+                     */
+                    const contentSpacerLine =
                         document.createElement("div");
 
-                    if (line.length === 0) {
-                        lineElement.appendChild(
-                            document.createElement("br"));
-                    }
-                    else {
-                        lineElement.textContent =
-                            line;
-                    }
+                    contentSpacerLine.appendChild(
+                        document.createElement("br"));
 
                     editor.appendChild(
-                        lineElement);
+                        contentSpacerLine);
+
+                    appendPlainTextLines(
+                        followingPlainText);
                 }
 
                 /*
@@ -127,9 +156,8 @@ public partial class ComposeHtmlEditor
                  * grundsätzlich in der ersten Nachrichtenzeile
                  * beginnen.
                  *
-                 * Danach wird die Sonderbehandlung entfernt
-                 * und der Editor verhält sich wieder völlig
-                 * normal.
+                 * Danach verhält sich der Editor wieder
+                 * vollständig normal.
                  */
                 let initialCaretPending =
                     true;
