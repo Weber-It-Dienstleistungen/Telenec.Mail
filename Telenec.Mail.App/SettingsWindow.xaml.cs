@@ -6,12 +6,6 @@ namespace Telenec.Mail.App;
 
 public partial class SettingsWindow : Window
 {
-    private const string SignatureEnabledSettingKey =
-        "Compose.Signature.Enabled";
-
-    private const string SignaturePlainTextSettingKey =
-        "Compose.Signature.PlainText";
-
     private readonly ISettingsStore
         _settingsStore;
 
@@ -76,13 +70,13 @@ public partial class SettingsWindow : Window
                 await _settingsStore
                     .GetAccountSettingAsync(
                         account.AccountId,
-                        SignaturePlainTextSettingKey);
+                        SettingsKeys.ComposeSignaturePlainText);
 
             var signatureEnabled =
                 await _settingsStore
                     .GetAccountSettingAsync(
                         account.AccountId,
-                        SignatureEnabledSettingKey);
+                        SettingsKeys.ComposeSignatureEnabled);
 
             SignatureTextBox.Text =
                 signatureText
@@ -219,13 +213,13 @@ public partial class SettingsWindow : Window
             await _settingsStore
                 .SetAccountSettingAsync(
                     _activeAccountId.Value,
-                    SignaturePlainTextSettingKey,
+                    SettingsKeys.ComposeSignaturePlainText,
                     SignatureTextBox.Text);
 
             await _settingsStore
                 .SetAccountSettingAsync(
                     _activeAccountId.Value,
-                    SignatureEnabledSettingKey,
+                    SettingsKeys.ComposeSignatureEnabled,
                     SignatureEnabledCheckBox.IsChecked == true
                         ? "true"
                         : "false");

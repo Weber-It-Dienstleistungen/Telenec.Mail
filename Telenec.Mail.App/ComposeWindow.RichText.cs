@@ -39,6 +39,12 @@ public partial class ComposeWindow
 
     private async Task ActivateRichTextEditorAsync()
     {
+        /*
+         * Eine konfigurierte Signatur muss vor dem ersten
+         * Befüllen des Rich-Text-Editors im ViewModel stehen.
+         */
+        await EnsureSignaturePreparedAsync();
+
         if (BodyTextBox.Parent
             is not Grid bodyGrid)
         {
@@ -85,10 +91,27 @@ public partial class ComposeWindow
                 return;
             }
 
-            await editor
-                .SetContentAsync(
-                    _viewModel.Body,
-                    _viewModel.HtmlBody);
+            /*
+             * Eine automatisch eingesetzte Signatur benötigt
+             * eine eigene initiale DOM-Struktur.
+             *
+             * Normale Nachrichten, Antworten, Weiterleitungen
+             * und Entwürfe verwenden unverändert den bisherigen
+             * SetContentAsync-Pfad.
+             */
+            if (_signatureAppliedToNewMessage)
+            {
+                await editor
+                    .SetNewMessageSignatureContentAsync(
+                        _newMessageSignatureText);
+            }
+            else
+            {
+                await editor
+                    .SetContentAsync(
+                        _viewModel.Body,
+                        _viewModel.HtmlBody);
+            }
 
             if (_richTextEditorWindowClosed)
             {

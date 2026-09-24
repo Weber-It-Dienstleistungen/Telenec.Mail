@@ -5,6 +5,7 @@ using System.Windows;
 using System.Windows.Input;
 using Telenec.Mail.App.Models;
 using Telenec.Mail.App.Services.Mail;
+using Telenec.Mail.App.Services.Storage;
 using Telenec.Mail.App.ViewModels;
 
 namespace Telenec.Mail.App;
@@ -62,12 +63,29 @@ public partial class ComposeWindow : Window
     }
 
     public ComposeWindow(
-        ComposeMailViewModel viewModel)
+        ComposeMailViewModel viewModel,
+        ISettingsStore settingsStore,
+        IMailAccountStore mailAccountStore)
     {
+        ArgumentNullException.ThrowIfNull(
+            viewModel);
+
+        ArgumentNullException.ThrowIfNull(
+            settingsStore);
+
+        ArgumentNullException.ThrowIfNull(
+            mailAccountStore);
+
         InitializeComponent();
 
         _viewModel =
             viewModel;
+
+        _settingsStore =
+            settingsStore;
+
+        _mailAccountStore =
+            mailAccountStore;
 
         DataContext =
             _viewModel;
@@ -85,6 +103,9 @@ public partial class ComposeWindow : Window
         ArgumentNullException.ThrowIfNull(
             message);
 
+        _isNewMessage =
+            false;
+
         _viewModel.PrepareReply(
             message);
     }
@@ -95,6 +116,9 @@ public partial class ComposeWindow : Window
         ArgumentNullException.ThrowIfNull(
             message);
 
+        _isNewMessage =
+            false;
+
         _viewModel.PrepareReplyAll(
             message);
     }
@@ -104,6 +128,9 @@ public partial class ComposeWindow : Window
     {
         ArgumentNullException.ThrowIfNull(
             message);
+
+        _isNewMessage =
+            false;
 
         _forwardSourceMessage =
             message;
@@ -118,6 +145,9 @@ public partial class ComposeWindow : Window
         string? expectedMessageId,
         CancellationToken cancellationToken = default)
     {
+        _isNewMessage =
+            false;
+
         await _viewModel
             .PrepareDraftEditAsync(
                 sourceFolderId,
@@ -147,6 +177,17 @@ public partial class ComposeWindow : Window
                 MessageBoxButton.OK,
                 MessageBoxImage.Warning);
         }
+
+        /*
+         * Der Rich-Text-Editor kann seine Initialisierung
+         * bereits über OnActivated begonnen haben.
+         *
+         * Beide Wege warten deshalb auf dieselbe
+         * Signatur-Vorbereitung. So steht die Signatur
+         * garantiert sowohl vor der Editorbefüllung als auch
+         * vor dem Erzeugen der Autosave-Baseline fest.
+         */
+        await EnsureSignaturePreparedAsync();
 
         CaptureComposeBaseline();
 
