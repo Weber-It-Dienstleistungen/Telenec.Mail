@@ -1,4 +1,5 @@
 ﻿using System.Windows;
+using Telenec.Mail.App.Services.Startup;
 using Telenec.Mail.App.Services.Storage;
 
 namespace Telenec.Mail.App;
@@ -171,8 +172,8 @@ public partial class SettingsWindow
                         : "false");
 
             /*
-             * Tray und Autostart gelten für die gesamte
-             * lokale Anwendung.
+             * Der Tray-Modus gilt für die gesamte lokale
+             * Anwendung.
              */
             await _settingsStore
                 .SetApplicationSettingAsync(
@@ -181,24 +182,44 @@ public partial class SettingsWindow
                         ? "true"
                         : "false");
 
+            var startWithWindows =
+                StartWithWindowsEnabledCheckBox.IsChecked ==
+                true;
+
+            /*
+             * Zuerst wird der tatsächliche Windows-Autostart
+             * geändert.
+             *
+             * WindowsStartupRegistration verifiziert den
+             * Registry-Zustand unmittelbar nach der Änderung.
+             */
+            WindowsStartupRegistration.Apply(
+                startWithWindows);
+
+            /*
+             * Erst nachdem der Windows-Zustand erfolgreich
+             * geändert wurde, speichern wir denselben Zustand
+             * auch in den Programmeinstellungen.
+             */
             await _settingsStore
                 .SetApplicationSettingAsync(
                     SettingsKeys.ApplicationStartWithWindowsEnabled,
-                    StartWithWindowsEnabledCheckBox.IsChecked == true
+                    startWithWindows
                         ? "true"
                         : "false");
 
             NotificationStatusText.Text =
                 "Gespeichert.";
         }
-        catch
+        catch (Exception exception)
         {
             NotificationStatusText.Text =
                 "Speichern fehlgeschlagen.";
 
             MessageBox.Show(
                 this,
-                "Die Einstellungen konnten nicht gespeichert werden.",
+                "Die Einstellungen konnten nicht vollständig gespeichert werden.\n\n" +
+                exception.Message,
                 "Telenec Mail",
                 MessageBoxButton.OK,
                 MessageBoxImage.Error);
