@@ -21,6 +21,17 @@ public static class SettingsKeys
         "Notifications.Desktop.Enabled";
 
     /*
+     * Die gesamte Regeldefinition eines Kontos wird aktuell
+     * als versioniertes JSON-Dokument gespeichert.
+     *
+     * Das hält den ersten Regel-Unterbau bewusst klein und
+     * vermeidet eine unnötige Datenbankmigration, solange die
+     * Regelmenge überschaubar bleibt.
+     */
+    public const string MailRulesDefinitions =
+        "Mail.Rules.Definitions";
+
+    /*
      * Anwendungsweit:
      * Tray- und Windows-Start-Verhalten gelten für die
      * gesamte lokale Telenec-Mail-Installation.

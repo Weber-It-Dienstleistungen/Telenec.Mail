@@ -1,6 +1,7 @@
 ﻿using System.Windows;
 using System.Windows.Controls;
 using Telenec.Mail.App.Controls;
+using Telenec.Mail.App.Services.Mail;
 using Telenec.Mail.App.Services.Storage;
 
 namespace Telenec.Mail.App;
@@ -27,7 +28,8 @@ public partial class SettingsWindow : Window
 
     public SettingsWindow(
         ISettingsStore settingsStore,
-        IMailAccountStore mailAccountStore)
+        IMailAccountStore mailAccountStore,
+        IMailDataSource mailDataSource)
     {
         _settingsStore =
             settingsStore;
@@ -35,7 +37,23 @@ public partial class SettingsWindow : Window
         _mailAccountStore =
             mailAccountStore;
 
+        /*
+         * Die Regelverwaltung verwendet denselben bereits
+         * vorhandenen Settings-Store.
+         *
+         * Für 5B ist deshalb keine zusätzliche
+         * DI-Registrierung notwendig.
+         */
+        _mailRuleStore =
+            new MailRuleStore(
+                settingsStore);
+
+        _ruleMailDataSource =
+            mailDataSource;
+
         InitializeComponent();
+
+        InitializeRuleSettingsUi();
     }
 
     private async void SettingsWindow_OnLoaded(
