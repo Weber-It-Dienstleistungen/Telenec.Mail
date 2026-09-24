@@ -572,53 +572,171 @@
                 Grid.Row="0"
                 Visibility="Collapsed">
 
-                <StackPanel>
+                <ScrollViewer
+                    VerticalScrollBarVisibility="Auto"
+                    HorizontalScrollBarVisibility="Disabled">
 
-                    <TextBlock
-                        Text="Benachrichtigungen"
-                        FontSize="26"
-                        FontWeight="SemiBold"
-                        Foreground="{StaticResource Text.Primary}" />
+                    <StackPanel Margin="0,0,12,0">
 
-                    <TextBlock
-                        Text="Einstellungen für Hinweise und Benachrichtigungen."
-                        Margin="0,6,0,26"
-                        FontSize="13"
-                        Foreground="{StaticResource Text.Secondary}" />
+                        <TextBlock
+                            Text="Benachrichtigungen"
+                            FontSize="26"
+                            FontWeight="SemiBold"
+                            Foreground="{StaticResource Text.Primary}" />
 
-                    <Border
-                        Padding="22"
-                        Background="{StaticResource Surface.Card}"
-                        BorderBrush="{StaticResource Border.Default}"
-                        BorderThickness="1"
-                        CornerRadius="8">
+                        <TextBlock
+                            Text="Hinweise bei neuen E-Mails und Verhalten im Hintergrund."
+                            Margin="0,6,0,26"
+                            FontSize="13"
+                            Foreground="{StaticResource Text.Secondary}" />
 
-                        <StackPanel>
+                        <StackPanel
+                            x:Name="NotificationSettingsControls"
+                            IsEnabled="False">
 
-                            <TextBlock
-                                Text="Lokale Programmeinstellungen"
-                                FontSize="14"
-                                FontWeight="SemiBold"
-                                Foreground="{StaticResource Text.Primary}" />
+                            <!-- DESKTOP-BENACHRICHTIGUNGEN -->
 
-                            <TextBlock
-                                Margin="0,7,0,0"
-                                Text="Benachrichtigungen werden später an dieser Stelle zentral verwaltet."
-                                FontSize="13"
-                                Foreground="{StaticResource Text.Secondary}"
-                                TextWrapping="Wrap" />
+                            <Border
+                                Padding="22"
+                                Background="{StaticResource Surface.Card}"
+                                BorderBrush="{StaticResource Border.Default}"
+                                BorderThickness="1"
+                                CornerRadius="8">
 
-                            <TextBlock
-                                Margin="0,18,0,0"
-                                Text="Noch keine Einstellungen verfügbar."
-                                FontSize="13"
-                                Foreground="{StaticResource Text.Secondary}" />
+                                <StackPanel>
+
+                                    <TextBlock
+                                        Text="Desktop-Benachrichtigungen"
+                                        FontSize="14"
+                                        FontWeight="SemiBold"
+                                        Foreground="{StaticResource Text.Primary}" />
+
+                                    <TextBlock
+                                        x:Name="NotificationAccountText"
+                                        Margin="0,7,0,0"
+                                        Text="Aktuelles Konto wird geladen …"
+                                        FontSize="12"
+                                        Foreground="{StaticResource Text.Secondary}"
+                                        TextWrapping="Wrap" />
+
+                                    <CheckBox
+                                        x:Name="DesktopNotificationsEnabledCheckBox"
+                                        Margin="0,20,0,0"
+                                        Content="Bei neuen E-Mails benachrichtigen"
+                                        Foreground="{StaticResource Text.Primary}"
+                                        FontSize="13"
+                                        FontWeight="SemiBold"
+                                        Checked="NotificationSetting_OnChanged"
+                                        Unchecked="NotificationSetting_OnChanged" />
+
+                                    <TextBlock
+                                        Margin="24,6,0,0"
+                                        Text="Zeigt einen Windows-Hinweis an, wenn eine neue Nachricht im Postfach eingeht."
+                                        FontSize="12"
+                                        Foreground="{StaticResource Text.Secondary}"
+                                        TextWrapping="Wrap" />
+
+                                </StackPanel>
+
+                            </Border>
+
+                            <!-- HINTERGRUNDBETRIEB -->
+
+                            <Border
+                                Margin="0,16,0,0"
+                                Padding="22"
+                                Background="{StaticResource Surface.Card}"
+                                BorderBrush="{StaticResource Border.Default}"
+                                BorderThickness="1"
+                                CornerRadius="8">
+
+                                <StackPanel>
+
+                                    <TextBlock
+                                        Text="Hintergrundbetrieb"
+                                        FontSize="14"
+                                        FontWeight="SemiBold"
+                                        Foreground="{StaticResource Text.Primary}" />
+
+                                    <TextBlock
+                                        Margin="0,7,0,0"
+                                        Text="Diese Einstellungen gelten für Telenec Mail auf diesem Computer."
+                                        FontSize="12"
+                                        Foreground="{StaticResource Text.Secondary}"
+                                        TextWrapping="Wrap" />
+
+                                    <CheckBox
+                                        x:Name="CloseToTrayEnabledCheckBox"
+                                        Margin="0,20,0,0"
+                                        Content="Beim Schließen im Infobereich weiterlaufen"
+                                        Foreground="{StaticResource Text.Primary}"
+                                        FontSize="13"
+                                        FontWeight="SemiBold"
+                                        Checked="NotificationSetting_OnChanged"
+                                        Unchecked="NotificationSetting_OnChanged" />
+
+                                    <TextBlock
+                                        Margin="24,6,0,0"
+                                        Text="Das Hauptfenster wird geschlossen, Telenec Mail bleibt jedoch im Windows-Infobereich aktiv."
+                                        FontSize="12"
+                                        Foreground="{StaticResource Text.Secondary}"
+                                        TextWrapping="Wrap" />
+
+                                    <CheckBox
+                                        x:Name="StartWithWindowsEnabledCheckBox"
+                                        Margin="0,22,0,0"
+                                        Content="Mit Windows starten"
+                                        Foreground="{StaticResource Text.Primary}"
+                                        FontSize="13"
+                                        FontWeight="SemiBold"
+                                        Checked="NotificationSetting_OnChanged"
+                                        Unchecked="NotificationSetting_OnChanged" />
+
+                                    <TextBlock
+                                        Margin="24,6,0,0"
+                                        Text="Telenec Mail wird nach der Windows-Anmeldung automatisch gestartet."
+                                        FontSize="12"
+                                        Foreground="{StaticResource Text.Secondary}"
+                                        TextWrapping="Wrap" />
+
+                                </StackPanel>
+
+                            </Border>
+
+                            <!-- SPEICHERN -->
+
+                            <Grid Margin="0,18,0,0">
+
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+
+                                <TextBlock
+                                    x:Name="NotificationStatusText"
+                                    Grid.Column="0"
+                                    Margin="0,0,16,0"
+                                    VerticalAlignment="Center"
+                                    FontSize="12"
+                                    Foreground="{StaticResource Text.Secondary}"
+                                    TextWrapping="Wrap" />
+
+                                <Button
+                                    Grid.Column="1"
+                                    Width="120"
+                                    Height="38"
+                                    Content="Speichern"
+                                    Cursor="Hand"
+                                    Style="{StaticResource Button.Primary}"
+                                    Click="SaveNotificationSettingsButton_OnClick" />
+
+                            </Grid>
 
                         </StackPanel>
 
-                    </Border>
+                    </StackPanel>
 
-                </StackPanel>
+                </ScrollViewer>
 
             </Grid>
 
