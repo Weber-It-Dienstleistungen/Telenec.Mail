@@ -94,7 +94,7 @@ public sealed class ImapMailMessageStateSource
             }
 
             var uniqueIds =
-                await GetNewestMessageUniqueIdsAsync(
+                await GetSortedMessageUniqueIdsAsync(
                     folder,
                     maximumMessageCount,
                     cancellationToken);
@@ -113,13 +113,14 @@ public sealed class ImapMailMessageStateSource
             }
 
             /*
-             * Envelope wird hier zusätzlich benötigt, damit die
-             * leichte State-Liste exakt dieselbe deterministische
-             * Sortierreihenfolge verwenden kann wie
-             * ImapMailDataSource.
+             * Envelope bleibt hier enthalten.
              *
-             * Es werden weiterhin ausdrücklich keine Bodies,
-             * Attachments oder MIME-Inhalte geladen.
+             * Beim Server-SORT benötigen wir es zwar nicht
+             * zwingend zur Reihenfolge, der lokale Fallback
+             * verwendet jedoch dieselben Headerdaten.
+             *
+             * Bodies, Attachments und MIME-Inhalte werden
+             * weiterhin ausdrücklich nicht geladen.
              */
             var summaries =
                 await folder.FetchAsync(
@@ -130,33 +131,19 @@ public sealed class ImapMailMessageStateSource
                     cancellationToken);
 
             /*
-             * Wichtig für Paging:
-             *
              * MailKit garantiert bei einem Fetch über eine
-             * UID-Liste nicht, dass die zurückgegebenen
-             * IMessageSummary-Objekte in derselben Reihenfolge
-             * wie die angeforderten UIDs stehen.
+             * UID-Liste nicht, dass die Ergebnisse in exakt
+             * derselben Reihenfolge zurückkommen.
              *
-             * Die eigentliche Nachrichten-Datenquelle sortiert
-             * ihre Summaries ebenfalls nach Datum und danach
-             * nach Index.
-             *
-             * Der State-Source muss dieselbe Reihenfolge
-             * verwenden, weil das ViewModel damit prüft, ob die
-             * bereits sichtbaren Nachrichten noch exakt den
-             * aktuellen Anfang des Serverordners bilden.
+             * Deshalb stellen wir die Reihenfolge wieder her,
+             * die zuvor durch IMAP SORT bzw. den lokalen
+             * Fallback ermittelt wurde.
              */
             var orderedSummaries =
-                summaries
-                    .Where(
-                        summary =>
-                            summary.UniqueId.IsValid)
-                    .OrderByDescending(
-                        GetMessageSortDate)
-                    .ThenByDescending(
-                        summary =>
-                            summary.Index)
-                    .ToList();
+                MailSortOrder
+                    .RestoreRequestedUniqueIdOrder(
+                        summaries,
+                        uniqueIds);
 
             var states =
                 orderedSummaries
@@ -190,20 +177,29 @@ public sealed class ImapMailMessageStateSource
     }
 
     private static async Task<IList<UniqueId>>
-        GetNewestMessageUniqueIdsAsync(
+        GetSortedMessageUniqueIdsAsync(
             IMailFolder folder,
             int maximumMessageCount,
             CancellationToken cancellationToken)
     {
+        var sort =
+            MailSortState.Effective;
+
         try
         {
+            /*
+             * IMAP SORT sortiert den vollständigen Ordner
+             * serverseitig.
+             *
+             * Erst DANACH werden die benötigten UIDs für die
+             * aktuell sichtbare Tiefe ausgewählt.
+             */
             var sortedUniqueIds =
                 await folder.SortAsync(
                     SearchQuery.All,
-                    new[]
-                    {
-                        OrderBy.ReverseDate
-                    },
+                    MailSortOrder
+                        .CreateServerOrder(
+                            sort),
                     cancellationToken);
 
             return sortedUniqueIds
@@ -213,6 +209,14 @@ public sealed class ImapMailMessageStateSource
         }
         catch (NotSupportedException)
         {
+            /*
+             * Falls der Server SORT oder das gewünschte
+             * Sortierkriterium nicht unterstützt, laden wir
+             * ausschließlich die leichten Headerdaten des
+             * Ordners und sortieren diese lokal.
+             *
+             * Bodies werden hierbei nicht geladen.
+             */
             var lightweightSummaries =
                 await folder.FetchAsync(
                     0,
@@ -221,12 +225,10 @@ public sealed class ImapMailMessageStateSource
                     MessageSummaryItems.Envelope,
                     cancellationToken);
 
-            return lightweightSummaries
-                .OrderByDescending(
-                    GetMessageSortDate)
-                .ThenByDescending(
-                    summary =>
-                        summary.Index)
+            return MailSortOrder
+                .SortSummaries(
+                    lightweightSummaries,
+                    sort)
                 .Take(
                     maximumMessageCount)
                 .Select(
@@ -234,13 +236,6 @@ public sealed class ImapMailMessageStateSource
                         summary.UniqueId)
                 .ToList();
         }
-    }
-
-    private static DateTimeOffset GetMessageSortDate(
-        IMessageSummary summary)
-    {
-        return summary.Envelope?.Date
-            ?? DateTimeOffset.MinValue;
     }
 
     private async Task<ImapClient>

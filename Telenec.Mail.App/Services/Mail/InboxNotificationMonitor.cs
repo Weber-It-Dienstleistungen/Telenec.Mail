@@ -189,10 +189,20 @@ public sealed class InboxNotificationMonitor
         try
         {
             /*
-             * Nur jetzt laden wir die eigentlichen
-             * Nachrichtendaten, damit Sender und Betreff im
-             * Hinweis angezeigt werden können.
+             * Die sichtbare Mailansicht kann nach Absender
+             * oder Betreff sortiert sein.
+             *
+             * Für Benachrichtigungen benötigen wir dagegen
+             * immer die zeitlich neuesten Nachrichten.
+             *
+             * Der temporäre Sortier-Override gilt nur für
+             * diesen asynchronen Aufrufpfad und verändert
+             * nicht die sichtbare Sortierung des Benutzers.
              */
+            using var sortOverride =
+                MailSortState.UseTemporarySort(
+                    MailSortState.DefaultSort);
+
             var messages =
                 await _mailDataSource
                     .GetMessagesAsync(
@@ -252,6 +262,15 @@ public sealed class InboxNotificationMonitor
         GetInboxStateAsync(
             CancellationToken cancellationToken)
     {
+        /*
+         * Auch die leichte UID-Prüfung muss unabhängig von
+         * der sichtbaren Sortierung immer die neuesten
+         * Nachrichten betrachten.
+         */
+        using var sortOverride =
+            MailSortState.UseTemporarySort(
+                MailSortState.DefaultSort);
+
         return await _mailMessageStateSource
             .GetMessageStatesAsync(
                 InboxFolderId,

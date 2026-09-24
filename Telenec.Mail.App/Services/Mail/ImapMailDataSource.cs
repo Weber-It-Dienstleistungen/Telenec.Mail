@@ -239,14 +239,20 @@ public sealed class ImapMailDataSource : IMailDataSource
                     MailImportanceSummaryService.HeaderFields,
                     cancellationToken);
 
+            /*
+             * Ein UID-Fetch muss nicht in derselben
+             * Reihenfolge zurückkommen, in der die UIDs
+             * angefordert wurden.
+             *
+             * Die endgültige Reihenfolge wird deshalb exakt
+             * anhand der zuvor global sortierten UID-Liste
+             * wiederhergestellt.
+             */
             var orderedSummaries =
-                summaries
-                    .OrderByDescending(
-                        GetMessageSortDate)
-                    .ThenByDescending(
-                        summary =>
-                            summary.Index)
-                    .ToList();
+                MailSortOrder
+                    .RestoreRequestedUniqueIdOrder(
+                        summaries,
+                        uniqueIds);
 
             var messages =
                 new List<MailMessageData>();
@@ -400,15 +406,29 @@ public sealed class ImapMailDataSource : IMailDataSource
             int maximumMessageCount,
             CancellationToken cancellationToken)
     {
+        var sort =
+            MailSortState.Effective;
+
         try
         {
+            /*
+             * Entscheidend:
+             *
+             * Zuerst wird der GESAMTE Ordner durch den
+             * Mailserver sortiert.
+             *
+             * Erst anschließend schneiden wir die gewünschte
+             * 20er-Seite aus der sortierten UID-Liste.
+             *
+             * Damit sortieren die UI-Schaltflächen nicht nur
+             * die gerade geladenen Nachrichten.
+             */
             var sortedUniqueIds =
                 await folder.SortAsync(
                     SearchQuery.All,
-                    new[]
-                    {
-                        OrderBy.ReverseDate
-                    },
+                    MailSortOrder
+                        .CreateServerOrder(
+                            sort),
                     cancellationToken);
 
             return sortedUniqueIds
@@ -420,6 +440,15 @@ public sealed class ImapMailDataSource : IMailDataSource
         }
         catch (NotSupportedException)
         {
+            /*
+             * Fallback für Server ohne IMAP SORT bzw. ohne
+             * Unterstützung eines einzelnen Sortierkriteriums.
+             *
+             * Wir laden lediglich UID + Envelope des gesamten
+             * Ordners, sortieren diese leichten Daten lokal und
+             * laden anschließend weiterhin nur die Bodies der
+             * tatsächlich benötigten Seite.
+             */
             var lightweightSummaries =
                 await folder.FetchAsync(
                     0,
@@ -428,12 +457,10 @@ public sealed class ImapMailDataSource : IMailDataSource
                     MessageSummaryItems.Envelope,
                     cancellationToken);
 
-            return lightweightSummaries
-                .OrderByDescending(
-                    GetMessageSortDate)
-                .ThenByDescending(
-                    summary =>
-                        summary.Index)
+            return MailSortOrder
+                .SortSummaries(
+                    lightweightSummaries,
+                    sort)
                 .Skip(
                     skipMessageCount)
                 .Take(
@@ -443,13 +470,6 @@ public sealed class ImapMailDataSource : IMailDataSource
                         summary.UniqueId)
                 .ToList();
         }
-    }
-
-    private static DateTimeOffset GetMessageSortDate(
-        IMessageSummary summary)
-    {
-        return summary.Envelope?.Date
-            ?? DateTimeOffset.MinValue;
     }
 
     public async Task MarkAsReadAsync(
