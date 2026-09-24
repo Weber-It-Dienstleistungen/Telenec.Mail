@@ -49,6 +49,17 @@ public partial class MainWindow
             MainWindowContacts_OnLoaded;
 
         /*
+         * Die Postfach-Quota wird unmittelbar nach der
+         * Kontakte-Navigation ergänzt.
+         *
+         * Dadurch kann ihre Karte gezielt zwischen
+         * "Kontakte" und dem festen Kontobereich am unteren
+         * Rand eingefügt werden.
+         */
+        Loaded +=
+            MainWindowQuota_OnLoaded;
+
+        /*
          * Die Freigabe externer Bilder wird lokal pro
          * Nachricht gespeichert.
          *
