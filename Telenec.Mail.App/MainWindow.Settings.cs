@@ -123,7 +123,7 @@ public partial class MainWindow
             true;
     }
 
-    private void SettingsMenuItem_OnClick(
+    private async void SettingsMenuItem_OnClick(
         object sender,
         RoutedEventArgs e)
     {
@@ -138,6 +138,17 @@ public partial class MainWindow
                 this;
 
             settingsWindow.ShowDialog();
+
+            /*
+             * Tray-Einstellungen sollen unmittelbar nach
+             * dem Speichern gelten.
+             *
+             * Deshalb wird der aktuelle Wert nach dem
+             * Schließen des Einstellungsfensters erneut
+             * eingelesen – ein Programmneustart ist nicht
+             * erforderlich.
+             */
+            await RefreshTrayStateAsync();
         }
         catch (Exception exception)
         {

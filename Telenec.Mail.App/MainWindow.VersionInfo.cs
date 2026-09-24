@@ -60,6 +60,17 @@ public partial class MainWindow
             MainWindowQuota_OnLoaded;
 
         /*
+         * Der Tray-Unterbau wird ebenfalls erst nach dem
+         * vollständigen Laden des Hauptfensters aktiviert.
+         *
+         * Zu diesem Zeitpunkt existiert bereits ein natives
+         * HWND, an das Windows die Tray-Nachrichten senden
+         * kann.
+         */
+        Loaded +=
+            MainWindowTray_OnLoaded;
+
+        /*
          * Die Freigabe externer Bilder wird lokal pro
          * Nachricht gespeichert.
          *
