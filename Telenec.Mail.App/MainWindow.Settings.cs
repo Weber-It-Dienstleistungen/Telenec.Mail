@@ -140,15 +140,15 @@ public partial class MainWindow
             settingsWindow.ShowDialog();
 
             /*
-             * Tray-Einstellungen sollen unmittelbar nach
-             * dem Speichern gelten.
+             * Tray- und Benachrichtigungseinstellungen
+             * sollen unmittelbar nach dem Schließen des
+             * Einstellungsfensters gelten.
              *
-             * Deshalb wird der aktuelle Wert nach dem
-             * Schließen des Einstellungsfensters erneut
-             * eingelesen – ein Programmneustart ist nicht
-             * erforderlich.
+             * Ein Programmneustart ist nicht erforderlich.
              */
             await RefreshTrayStateAsync();
+
+            await RefreshDesktopNotificationStateAsync();
         }
         catch (Exception exception)
         {
