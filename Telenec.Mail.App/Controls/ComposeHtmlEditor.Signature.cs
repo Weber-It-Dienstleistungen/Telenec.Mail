@@ -4,10 +4,12 @@ namespace Telenec.Mail.App.Controls;
 
 public partial class ComposeHtmlEditor
 {
-    public async Task SetSignatureContentAsync(
-        string signatureText,
-        string? followingPlainText,
-        CancellationToken cancellationToken = default)
+    public async Task<ComposeHtmlEditorContent>
+        SetSignatureContentAsync(
+            string signatureText,
+            string? signatureHtml,
+            string? followingPlainText,
+            CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(
             signatureText);
@@ -18,31 +20,25 @@ public partial class ComposeHtmlEditor
         cancellationToken
             .ThrowIfCancellationRequested();
 
+        var normalizedSignatureHtml =
+            string.IsNullOrWhiteSpace(
+                signatureHtml)
+                ? null
+                : signatureHtml;
+
         var normalizedFollowingPlainText =
             string.IsNullOrEmpty(
                 followingPlainText)
                 ? null
                 : followingPlainText;
 
-        PlainText =
-            Environment.NewLine +
-            Environment.NewLine +
-            signatureText;
-
-        if (normalizedFollowingPlainText is not null)
-        {
-            PlainText +=
-                Environment.NewLine +
-                Environment.NewLine +
-                normalizedFollowingPlainText;
-        }
-
-        HtmlBody =
-            null;
-
         var signatureTextJson =
             JsonSerializer.Serialize(
                 signatureText);
+
+        var signatureHtmlJson =
+            JsonSerializer.Serialize(
+                normalizedSignatureHtml);
 
         var followingPlainTextJson =
             JsonSerializer.Serialize(
@@ -61,17 +57,45 @@ public partial class ComposeHtmlEditor
                 const signatureText =
                     {{signatureTextJson}};
 
+                const signatureHtml =
+                    {{signatureHtmlJson}};
+
                 const followingPlainText =
                     {{followingPlainTextJson}};
+
+                let sanitizedSignatureNodes =
+                    null;
+
+                /*
+                 * Formatierte Signaturen werden zuerst über
+                 * den bereits vorhandenen Editorpfad geladen.
+                 *
+                 * setContent führt dabei denselben Sanitizer
+                 * aus wie beim normalen Mailverfassen.
+                 *
+                 * Erst die daraus entstandenen, bereinigten
+                 * DOM-Knoten werden anschließend übernommen.
+                 */
+                if (typeof signatureHtml === "string" &&
+                    signatureHtml.trim().length > 0) {
+                    window.telenecEditor.setContent(
+                        signatureHtml,
+                        signatureText);
+
+                    sanitizedSignatureNodes =
+                        Array.from(
+                            editor.childNodes)
+                            .map(
+                                node =>
+                                    node.cloneNode(
+                                        true));
+                }
 
                 editor.replaceChildren();
 
                 /*
                  * Erste Zeile:
                  * eigentlicher Nachrichtentext.
-                 *
-                 * Sie ist zunächst leer. Der Benutzer beginnt
-                 * beim ersten Fokus genau an dieser Stelle.
                  */
                 const messageLine =
                     document.createElement("div");
@@ -83,8 +107,7 @@ public partial class ComposeHtmlEditor
                     messageLine);
 
                 /*
-                 * Abstand zwischen neuem Nachrichtentext und
-                 * Signatur.
+                 * Abstand zwischen Nachricht und Signatur.
                  */
                 const signatureSpacerLine =
                     document.createElement("div");
@@ -123,13 +146,24 @@ public partial class ComposeHtmlEditor
                 }
 
                 /*
-                 * Signatur ausschließlich als Text einsetzen.
+                 * Gibt es nach der Bereinigung verwertbares
+                 * HTML, übernehmen wir diese Knoten.
                  *
-                 * Dadurch kann Signaturinhalt nicht als HTML
-                 * oder Script interpretiert werden.
+                 * Andernfalls verwenden wir den immer
+                 * vorhandenen Klartext-Fallback.
                  */
-                appendPlainTextLines(
-                    signatureText);
+                if (sanitizedSignatureNodes &&
+                    sanitizedSignatureNodes.length > 0) {
+                    for (const node of
+                         sanitizedSignatureNodes) {
+                        editor.appendChild(
+                            node);
+                    }
+                }
+                else {
+                    appendPlainTextLines(
+                        signatureText);
+                }
 
                 if (typeof followingPlainText === "string" &&
                     followingPlainText.length > 0) {
@@ -226,5 +260,13 @@ public partial class ComposeHtmlEditor
             .CoreWebView2
             .ExecuteScriptAsync(
                 script);
+
+        /*
+         * Dadurch erhalten wir unmittelbar die bereits
+         * bereinigte HTML-Version des vollständigen
+         * Editorinhalts.
+         */
+        return await GetContentAsync(
+            cancellationToken);
     }
 }

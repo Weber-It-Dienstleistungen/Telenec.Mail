@@ -1,5 +1,6 @@
 ﻿using System.Windows;
 using System.Windows.Controls;
+using Telenec.Mail.App.Controls;
 using Telenec.Mail.App.Services.Storage;
 
 namespace Telenec.Mail.App;
@@ -20,6 +21,9 @@ public partial class SettingsWindow : Window
 
     private bool
         _isSavingSignatureSettings;
+
+    private bool
+        _signatureRichTextAvailable;
 
     public SettingsWindow(
         ISettingsStore settingsStore,
@@ -72,15 +76,24 @@ public partial class SettingsWindow : Window
                         account.AccountId,
                         SettingsKeys.ComposeSignaturePlainText);
 
+            var signatureHtml =
+                await _settingsStore
+                    .GetAccountSettingAsync(
+                        account.AccountId,
+                        SettingsKeys.ComposeSignatureHtml);
+
             var signatureEnabled =
                 await _settingsStore
                     .GetAccountSettingAsync(
                         account.AccountId,
                         SettingsKeys.ComposeSignatureEnabled);
 
-            SignatureTextBox.Text =
+            var normalizedSignatureText =
                 signatureText
                 ?? string.Empty;
+
+            SignatureFallbackTextBox.Text =
+                normalizedSignatureText;
 
             SignatureEnabledCheckBox.IsChecked =
                 string.Equals(
@@ -88,11 +101,60 @@ public partial class SettingsWindow : Window
                     "true",
                     StringComparison.OrdinalIgnoreCase);
 
+            try
+            {
+                await SignatureHtmlEditor
+                    .EnsureInitializedAsync();
+
+                await SignatureHtmlEditor
+                    .SetContentAsync(
+                        normalizedSignatureText,
+                        signatureHtml);
+
+                _signatureRichTextAvailable =
+                    true;
+
+                SignatureHtmlEditor.Visibility =
+                    Visibility.Visible;
+
+                SignatureFallbackTextBox.Visibility =
+                    Visibility.Collapsed;
+
+                SignatureFormattingToolbar.Visibility =
+                    Visibility.Visible;
+
+                SignatureStatusText.Text =
+                    string.Empty;
+            }
+            catch
+            {
+                /*
+                 * Die Signaturverwaltung soll auch dann
+                 * benutzbar bleiben, wenn WebView2 auf einem
+                 * einzelnen Kundensystem nicht gestartet
+                 * werden kann.
+                 *
+                 * In diesem Fall fällt ausschließlich der
+                 * Signatureditor auf Klartext zurück.
+                 */
+                _signatureRichTextAvailable =
+                    false;
+
+                SignatureHtmlEditor.Visibility =
+                    Visibility.Collapsed;
+
+                SignatureFallbackTextBox.Visibility =
+                    Visibility.Visible;
+
+                SignatureFormattingToolbar.Visibility =
+                    Visibility.Collapsed;
+
+                SignatureStatusText.Text =
+                    "Formatierter Editor nicht verfügbar – Klartextbearbeitung aktiv.";
+            }
+
             _signatureSettingsLoaded =
                 true;
-
-            SignatureStatusText.Text =
-                string.Empty;
 
             SignatureSettingsControls.IsEnabled =
                 true;
@@ -155,11 +217,90 @@ public partial class SettingsWindow : Window
         ClearSignatureSaveStatus();
     }
 
-    private void SignatureTextBox_OnTextChanged(
+    private void SignatureHtmlEditor_OnContentChanged(
+        object? sender,
+        ComposeHtmlEditorContentChangedEventArgs e)
+    {
+        ClearSignatureSaveStatus();
+    }
+
+    private void SignatureFallbackTextBox_OnTextChanged(
         object sender,
         TextChangedEventArgs e)
     {
         ClearSignatureSaveStatus();
+    }
+
+    private async void SignatureRichTextCommandButton_OnClick(
+        object sender,
+        RoutedEventArgs e)
+    {
+        if (sender is not FrameworkElement element ||
+            element.Tag is not string command ||
+            string.IsNullOrWhiteSpace(
+                command))
+        {
+            return;
+        }
+
+        await ExecuteSignatureRichTextCommandAsync(
+            command);
+    }
+
+    private async void SignatureRichTextCommandComboBox_OnSelectionChanged(
+        object sender,
+        SelectionChangedEventArgs e)
+    {
+        if (!_signatureRichTextAvailable ||
+            sender is not ComboBox comboBox ||
+            comboBox.Tag is not string command ||
+            comboBox.SelectedItem
+                is not ComboBoxItem selectedItem ||
+            selectedItem.Tag is not string commandValue ||
+            string.IsNullOrWhiteSpace(
+                commandValue))
+        {
+            return;
+        }
+
+        /*
+         * Wie beim Composer springt die Auswahl danach
+         * wieder auf den neutralen Platzhalter zurück.
+         */
+        comboBox.SelectedIndex =
+            0;
+
+        await ExecuteSignatureRichTextCommandAsync(
+            command,
+            commandValue);
+    }
+
+    private async Task ExecuteSignatureRichTextCommandAsync(
+        string command,
+        string? value = null)
+    {
+        if (!_signatureRichTextAvailable ||
+            _isSavingSignatureSettings)
+        {
+            return;
+        }
+
+        try
+        {
+            await SignatureHtmlEditor
+                .ExecuteCommandAsync(
+                    command,
+                    value);
+        }
+        catch
+        {
+            MessageBox.Show(
+                this,
+                "Die gewünschte Signaturformatierung konnte nicht angewendet werden.",
+                "Formatierung nicht möglich",
+                MessageBoxButton.OK,
+                MessageBoxImage.Warning);
+        }
     }
 
     private void ClearSignatureSaveStatus()
@@ -178,7 +319,9 @@ public partial class SettingsWindow : Window
         }
 
         SignatureStatusText.Text =
-            string.Empty;
+            _signatureRichTextAvailable
+                ? string.Empty
+                : "Formatierter Editor nicht verfügbar – Klartextbearbeitung aktiv.";
     }
 
     private async void SaveSignatureButton_OnClick(
@@ -202,20 +345,66 @@ public partial class SettingsWindow : Window
 
         try
         {
+            string signaturePlainText;
+            string signatureHtml;
+
+            if (_signatureRichTextAvailable)
+            {
+                var content =
+                    await SignatureHtmlEditor
+                        .GetContentAsync();
+
+                signaturePlainText =
+                    content.PlainText
+                    ?? string.Empty;
+
+                signatureHtml =
+                    content.HtmlBody
+                    ?? string.Empty;
+            }
+            else
+            {
+                /*
+                 * Im Fallbackmodus wird bewusst nur Klartext
+                 * gespeichert.
+                 *
+                 * Eine eventuell ältere HTML-Version wird
+                 * dabei geleert, damit Text und HTML nicht
+                 * voneinander abweichen.
+                 */
+                signaturePlainText =
+                    SignatureFallbackTextBox.Text;
+
+                signatureHtml =
+                    string.Empty;
+            }
+
             /*
-             * Zuerst wird der Signaturtext gespeichert.
+             * Klartext bleibt immer vorhanden.
              *
-             * Erst danach schreiben wir den Aktiv-Status.
-             * Sollte der erste Schreibvorgang fehlschlagen,
-             * kann dadurch nicht versehentlich eine noch nicht
-             * gespeicherte Signatur aktiviert werden.
+             * Er dient sowohl als Fallback als auch als
+             * text/plain-Version einer versendeten E-Mail.
              */
             await _settingsStore
                 .SetAccountSettingAsync(
                     _activeAccountId.Value,
                     SettingsKeys.ComposeSignaturePlainText,
-                    SignatureTextBox.Text);
+                    signaturePlainText);
 
+            await _settingsStore
+                .SetAccountSettingAsync(
+                    _activeAccountId.Value,
+                    SettingsKeys.ComposeSignatureHtml,
+                    signatureHtml);
+
+            /*
+             * Der Aktiv-Status wird bewusst zuletzt
+             * geschrieben.
+             *
+             * Damit kann nicht versehentlich eine nur
+             * teilweise gespeicherte Signatur aktiviert
+             * werden.
+             */
             await _settingsStore
                 .SetAccountSettingAsync(
                     _activeAccountId.Value,
@@ -225,7 +414,9 @@ public partial class SettingsWindow : Window
                         : "false");
 
             SignatureStatusText.Text =
-                "Gespeichert.";
+                _signatureRichTextAvailable
+                    ? "Gespeichert."
+                    : "Gespeichert (Klartextmodus).";
         }
         catch
         {

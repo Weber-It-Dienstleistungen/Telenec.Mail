@@ -103,10 +103,38 @@ public partial class ComposeWindow
              */
             if (_signatureApplied)
             {
-                await editor
-                    .SetSignatureContentAsync(
-                        _signatureText,
-                        _signatureFollowingPlainText);
+                var signatureContent =
+                    await editor
+                        .SetSignatureContentAsync(
+                            _signatureText,
+                            _signatureHtml,
+                            _signatureFollowingPlainText);
+
+                /*
+                 * Besonders wichtig für formatierte
+                 * Signaturen:
+                 *
+                 * Die bereits erneut bereinigte HTML-Version
+                 * wird sofort ins ViewModel übernommen.
+                 *
+                 * Dadurch wird die Formatierung auch dann
+                 * korrekt versendet, wenn der Benutzer nach
+                 * dem Öffnen des Fensters nichts mehr im
+                 * Nachrichtentext verändert.
+                 */
+                _viewModel.HtmlBody =
+                    signatureContent.HtmlBody;
+
+                /*
+                 * Die Signatur ist Teil des initialen
+                 * Nachrichtenzustands und keine nachträgliche
+                 * Benutzeränderung.
+                 *
+                 * Deshalb aktualisieren wir die Baseline auch
+                 * hier. Falls Loaded später nochmals eine
+                 * Baseline setzt, ist das ebenfalls korrekt.
+                 */
+                CaptureComposeBaseline();
             }
             else
             {

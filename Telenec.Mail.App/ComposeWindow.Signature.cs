@@ -22,6 +22,9 @@ public partial class ComposeWindow
             string.Empty;
 
     private string?
+        _signatureHtml;
+
+    private string?
         _signatureFollowingPlainText;
 
     private Task?
@@ -123,8 +126,20 @@ public partial class ComposeWindow
                 return;
             }
 
+            var signatureHtml =
+                await _settingsStore
+                    .GetAccountSettingAsync(
+                        account.AccountId,
+                        SettingsKeys.ComposeSignatureHtml);
+
             _signatureText =
                 signatureText;
+
+            _signatureHtml =
+                string.IsNullOrWhiteSpace(
+                    signatureHtml)
+                    ? null
+                    : signatureHtml;
 
             if (_isNewMessage)
             {
@@ -158,6 +173,17 @@ public partial class ComposeWindow
                             '\n');
             }
 
+            /*
+             * Im ViewModel wird zunächst ausschließlich der
+             * sichere Klartextaufbau hinterlegt.
+             *
+             * Gespeichertes HTML wird NICHT direkt in
+             * HtmlBody übernommen.
+             *
+             * Erst der ComposeHtmlEditor bereinigt es erneut.
+             * Die bereinigte Version wird anschließend vom
+             * Rich-Text-Aufbau ins ViewModel synchronisiert.
+             */
             _viewModel.Body =
                 CreateSignaturePlainTextBody(
                     _signatureText,

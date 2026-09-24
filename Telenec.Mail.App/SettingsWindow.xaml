@@ -1,11 +1,12 @@
 ﻿<Window x:Class="Telenec.Mail.App.SettingsWindow"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:controls="clr-namespace:Telenec.Mail.App.Controls"
         Title="Telenec Mail – Einstellungen"
-        Width="900"
-        Height="620"
-        MinWidth="760"
-        MinHeight="520"
+        Width="1050"
+        Height="780"
+        MinWidth="900"
+        MinHeight="680"
         WindowStartupLocation="CenterOwner"
         ShowInTaskbar="False"
         Background="{StaticResource Surface.Background}"
@@ -16,13 +17,6 @@
         Loaded="SettingsWindow_OnLoaded">
 
     <Window.Resources>
-
-        <!--
-            Die Navigation gehört bewusst nur zu diesem Fenster.
-
-            Dadurch erweitern wir das globale Theme für den
-            ersten Settings-Unterbau noch nicht unnötig.
-        -->
 
         <Style
             x:Key="SettingsNavigationItemStyle"
@@ -304,111 +298,270 @@
                 Grid.Row="0"
                 Visibility="Collapsed">
 
-                <StackPanel>
+                <ScrollViewer
+                    VerticalScrollBarVisibility="Auto"
+                    HorizontalScrollBarVisibility="Disabled">
 
-                    <TextBlock
-                        Text="Verfassen"
-                        FontSize="26"
-                        FontWeight="SemiBold"
-                        Foreground="{StaticResource Text.Primary}" />
+                    <StackPanel Margin="0,0,12,0">
 
-                    <TextBlock
-                        Text="Einstellungen für das Schreiben und Versenden von E-Mails."
-                        Margin="0,6,0,26"
-                        FontSize="13"
-                        Foreground="{StaticResource Text.Secondary}" />
+                        <TextBlock
+                            Text="Verfassen"
+                            FontSize="26"
+                            FontWeight="SemiBold"
+                            Foreground="{StaticResource Text.Primary}" />
 
-                    <Border
-                        Padding="22"
-                        Background="{StaticResource Surface.Card}"
-                        BorderBrush="{StaticResource Border.Default}"
-                        BorderThickness="1"
-                        CornerRadius="8">
+                        <TextBlock
+                            Text="Einstellungen für das Schreiben und Versenden von E-Mails."
+                            Margin="0,6,0,26"
+                            FontSize="13"
+                            Foreground="{StaticResource Text.Secondary}" />
 
-                        <StackPanel>
+                        <Border
+                            Padding="22"
+                            Background="{StaticResource Surface.Card}"
+                            BorderBrush="{StaticResource Border.Default}"
+                            BorderThickness="1"
+                            CornerRadius="8">
 
-                            <TextBlock
-                                Text="Signatur"
-                                FontSize="14"
-                                FontWeight="SemiBold"
-                                Foreground="{StaticResource Text.Primary}" />
-
-                            <TextBlock
-                                x:Name="SignatureAccountText"
-                                Margin="0,7,0,0"
-                                Text="Aktuelles Konto wird geladen …"
-                                FontSize="12"
-                                Foreground="{StaticResource Text.Secondary}"
-                                TextWrapping="Wrap" />
-
-                            <StackPanel
-                                x:Name="SignatureSettingsControls"
-                                Margin="0,20,0,0"
-                                IsEnabled="False">
-
-                                <CheckBox
-                                    x:Name="SignatureEnabledCheckBox"
-                                    Content="Signatur verwenden"
-                                    Foreground="{StaticResource Text.Primary}"
-                                    FontSize="13"
-                                    FontWeight="SemiBold"
-                                    Checked="SignatureSetting_OnChanged"
-                                    Unchecked="SignatureSetting_OnChanged" />
+                            <StackPanel>
 
                                 <TextBlock
-                                    Margin="0,18,0,6"
-                                    Text="Signaturtext"
+                                    Text="Signatur"
+                                    FontSize="14"
+                                    FontWeight="SemiBold"
+                                    Foreground="{StaticResource Text.Primary}" />
+
+                                <TextBlock
+                                    x:Name="SignatureAccountText"
+                                    Margin="0,7,0,0"
+                                    Text="Aktuelles Konto wird geladen …"
                                     FontSize="12"
-                                    Foreground="{StaticResource Text.Secondary}" />
+                                    Foreground="{StaticResource Text.Secondary}"
+                                    TextWrapping="Wrap" />
 
-                                <TextBox
-                                    x:Name="SignatureTextBox"
-                                    Height="160"
-                                    Padding="10,8"
-                                    AcceptsReturn="True"
-                                    AcceptsTab="True"
-                                    TextWrapping="Wrap"
-                                    VerticalScrollBarVisibility="Auto"
-                                    Background="{StaticResource Surface.Background}"
-                                    Foreground="{StaticResource Text.Primary}"
-                                    BorderBrush="{StaticResource Border.Default}"
-                                    TextChanged="SignatureTextBox_OnTextChanged" />
+                                <StackPanel
+                                    x:Name="SignatureSettingsControls"
+                                    Margin="0,20,0,0"
+                                    IsEnabled="False">
 
-                                <Grid Margin="0,16,0,0">
-
-                                    <Grid.ColumnDefinitions>
-                                        <ColumnDefinition Width="*" />
-                                        <ColumnDefinition Width="Auto" />
-                                    </Grid.ColumnDefinitions>
+                                    <CheckBox
+                                        x:Name="SignatureEnabledCheckBox"
+                                        Content="Signatur verwenden"
+                                        Foreground="{StaticResource Text.Primary}"
+                                        FontSize="13"
+                                        FontWeight="SemiBold"
+                                        Checked="SignatureSetting_OnChanged"
+                                        Unchecked="SignatureSetting_OnChanged" />
 
                                     <TextBlock
-                                        x:Name="SignatureStatusText"
-                                        Grid.Column="0"
-                                        Margin="0,0,16,0"
-                                        VerticalAlignment="Center"
+                                        Margin="0,18,0,6"
+                                        Text="Signatur"
                                         FontSize="12"
-                                        Foreground="{StaticResource Text.Secondary}"
-                                        TextWrapping="Wrap" />
+                                        Foreground="{StaticResource Text.Secondary}" />
 
-                                    <Button
-                                        x:Name="SaveSignatureButton"
-                                        Grid.Column="1"
-                                        Width="120"
-                                        Height="38"
-                                        Content="Speichern"
-                                        Cursor="Hand"
-                                        Style="{StaticResource Button.Primary}"
-                                        Click="SaveSignatureButton_OnClick" />
+                                    <Border
+                                        x:Name="SignatureFormattingToolbar"
+                                        Padding="8,6"
+                                        Background="{StaticResource Surface.Background}"
+                                        BorderBrush="{StaticResource Border.Subtle}"
+                                        BorderThickness="1,1,1,0"
+                                        CornerRadius="6,6,0,0">
 
-                                </Grid>
+                                        <WrapPanel>
+
+                                            <Button
+                                                Width="36"
+                                                Height="32"
+                                                Margin="0,0,6,0"
+                                                Padding="5,2"
+                                                Tag="bold"
+                                                ToolTip="Fett"
+                                                Cursor="Hand"
+                                                Click="SignatureRichTextCommandButton_OnClick">
+
+                                                <TextBlock
+                                                    Text="B"
+                                                    FontWeight="Bold" />
+
+                                            </Button>
+
+                                            <Button
+                                                Width="36"
+                                                Height="32"
+                                                Margin="0,0,6,0"
+                                                Padding="5,2"
+                                                Tag="italic"
+                                                ToolTip="Kursiv"
+                                                Cursor="Hand"
+                                                Click="SignatureRichTextCommandButton_OnClick">
+
+                                                <TextBlock
+                                                    Text="I"
+                                                    FontStyle="Italic" />
+
+                                            </Button>
+
+                                            <Button
+                                                Width="36"
+                                                Height="32"
+                                                Margin="0,0,6,0"
+                                                Padding="5,2"
+                                                Tag="underline"
+                                                ToolTip="Unterstrichen"
+                                                Cursor="Hand"
+                                                Click="SignatureRichTextCommandButton_OnClick">
+
+                                                <TextBlock
+                                                    Text="U"
+                                                    TextDecorations="Underline" />
+
+                                            </Button>
+
+                                            <Button
+                                                Width="72"
+                                                Height="32"
+                                                Margin="0,0,6,0"
+                                                Padding="5,2"
+                                                Tag="insertUnorderedList"
+                                                Content="• Liste"
+                                                ToolTip="Aufzählung ein-/ausschalten"
+                                                Cursor="Hand"
+                                                Click="SignatureRichTextCommandButton_OnClick" />
+
+                                            <ComboBox
+                                                Width="135"
+                                                Height="32"
+                                                Margin="0,0,6,0"
+                                                Padding="7,3"
+                                                Tag="fontName"
+                                                SelectedIndex="0"
+                                                VerticalContentAlignment="Center"
+                                                ToolTip="Schriftart"
+                                                SelectionChanged="SignatureRichTextCommandComboBox_OnSelectionChanged">
+
+                                                <ComboBoxItem Content="Schriftart" Tag="" />
+                                                <ComboBoxItem Content="Segoe UI" Tag="Segoe UI" />
+                                                <ComboBoxItem Content="Arial" Tag="Arial" />
+                                                <ComboBoxItem Content="Calibri" Tag="Calibri" />
+                                                <ComboBoxItem Content="Verdana" Tag="Verdana" />
+                                                <ComboBoxItem Content="Georgia" Tag="Georgia" />
+                                                <ComboBoxItem Content="Times New Roman" Tag="Times New Roman" />
+                                                <ComboBoxItem Content="Courier New" Tag="Courier New" />
+
+                                            </ComboBox>
+
+                                            <ComboBox
+                                                Width="105"
+                                                Height="32"
+                                                Margin="0,0,6,0"
+                                                Padding="7,3"
+                                                Tag="fontSize"
+                                                SelectedIndex="0"
+                                                VerticalContentAlignment="Center"
+                                                ToolTip="Schriftgröße"
+                                                SelectionChanged="SignatureRichTextCommandComboBox_OnSelectionChanged">
+
+                                                <ComboBoxItem Content="Größe" Tag="" />
+                                                <ComboBoxItem Content="Klein" Tag="2" />
+                                                <ComboBoxItem Content="Normal" Tag="3" />
+                                                <ComboBoxItem Content="Groß" Tag="4" />
+                                                <ComboBoxItem Content="Sehr groß" Tag="5" />
+
+                                            </ComboBox>
+
+                                            <ComboBox
+                                                Width="105"
+                                                Height="32"
+                                                Margin="0,0,6,0"
+                                                Padding="7,3"
+                                                Tag="foreColor"
+                                                SelectedIndex="0"
+                                                VerticalContentAlignment="Center"
+                                                ToolTip="Textfarbe"
+                                                SelectionChanged="SignatureRichTextCommandComboBox_OnSelectionChanged">
+
+                                                <ComboBoxItem Content="Farbe" Tag="" />
+                                                <ComboBoxItem Content="Schwarz" Tag="#1F2328" />
+                                                <ComboBoxItem Content="Rot" Tag="#CF222E" />
+                                                <ComboBoxItem Content="Blau" Tag="#0969DA" />
+                                                <ComboBoxItem Content="Grün" Tag="#238636" />
+                                                <ComboBoxItem Content="Orange" Tag="#B7791F" />
+                                                <ComboBoxItem Content="Lila" Tag="#8250DF" />
+                                                <ComboBoxItem Content="Grau" Tag="#66707A" />
+
+                                            </ComboBox>
+
+                                        </WrapPanel>
+
+                                    </Border>
+
+                                    <Border
+                                        Height="220"
+                                        Background="{StaticResource Surface.Background}"
+                                        BorderBrush="{StaticResource Border.Default}"
+                                        BorderThickness="1"
+                                        CornerRadius="0,0,6,6">
+
+                                        <Grid>
+
+                                            <controls:ComposeHtmlEditor
+                                                x:Name="SignatureHtmlEditor"
+                                                ContentChanged="SignatureHtmlEditor_OnContentChanged" />
+
+                                            <TextBox
+                                                x:Name="SignatureFallbackTextBox"
+                                                Visibility="Collapsed"
+                                                Padding="10,8"
+                                                AcceptsReturn="True"
+                                                AcceptsTab="True"
+                                                TextWrapping="Wrap"
+                                                VerticalScrollBarVisibility="Auto"
+                                                Background="{StaticResource Surface.Background}"
+                                                Foreground="{StaticResource Text.Primary}"
+                                                BorderThickness="0"
+                                                TextChanged="SignatureFallbackTextBox_OnTextChanged" />
+
+                                        </Grid>
+
+                                    </Border>
+
+                                    <Grid Margin="0,18,0,0">
+
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*" />
+                                            <ColumnDefinition Width="Auto" />
+                                        </Grid.ColumnDefinitions>
+
+                                        <TextBlock
+                                            x:Name="SignatureStatusText"
+                                            Grid.Column="0"
+                                            Margin="0,0,16,0"
+                                            VerticalAlignment="Center"
+                                            FontSize="12"
+                                            Foreground="{StaticResource Text.Secondary}"
+                                            TextWrapping="Wrap" />
+
+                                        <Button
+                                            x:Name="SaveSignatureButton"
+                                            Grid.Column="1"
+                                            Width="120"
+                                            Height="38"
+                                            Content="Speichern"
+                                            Cursor="Hand"
+                                            Style="{StaticResource Button.Primary}"
+                                            Click="SaveSignatureButton_OnClick" />
+
+                                    </Grid>
+
+                                </StackPanel>
 
                             </StackPanel>
 
-                        </StackPanel>
+                        </Border>
 
-                    </Border>
+                    </StackPanel>
 
-                </StackPanel>
+                </ScrollViewer>
 
             </Grid>
 

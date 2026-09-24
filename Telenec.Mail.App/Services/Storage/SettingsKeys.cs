@@ -7,4 +7,7 @@ public static class SettingsKeys
 
     public const string ComposeSignaturePlainText =
         "Compose.Signature.PlainText";
+
+    public const string ComposeSignatureHtml =
+        "Compose.Signature.Html";
 }
