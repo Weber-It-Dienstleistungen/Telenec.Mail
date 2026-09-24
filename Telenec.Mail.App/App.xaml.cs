@@ -221,6 +221,17 @@ public partial class App : Application
                     services.AddTransient<
                         ComposeWindow>();
 
+                    /*
+                     * Das Einstellungsfenster ist transient.
+                     *
+                     * Bei jedem Öffnen entsteht damit eine neue,
+                     * saubere Fensterinstanz. Persistente Werte
+                     * werden später ausschließlich über den
+                     * ISettingsStore geladen und gespeichert.
+                     */
+                    services.AddTransient<
+                        SettingsWindow>();
+
                     services.AddTransient<
                         WhatsNewWindow>();
                 })
