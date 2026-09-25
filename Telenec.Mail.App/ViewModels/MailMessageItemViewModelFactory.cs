@@ -99,6 +99,9 @@ public static class MailMessageItemViewModelFactory
                 message.Keywords,
 
             securityData:
-                message.SecurityData);
+                message.SecurityData,
+
+            smimeVerification:
+                message.SmimeVerification);
     }
 }

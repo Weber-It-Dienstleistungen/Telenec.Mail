@@ -274,11 +274,25 @@ public sealed class ImapMailDataSource : IMailDataSource
                         summary,
                         cancellationToken);
 
-                messages.Add(
+                var messageData =
                     CreateMessageData(
                         summary,
                         bodyContent,
-                        readReceipt));
+                        readReceipt);
+
+                var smimeVerification =
+                    await TryVerifySmimeSignatureAsync(
+                        folder,
+                        summary,
+                        messageData.SecurityData,
+                        cancellationToken);
+
+                messages.Add(
+                    messageData with
+                    {
+                        SmimeVerification =
+                            smimeVerification
+                    });
             }
 
             return messages;
@@ -1363,6 +1377,83 @@ public sealed class ImapMailDataSource : IMailDataSource
                 inlinePartSpecifiers);
     }
 
+    private static async Task<MailSmimeVerificationData>
+        TryVerifySmimeSignatureAsync(
+            IMailFolder folder,
+            IMessageSummary summary,
+            MailSecurityData? securityData,
+            CancellationToken cancellationToken)
+    {
+        if (securityData?.HasSmimeSignature !=
+            true)
+        {
+            return MailSmimeVerificationData
+                .NotChecked;
+        }
+
+        try
+        {
+            /*
+             * Nur bei strukturell als signiert erkannten
+             * Nachrichten wird die vollständige MIME-Nachricht
+             * nachgeladen.
+             *
+             * Normale Nachrichten verursachen dadurch keinen
+             * zusätzlichen IMAP-Abruf.
+             */
+            using var message =
+                await folder.GetMessageAsync(
+                    summary.UniqueId,
+                    cancellationToken);
+
+            var verification =
+                MailSmimeVerificationService
+                    .Verify(
+                        message,
+                        cancellationToken);
+
+            /*
+             * Wenn unsere BodyStructure-Erkennung eindeutig
+             * eine Signatur gesehen hat, der vollständige
+             * MIME-Parser aber keinen prüfbaren Signaturtyp
+             * liefert, ist "nicht geprüft" zu schwach.
+             *
+             * Für die Oberfläche ist das ein technischer
+             * Prüfungsfehler.
+             */
+            if (!verification.WasChecked)
+            {
+                return new MailSmimeVerificationData(
+                    Status:
+                        MailSmimeVerificationStatus.Error,
+
+                    Signers:
+                        Array.Empty<MailSmimeSignerData>());
+            }
+
+            return verification;
+        }
+        catch (OperationCanceledException)
+            when (cancellationToken.IsCancellationRequested)
+        {
+            throw;
+        }
+        catch
+        {
+            /*
+             * Eine fehlgeschlagene S/MIME-Prüfung darf das
+             * Laden der eigentlichen Nachricht nicht
+             * verhindern.
+             */
+            return new MailSmimeVerificationData(
+                Status:
+                    MailSmimeVerificationStatus.Error,
+
+                Signers:
+                    Array.Empty<MailSmimeSignerData>());
+        }
+    }
+
     private static async Task<MailReadReceiptData?>
         TryDetectReadReceiptAsync(
             IMailFolder folder,
@@ -1889,7 +1980,7 @@ public sealed class ImapMailDataSource : IMailDataSource
                     fileName);
 
             return string.IsNullOrWhiteSpace(
-                safeFileName)
+                    safeFileName)
                 ? $"Anhang {attachmentNumber}"
                 : safeFileName;
         }

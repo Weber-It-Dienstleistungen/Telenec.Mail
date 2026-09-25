@@ -30,4 +30,5 @@ public sealed record MailMessageData(
     MailReadReceiptData? ReadReceipt = null,
     IReadOnlyList<MailReadReceiptData>? ReceivedReadReceipts = null,
     IReadOnlyList<string>? Keywords = null,
-    MailSecurityData? SecurityData = null);
+    MailSecurityData? SecurityData = null,
+    MailSmimeVerificationData? SmimeVerification = null);

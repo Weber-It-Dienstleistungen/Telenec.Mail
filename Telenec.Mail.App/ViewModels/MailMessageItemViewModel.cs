@@ -41,7 +41,8 @@ public sealed class MailMessageItemViewModel : BaseViewModel
         MailReadReceiptData? readReceipt = null,
         IReadOnlyList<MailReadReceiptData>? receivedReadReceipts = null,
         IReadOnlyList<string>? keywords = null,
-        MailSecurityData? securityData = null)
+        MailSecurityData? securityData = null,
+        MailSmimeVerificationData? smimeVerification = null)
     {
         Sender =
             sender;
@@ -105,6 +106,11 @@ public sealed class MailMessageItemViewModel : BaseViewModel
             securityData
             ?? CreateLegacySecurityData(
                 hasSmimeSignature);
+
+        SmimeVerification =
+            smimeVerification
+            ?? MailSmimeVerificationData
+                .NotChecked;
 
         MessageId =
             messageId;
@@ -229,17 +235,11 @@ public sealed class MailMessageItemViewModel : BaseViewModel
         Attachments
     { get; }
 
-    /*
-     * Vollständiger struktureller S/MIME-Status.
-     *
-     * Wichtig:
-     * Eine erkannte Signatur ist an dieser Stelle noch nicht
-     * kryptografisch validiert. Wir wissen also, dass eine
-     * S/MIME-Signaturstruktur vorhanden ist, aber noch nicht,
-     * ob die Signatur gültig oder das Zertifikat vertrauenswürdig
-     * ist.
-     */
     public MailSecurityData SecurityData
+    { get; }
+
+    public MailSmimeVerificationData
+        SmimeVerification
     { get; }
 
     public bool HasSmimeSignature =>
@@ -270,13 +270,39 @@ public sealed class MailMessageItemViewModel : BaseViewModel
             SecurityData
                 .SmimeEncryptionFormat;
 
-    /*
-     * Diese beiden Properties bilden die zentrale,
-     * benutzerverständliche Darstellung für die spätere
-     * Security-Leiste.
-     *
-     * Das XAML muss dadurch keine Security-Logik nachbauen.
-     */
+    public MailSmimeVerificationStatus
+        SmimeVerificationStatus =>
+            SmimeVerification.Status;
+
+    public bool HasSmimeVerificationResult =>
+        SmimeVerification.WasChecked;
+
+    public bool IsSmimeSignatureValid =>
+        SmimeVerification.Status ==
+        MailSmimeVerificationStatus.Valid;
+
+    public bool IsSmimeSignatureInvalid =>
+        SmimeVerification.Status ==
+        MailSmimeVerificationStatus
+            .InvalidSignature;
+
+    public bool HasSmimeCertificateProblem =>
+        SmimeVerification.Status ==
+            MailSmimeVerificationStatus
+                .CertificateNotYetValid
+        ||
+        SmimeVerification.Status ==
+            MailSmimeVerificationStatus
+                .CertificateExpired
+        ||
+        SmimeVerification.Status ==
+            MailSmimeVerificationStatus
+                .CertificateValidationFailed;
+
+    public bool HasSmimeVerificationError =>
+        SmimeVerification.Status ==
+        MailSmimeVerificationStatus.Error;
+
     public string SecurityStatusTitle =>
         CreateSecurityStatusTitle();
 
@@ -444,6 +470,38 @@ public sealed class MailMessageItemViewModel : BaseViewModel
 
     private string CreateSecurityStatusTitle()
     {
+        if (HasSmimeSignature &&
+            SmimeVerification.WasChecked)
+        {
+            return SmimeVerification.Status switch
+            {
+                MailSmimeVerificationStatus.Valid =>
+                    "Signatur gültig (S/MIME)",
+
+                MailSmimeVerificationStatus
+                    .InvalidSignature =>
+                    "Signatur ungültig (S/MIME)",
+
+                MailSmimeVerificationStatus
+                    .CertificateExpired =>
+                    "Signatur geprüft · Zertifikat abgelaufen",
+
+                MailSmimeVerificationStatus
+                    .CertificateNotYetValid =>
+                    "Signatur geprüft · Zertifikat noch nicht gültig",
+
+                MailSmimeVerificationStatus
+                    .CertificateValidationFailed =>
+                    "Signatur geprüft · Zertifikat nicht vertrauenswürdig",
+
+                MailSmimeVerificationStatus.Error =>
+                    "S/MIME-Signatur konnte nicht geprüft werden",
+
+                _ =>
+                    "Digital signiert (S/MIME)"
+            };
+        }
+
         if (IsSmimeSignedAndEncrypted)
         {
             return
@@ -473,6 +531,12 @@ public sealed class MailMessageItemViewModel : BaseViewModel
 
     private string CreateSecurityStatusDetail()
     {
+        if (HasSmimeSignature &&
+            SmimeVerification.WasChecked)
+        {
+            return CreateVerifiedSignatureDetail();
+        }
+
         if (IsSmimeSignedAndEncrypted)
         {
             return
@@ -516,6 +580,121 @@ public sealed class MailMessageItemViewModel : BaseViewModel
         return string.Empty;
     }
 
+    private string CreateVerifiedSignatureDetail()
+    {
+        var signerDescription =
+            CreateSignerDescription();
+
+        var verificationText =
+            SmimeVerification.Status switch
+            {
+                MailSmimeVerificationStatus.Valid =>
+                    "Die Signatur ist kryptografisch korrekt und die " +
+                    "Zertifikatskette wurde über Windows erfolgreich validiert.",
+
+                MailSmimeVerificationStatus
+                    .InvalidSignature =>
+                    "Die kryptografische Signaturprüfung ist fehlgeschlagen. " +
+                    "Die Nachricht oder ihre Signatur könnte verändert oder beschädigt sein.",
+
+                MailSmimeVerificationStatus
+                    .CertificateExpired =>
+                    "Die Signatur ist kryptografisch korrekt. " +
+                    "Das verwendete Signaturzertifikat ist jedoch abgelaufen.",
+
+                MailSmimeVerificationStatus
+                    .CertificateNotYetValid =>
+                    "Die Signatur ist kryptografisch korrekt. " +
+                    "Das verwendete Zertifikat ist derzeit noch nicht gültig.",
+
+                MailSmimeVerificationStatus
+                    .CertificateValidationFailed =>
+                    "Die Signatur ist kryptografisch korrekt, aber die " +
+                    "Zertifikatskette konnte auf diesem Windows-System " +
+                    "nicht als vertrauenswürdig bestätigt werden.",
+
+                MailSmimeVerificationStatus.Error =>
+                    "Die S/MIME-Signatur konnte technisch nicht vollständig geprüft werden.",
+
+                _ =>
+                    "Die S/MIME-Signatur wurde noch nicht geprüft."
+            };
+
+        if (string.IsNullOrWhiteSpace(
+                signerDescription))
+        {
+            return verificationText;
+        }
+
+        return
+            verificationText +
+            " Signiert von " +
+            signerDescription +
+            ".";
+    }
+
+    private string CreateSignerDescription()
+    {
+        var signer =
+            SmimeVerification
+                .Signers
+                .FirstOrDefault();
+
+        if (signer is null)
+        {
+            return string.Empty;
+        }
+
+        var name =
+            signer.Name?
+                .Trim()
+            ?? string.Empty;
+
+        var emailAddress =
+            signer.EmailAddress?
+                .Trim()
+            ?? string.Empty;
+
+        /*
+         * Manche S/MIME-Zertifikate verwenden die
+         * E-Mail-Adresse gleichzeitig als Anzeigenamen.
+         *
+         * Statt
+         *
+         * mail@example.de <mail@example.de>
+         *
+         * zeigen wir in diesem Fall nur die Adresse.
+         */
+        if (!string.IsNullOrWhiteSpace(
+                name) &&
+            !string.IsNullOrWhiteSpace(
+                emailAddress) &&
+            string.Equals(
+                name,
+                emailAddress,
+                StringComparison.OrdinalIgnoreCase))
+        {
+            return emailAddress;
+        }
+
+        if (!string.IsNullOrWhiteSpace(
+                name) &&
+            !string.IsNullOrWhiteSpace(
+                emailAddress))
+        {
+            return
+                $"{name} <{emailAddress}>";
+        }
+
+        if (!string.IsNullOrWhiteSpace(
+                emailAddress))
+        {
+            return emailAddress;
+        }
+
+        return name;
+    }
+
     private static MailSecurityData
         CreateLegacySecurityData(
             bool hasSmimeSignature)
@@ -525,13 +704,6 @@ public sealed class MailMessageItemViewModel : BaseViewModel
             return MailSecurityData.None;
         }
 
-        /*
-         * Das historische Flag wurde ausschließlich über
-         * application/pkcs7-signature erkannt.
-         *
-         * Für ältere Datenpfade entspricht das am ehesten
-         * einer detached S/MIME-Signatur.
-         */
         return new MailSecurityData(
             HasSmimeSignature:
                 true,
