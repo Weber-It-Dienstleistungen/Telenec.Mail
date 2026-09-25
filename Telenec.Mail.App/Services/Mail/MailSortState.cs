@@ -59,6 +59,19 @@ public static class MailSortState
         TemporarySort.Value
         ?? Current;
 
+    /*
+     * Der Offline-Cache darf nur sichtbare, reguläre
+     * Benutzerabrufe als Ordner-Snapshot speichern.
+     *
+     * Hintergrunddienste wie der New-Mail-Monitor arbeiten
+     * bewusst mit einem temporären Sortier-Override.
+     *
+     * Dadurch kann die Cache-Schicht diese Abrufe erkennen,
+     * ohne den Monitor selbst kennen zu müssen.
+     */
+    public static bool HasTemporaryOverride =>
+        TemporarySort.Value.HasValue;
+
     public static MailSortDescriptor Toggle(
         MailSortField field)
     {

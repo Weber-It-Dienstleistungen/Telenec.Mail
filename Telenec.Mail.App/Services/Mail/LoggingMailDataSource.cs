@@ -19,6 +19,9 @@ public sealed class LoggingMailDataSource :
     private readonly IMailReadReceiptStore
         _mailReadReceiptStore;
 
+    private readonly IMailMessageCacheStore
+        _mailMessageCacheStore;
+
     private readonly ILogger<LoggingMailDataSource>
         _logger;
 
@@ -26,6 +29,7 @@ public sealed class LoggingMailDataSource :
         ImapMailDataSource inner,
         IMailAccountStore mailAccountStore,
         IMailReadReceiptStore mailReadReceiptStore,
+        AppDataPaths appDataPaths,
         ILogger<LoggingMailDataSource> logger)
     {
         ArgumentNullException.ThrowIfNull(
@@ -38,6 +42,9 @@ public sealed class LoggingMailDataSource :
             mailReadReceiptStore);
 
         ArgumentNullException.ThrowIfNull(
+            appDataPaths);
+
+        ArgumentNullException.ThrowIfNull(
             logger);
 
         _inner =
@@ -48,6 +55,21 @@ public sealed class LoggingMailDataSource :
 
         _mailReadReceiptStore =
             mailReadReceiptStore;
+
+        /*
+         * AppDataPaths ist bereits ein regulär registrierter
+         * Singleton.
+         *
+         * Der Cache-Store selbst besitzt keinen Zustand und
+         * öffnet pro Operation eine eigene SQLite-Verbindung.
+         *
+         * Deshalb kann er hier als dünne lokale Persistenz-
+         * Komponente erstellt werden, ohne zusätzliche
+         * Anwendungsregistrierungen einzuführen.
+         */
+        _mailMessageCacheStore =
+            new SqliteMailMessageCacheStore(
+                appDataPaths);
 
         _logger =
             logger;
@@ -79,9 +101,29 @@ public sealed class LoggingMailDataSource :
             messages,
             cancellationToken);
 
-        return await AttachPersistedReadReceiptsAsync(
-            messages,
-            cancellationToken);
+        var enrichedMessages =
+            await AttachPersistedReadReceiptsAsync(
+                messages,
+                cancellationToken);
+
+        /*
+         * Nur ein regulärer sichtbarer Vollabruf darf den
+         * Offline-Snapshot ersetzen.
+         *
+         * Der New-Mail-Monitor verwendet bewusst einen
+         * temporären Sortierkontext und darf deshalb einen
+         * eventuell größeren sichtbaren Cache nicht auf seine
+         * kleine Hintergrundabfrage reduzieren.
+         */
+        if (!MailSortState.HasTemporaryOverride)
+        {
+            await PersistMailCacheAsync(
+                folderId,
+                enrichedMessages,
+                cancellationToken);
+        }
+
+        return enrichedMessages;
     }
 
     public async Task<IReadOnlyList<MailMessageData>>
@@ -103,6 +145,19 @@ public sealed class LoggingMailDataSource :
             messages,
             cancellationToken);
 
+        /*
+         * Paging wird in 7B bewusst noch nicht separat in den
+         * Cache geschrieben.
+         *
+         * SaveMessagesAsync repräsentiert aktuell einen
+         * vollständigen sichtbaren Snapshot und würde eine
+         * einzelne Folgeseite daher fälschlich als ganzen
+         * Ordner interpretieren.
+         *
+         * Die Erweiterung um echte Cache-Seiten erfolgt
+         * getrennt, nachdem der Grundpfad praktisch bestätigt
+         * wurde.
+         */
         return await AttachPersistedReadReceiptsAsync(
             messages,
             cancellationToken);
@@ -250,6 +305,83 @@ public sealed class LoggingMailDataSource :
 
             cancellationToken:
                 cancellationToken);
+    }
+
+    private async Task PersistMailCacheAsync(
+        string folderId,
+        IReadOnlyList<MailMessageData> messages,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            var account =
+                await _mailAccountStore
+                    .GetActiveAccountAsync(
+                        cancellationToken);
+
+            if (account is null ||
+                account.AccountId == Guid.Empty)
+            {
+                return;
+            }
+
+            /*
+             * UIDVALIDITY wurde unmittelbar vor dem
+             * vollständigen Mailabruf vom leichten
+             * Message-State-Service ermittelt.
+             *
+             * Ist keine solche bestätigte Ordneridentität
+             * vorhanden, wird bewusst NICHT gecacht.
+             *
+             * Wir erfinden niemals eine UIDVALIDITY und
+             * öffnen dafür auch keine zweite IMAP-Verbindung.
+             */
+            if (!MailFolderIdentityState.TryGet(
+                    account.AccountId,
+                    folderId,
+                    out var uidValidity))
+            {
+                return;
+            }
+
+            await _mailMessageCacheStore
+                .SaveMessagesAsync(
+                    account.AccountId,
+                    folderId,
+                    uidValidity,
+                    messages,
+                    cancellationToken);
+
+            _logger.LogInformation(
+                "Offline mail cache snapshot updated successfully. MessageCount={MessageCount}.",
+                messages.Count);
+        }
+        catch (OperationCanceledException)
+            when (cancellationToken.IsCancellationRequested)
+        {
+            throw;
+        }
+        catch (Exception exception)
+        {
+            /*
+             * Der Offline-Cache ist eine Zusatzfunktion.
+             *
+             * Ein lokaler SQLite-/Serialisierungsfehler darf
+             * niemals den erfolgreichen Online-Mailabruf
+             * blockieren.
+             *
+             * Personenbezogene Maildaten werden bewusst nicht
+             * protokolliert.
+             */
+            var exceptionType =
+                exception.GetType().FullName
+                ?? exception.GetType().Name;
+
+            _logger.LogWarning(
+                "Offline mail cache snapshot could not be persisted. MessageCount={MessageCount}, ExceptionType={ExceptionType}.",
+                messages.Count,
+                exceptionType);
+        }
     }
 
     private async Task PersistReadReceiptsAsync(

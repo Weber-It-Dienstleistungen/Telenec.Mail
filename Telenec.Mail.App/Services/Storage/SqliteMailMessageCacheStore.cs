@@ -39,7 +39,7 @@ public sealed class SqliteMailMessageCacheStore :
         Guid accountId,
         string folderId,
         uint uidValidity,
-        IReadOnlyCollection<MailMessageData> messages,
+        IReadOnlyList<MailMessageData> messages,
         CancellationToken cancellationToken = default)
     {
         ValidateAccountId(
@@ -73,33 +73,26 @@ public sealed class SqliteMailMessageCacheStore :
 
         try
         {
-            var previousUidValidity =
-                await GetStoredUidValidityAsync(
-                    connection,
-                    (SqliteTransaction)transaction,
-                    accountId,
-                    normalizedFolderId,
-                    cancellationToken);
-
             /*
-             * IMAP-UIDs sind ausschließlich innerhalb einer
-             * UIDVALIDITY eindeutig.
+             * SaveMessagesAsync repräsentiert bewusst einen
+             * vollständigen sichtbaren Ordner-Snapshot.
              *
-             * Wenn der Server eine neue UIDVALIDITY meldet,
-             * darf deshalb keine einzige Nachricht der alten
-             * Cache-Generation weiterverwendet werden.
+             * Deshalb werden die bisher gespeicherten
+             * Nachrichten dieses Ordners zuerst vollständig
+             * entfernt.
+             *
+             * Dadurch bleiben weder gelöschte noch verschobene
+             * Nachrichten als Cache-Leichen zurück.
+             *
+             * Gleichzeitig kann sich die sichtbare
+             * Sortierreihenfolge vollständig ändern.
              */
-            if (previousUidValidity.HasValue &&
-                previousUidValidity.Value !=
-                    uidValidity)
-            {
-                await DeleteCachedMessagesAsync(
-                    connection,
-                    (SqliteTransaction)transaction,
-                    accountId,
-                    normalizedFolderId,
-                    cancellationToken);
-            }
+            await DeleteCachedMessagesAsync(
+                connection,
+                (SqliteTransaction)transaction,
+                accountId,
+                normalizedFolderId,
+                cancellationToken);
 
             await UpsertFolderStateAsync(
                 connection,
@@ -110,10 +103,16 @@ public sealed class SqliteMailMessageCacheStore :
                 cachedAtUtc,
                 cancellationToken);
 
-            foreach (var message in messages)
+            for (var sortPosition = 0;
+                 sortPosition < messages.Count;
+                 sortPosition++)
             {
                 cancellationToken
                     .ThrowIfCancellationRequested();
+
+                var message =
+                    messages[
+                        sortPosition];
 
                 var serializedMessage =
                     JsonSerializer.Serialize(
@@ -127,6 +126,7 @@ public sealed class SqliteMailMessageCacheStore :
                     normalizedFolderId,
                     uidValidity,
                     message.UniqueId,
+                    sortPosition,
                     serializedMessage,
                     cachedAtUtc,
                     cancellationToken);
@@ -176,14 +176,16 @@ public sealed class SqliteMailMessageCacheStore :
          * Der JOIN auf die aktuell gespeicherte UIDVALIDITY
          * ist absichtlich Bestandteil der Abfrage.
          *
-         * Selbst wenn durch einen früheren Programmabbruch
-         * theoretisch noch eine alte Nachrichtengeneration
-         * vorhanden wäre, wird sie dadurch niemals
-         * ausgeliefert.
+         * Alte Nachrichtengenerationen dürfen niemals
+         * ausgeliefert werden.
          *
-         * UIDs steigen innerhalb einer UIDVALIDITY monoton.
-         * DESC entspricht deshalb der üblichen Darstellung
-         * "neueste Nachricht zuerst".
+         * Die Reihenfolge stammt ausdrücklich aus
+         * SortPosition und damit aus dem letzten erfolgreichen
+         * sichtbaren Online-Abruf.
+         *
+         * Dadurch funktioniert der Cache unabhängig davon,
+         * ob der Benutzer nach Datum, Absender oder Betreff
+         * sortiert hatte.
          */
         command.CommandText =
             """
@@ -201,8 +203,9 @@ public sealed class SqliteMailMessageCacheStore :
               AND message.FolderId = $folderId
               AND message.CacheFormatVersion =
                     $cacheFormatVersion
+              AND message.SortPosition IS NOT NULL
             ORDER BY
-                message.UniqueId DESC
+                message.SortPosition ASC
             LIMIT $maximumMessageCount
             OFFSET $skipMessageCount;
             """;
@@ -410,63 +413,6 @@ public sealed class SqliteMailMessageCacheStore :
             cancellationToken);
     }
 
-    private static async Task<uint?>
-        GetStoredUidValidityAsync(
-            SqliteConnection connection,
-            SqliteTransaction transaction,
-            Guid accountId,
-            string folderId,
-            CancellationToken cancellationToken)
-    {
-        await using var command =
-            connection.CreateCommand();
-
-        command.Transaction =
-            transaction;
-
-        command.CommandText =
-            """
-            SELECT UidValidity
-            FROM CachedMailFolders
-            WHERE AccountId = $accountId
-              AND FolderId = $folderId
-            LIMIT 1;
-            """;
-
-        command.Parameters.AddWithValue(
-            "$accountId",
-            accountId.ToString("D"));
-
-        command.Parameters.AddWithValue(
-            "$folderId",
-            folderId);
-
-        var result =
-            await command.ExecuteScalarAsync(
-                cancellationToken);
-
-        if (result is null ||
-            result == DBNull.Value)
-        {
-            return null;
-        }
-
-        var storedValue =
-            Convert.ToInt64(
-                result,
-                CultureInfo.InvariantCulture);
-
-        if (storedValue <= 0 ||
-            storedValue >
-                uint.MaxValue)
-        {
-            throw new InvalidDataException(
-                "Die lokal gespeicherte UIDVALIDITY ist ungültig.");
-        }
-
-        return (uint)storedValue;
-    }
-
     private static async Task
         DeleteCachedMessagesAsync(
             SqliteConnection connection,
@@ -575,6 +521,7 @@ public sealed class SqliteMailMessageCacheStore :
             string folderId,
             uint uidValidity,
             uint uniqueId,
+            int sortPosition,
             string serializedMessage,
             DateTimeOffset cachedAtUtc,
             CancellationToken cancellationToken)
@@ -595,7 +542,8 @@ public sealed class SqliteMailMessageCacheStore :
                 UniqueId,
                 CacheFormatVersion,
                 MessageJson,
-                CachedAtUtc
+                CachedAtUtc,
+                SortPosition
             )
             VALUES
             (
@@ -605,7 +553,8 @@ public sealed class SqliteMailMessageCacheStore :
                 $uniqueId,
                 $cacheFormatVersion,
                 $messageJson,
-                $cachedAtUtc
+                $cachedAtUtc,
+                $sortPosition
             )
             ON CONFLICT
             (
@@ -624,7 +573,10 @@ public sealed class SqliteMailMessageCacheStore :
                     excluded.MessageJson,
 
                 CachedAtUtc =
-                    excluded.CachedAtUtc;
+                    excluded.CachedAtUtc,
+
+                SortPosition =
+                    excluded.SortPosition;
             """;
 
         command.Parameters.AddWithValue(
@@ -656,6 +608,10 @@ public sealed class SqliteMailMessageCacheStore :
             cachedAtUtc.ToString(
                 "O",
                 CultureInfo.InvariantCulture));
+
+        command.Parameters.AddWithValue(
+            "$sortPosition",
+            sortPosition);
 
         await command.ExecuteNonQueryAsync(
             cancellationToken);
@@ -689,7 +645,7 @@ public sealed class SqliteMailMessageCacheStore :
     }
 
     private static void ValidateMessages(
-        IReadOnlyCollection<MailMessageData> messages)
+        IReadOnlyList<MailMessageData> messages)
     {
         var knownUniqueIds =
             new HashSet<uint>();

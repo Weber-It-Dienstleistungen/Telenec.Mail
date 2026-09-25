@@ -5,7 +5,7 @@ namespace Telenec.Mail.App.Services.Storage;
 
 public sealed class DatabaseInitializer
 {
-    private const int CurrentSchemaVersion = 5;
+    private const int CurrentSchemaVersion = 6;
 
     private readonly AppDataPaths _paths;
 
@@ -105,6 +105,16 @@ public sealed class DatabaseInitializer
 
             schemaVersion =
                 5;
+        }
+
+        if (schemaVersion == 5)
+        {
+            await UpgradeToSchemaVersion6Async(
+                connection,
+                cancellationToken);
+
+            schemaVersion =
+                6;
         }
 
         if (schemaVersion !=
@@ -427,6 +437,64 @@ public sealed class DatabaseInitializer
                 );
 
             PRAGMA user_version = 5;
+            """;
+
+        await command.ExecuteNonQueryAsync(
+            cancellationToken);
+
+        await transaction.CommitAsync(
+            cancellationToken);
+    }
+
+    private static async Task UpgradeToSchemaVersion6Async(
+        SqliteConnection connection,
+        CancellationToken cancellationToken)
+    {
+        await using var transaction =
+            await connection.BeginTransactionAsync(
+                cancellationToken);
+
+        await using var command =
+            connection.CreateCommand();
+
+        command.Transaction =
+            (SqliteTransaction)transaction;
+
+        /*
+         * SortPosition speichert bewusst nicht eine selbst
+         * berechnete Sortierung.
+         *
+         * Gespeichert wird exakt die Reihenfolge, in der der
+         * produktive Online-Abruf die Nachrichten geliefert
+         * hat.
+         *
+         * Dadurch bleibt auch eine Sortierung nach Absender
+         * oder Betreff offline exakt erhalten.
+         *
+         * Die Spalte ist für vorhandene v5-Zeilen zunächst
+         * nullable. Solche alten Cache-Zeilen werden vom
+         * Store nicht verwendet und beim nächsten erfolgreichen
+         * Online-Snapshot ersetzt.
+         */
+        command.CommandText =
+            """
+            ALTER TABLE CachedMailMessages
+                ADD COLUMN SortPosition INTEGER NULL
+                    CHECK
+                    (
+                        SortPosition IS NULL
+                        OR SortPosition >= 0
+                    );
+
+            CREATE INDEX IX_CachedMailMessages_SortPosition
+                ON CachedMailMessages
+                (
+                    AccountId,
+                    FolderId,
+                    SortPosition
+                );
+
+            PRAGMA user_version = 6;
             """;
 
         await command.ExecuteNonQueryAsync(

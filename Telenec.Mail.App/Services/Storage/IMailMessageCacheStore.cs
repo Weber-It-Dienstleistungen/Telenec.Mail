@@ -8,7 +8,7 @@ public interface IMailMessageCacheStore
         Guid accountId,
         string folderId,
         uint uidValidity,
-        IReadOnlyCollection<MailMessageData> messages,
+        IReadOnlyList<MailMessageData> messages,
         CancellationToken cancellationToken = default);
 
     Task<IReadOnlyList<MailMessageData>>

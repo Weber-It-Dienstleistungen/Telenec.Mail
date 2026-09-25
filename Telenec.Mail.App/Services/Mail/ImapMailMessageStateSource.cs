@@ -62,8 +62,20 @@ public sealed class ImapMailMessageStateSource
                     Array.Empty<MailMessageStateData>());
         }
 
+        var account =
+            await _mailAccountStore
+                .GetActiveAccountAsync(
+                    cancellationToken);
+
+        if (account is null)
+        {
+            throw new InvalidOperationException(
+                "Es ist kein aktives Mailkonto eingerichtet.");
+        }
+
         using var client =
             await CreateAuthenticatedClientAsync(
+                account,
                 cancellationToken);
 
         try
@@ -79,6 +91,21 @@ public sealed class ImapMailMessageStateSource
 
             var uidValidity =
                 folder.UidValidity;
+
+            /*
+             * Die Ordneridentität wird ausschließlich aus
+             * einem erfolgreich geöffneten IMAP-Ordner
+             * übernommen.
+             *
+             * Dadurch kann die nachgeschaltete Cache-Schicht
+             * dieselbe bereits geprüfte UIDVALIDITY verwenden,
+             * ohne hierfür eine zweite IMAP-Verbindung öffnen
+             * zu müssen.
+             */
+            MailFolderIdentityState.Set(
+                account.AccountId,
+                folder.FullName,
+                uidValidity);
 
             if (folder.Count == 0)
             {
@@ -240,18 +267,11 @@ public sealed class ImapMailMessageStateSource
 
     private async Task<ImapClient>
         CreateAuthenticatedClientAsync(
+            MailAccount account,
             CancellationToken cancellationToken)
     {
-        var account =
-            await _mailAccountStore
-                .GetActiveAccountAsync(
-                    cancellationToken);
-
-        if (account is null)
-        {
-            throw new InvalidOperationException(
-                "Es ist kein aktives Mailkonto eingerichtet.");
-        }
+        ArgumentNullException.ThrowIfNull(
+            account);
 
         var credential =
             await _credentialStore
