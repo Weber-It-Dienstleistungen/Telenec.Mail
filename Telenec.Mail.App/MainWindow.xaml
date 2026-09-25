@@ -751,15 +751,27 @@
 
                     </Button>
 
+                    <!--
+                        Security-Leiste.
+
+                        Strukturell erkannte S/MIME-Signaturen und
+                        Verschlüsselung sind zunächst ein informativer
+                        Zustand und ausdrücklich kein Fehler.
+
+                        Nur nicht eindeutig klassifizierbarer S/MIME-
+                        Inhalt erhält einen Warnakzent.
+                    -->
+
                     <Border
                         Grid.Row="1"
                         Grid.Column="0"
                         Grid.ColumnSpan="2"
                         Margin="0,14,0,0"
-                        Padding="12,7"
-                        HorizontalAlignment="Left"
-                        CornerRadius="5"
-                        Background="{StaticResource Status.Error}">
+                        Padding="12,10"
+                        CornerRadius="6"
+                        BorderBrush="{StaticResource Brand.Primary}"
+                        BorderThickness="1"
+                        Background="{StaticResource Brand.PrimaryLight}">
 
                         <Border.Style>
 
@@ -769,15 +781,29 @@
                                     Property="Visibility"
                                     Value="Collapsed" />
 
+                                <Setter
+                                    Property="BorderBrush"
+                                    Value="{StaticResource Brand.Primary}" />
+
                                 <Style.Triggers>
 
                                     <DataTrigger
-                                        Binding="{Binding SelectedMessage.HasSmimeSignature}"
+                                        Binding="{Binding SelectedMessage.HasAnySmimeContent}"
                                         Value="True">
 
                                         <Setter
                                             Property="Visibility"
                                             Value="Visible" />
+
+                                    </DataTrigger>
+
+                                    <DataTrigger
+                                        Binding="{Binding SelectedMessage.HasUnclassifiedSmimeContent}"
+                                        Value="True">
+
+                                        <Setter
+                                            Property="BorderBrush"
+                                            Value="{StaticResource Status.Warning}" />
 
                                     </DataTrigger>
 
@@ -787,25 +813,80 @@
 
                         </Border.Style>
 
-                        <StackPanel
-                            Orientation="Horizontal">
+                        <Grid>
 
-                            <TextBlock
-                                Text="&#xE72E;"
-                                Margin="0,0,8,0"
-                                FontFamily="Segoe MDL2 Assets"
-                                FontSize="15"
-                                Foreground="White"
-                                VerticalAlignment="Center" />
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto" />
+                                <ColumnDefinition Width="*" />
+                            </Grid.ColumnDefinitions>
 
-                            <TextBlock
-                                Text="Digital signiert (S/MIME) · Signatur noch nicht geprüft"
-                                FontSize="11"
-                                FontWeight="SemiBold"
-                                Foreground="White"
-                                VerticalAlignment="Center" />
+                            <Border
+                                Grid.Column="0"
+                                Width="32"
+                                Height="32"
+                                Margin="0,0,11,0"
+                                CornerRadius="16"
+                                Background="{StaticResource Surface.Card}"
+                                VerticalAlignment="Top">
 
-                        </StackPanel>
+                                <TextBlock
+                                    Text="&#xE72E;"
+                                    FontFamily="Segoe MDL2 Assets"
+                                    FontSize="16"
+                                    HorizontalAlignment="Center"
+                                    VerticalAlignment="Center">
+
+                                    <TextBlock.Style>
+
+                                        <Style TargetType="TextBlock">
+
+                                            <Setter
+                                                Property="Foreground"
+                                                Value="{StaticResource Brand.Primary}" />
+
+                                            <Style.Triggers>
+
+                                                <DataTrigger
+                                                    Binding="{Binding SelectedMessage.HasUnclassifiedSmimeContent}"
+                                                    Value="True">
+
+                                                    <Setter
+                                                        Property="Foreground"
+                                                        Value="{StaticResource Status.Warning}" />
+
+                                                </DataTrigger>
+
+                                            </Style.Triggers>
+
+                                        </Style>
+
+                                    </TextBlock.Style>
+
+                                </TextBlock>
+
+                            </Border>
+
+                            <StackPanel
+                                Grid.Column="1"
+                                VerticalAlignment="Center">
+
+                                <TextBlock
+                                    Text="{Binding SelectedMessage.SecurityStatusTitle}"
+                                    FontSize="12"
+                                    FontWeight="SemiBold"
+                                    Foreground="{StaticResource Text.Primary}"
+                                    TextWrapping="Wrap" />
+
+                                <TextBlock
+                                    Margin="0,3,0,0"
+                                    Text="{Binding SelectedMessage.SecurityStatusDetail}"
+                                    FontSize="11"
+                                    Foreground="{StaticResource Text.Secondary}"
+                                    TextWrapping="Wrap" />
+
+                            </StackPanel>
+
+                        </Grid>
 
                     </Border>
 

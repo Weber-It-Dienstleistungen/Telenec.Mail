@@ -101,17 +101,6 @@ public sealed class MailMessageItemViewModel : BaseViewModel
             attachments
             ?? Array.Empty<MailAttachmentData>();
 
-        /*
-         * Übergangskompatibilität:
-         *
-         * Bis der neue Security-Detector im nächsten
-         * Minischritt direkt an die IMAP-BodyStructure
-         * angeschlossen ist, können ältere Aufrufer weiterhin
-         * ausschließlich das bisherige bool-Flag liefern.
-         *
-         * Sobald SecurityData vorhanden ist, ist ausschließlich
-         * dieses reichere Modell maßgeblich.
-         */
         SecurityData =
             securityData
             ?? CreateLegacySecurityData(
@@ -241,19 +230,18 @@ public sealed class MailMessageItemViewModel : BaseViewModel
     { get; }
 
     /*
-     * Der vollständige strukturelle Security-Status.
+     * Vollständiger struktureller S/MIME-Status.
      *
-     * Eine kryptografische Validierung der Signatur ist hier
-     * ausdrücklich noch NICHT enthalten. Das folgt in einem
-     * späteren Security-Schritt.
+     * Wichtig:
+     * Eine erkannte Signatur ist an dieser Stelle noch nicht
+     * kryptografisch validiert. Wir wissen also, dass eine
+     * S/MIME-Signaturstruktur vorhanden ist, aber noch nicht,
+     * ob die Signatur gültig oder das Zertifikat vertrauenswürdig
+     * ist.
      */
     public MailSecurityData SecurityData
     { get; }
 
-    /*
-     * Bestehende Bindings und Drucklogik können dieses
-     * Property unverändert weiterverwenden.
-     */
     public bool HasSmimeSignature =>
         SecurityData.HasSmimeSignature;
 
@@ -281,6 +269,19 @@ public sealed class MailMessageItemViewModel : BaseViewModel
         SmimeEncryptionFormat =>
             SecurityData
                 .SmimeEncryptionFormat;
+
+    /*
+     * Diese beiden Properties bilden die zentrale,
+     * benutzerverständliche Darstellung für die spätere
+     * Security-Leiste.
+     *
+     * Das XAML muss dadurch keine Security-Logik nachbauen.
+     */
+    public string SecurityStatusTitle =>
+        CreateSecurityStatusTitle();
+
+    public string SecurityStatusDetail =>
+        CreateSecurityStatusDetail();
 
     public string? MessageId { get; }
 
@@ -441,6 +442,80 @@ public sealed class MailMessageItemViewModel : BaseViewModel
             nameof(AssignedCategories));
     }
 
+    private string CreateSecurityStatusTitle()
+    {
+        if (IsSmimeSignedAndEncrypted)
+        {
+            return
+                "Signiert und verschlüsselt (S/MIME)";
+        }
+
+        if (HasSmimeEncryption)
+        {
+            return
+                "Verschlüsselt (S/MIME)";
+        }
+
+        if (HasSmimeSignature)
+        {
+            return
+                "Digital signiert (S/MIME)";
+        }
+
+        if (HasUnclassifiedSmimeContent)
+        {
+            return
+                "S/MIME-Inhalt erkannt";
+        }
+
+        return string.Empty;
+    }
+
+    private string CreateSecurityStatusDetail()
+    {
+        if (IsSmimeSignedAndEncrypted)
+        {
+            return
+                "Die MIME-Struktur enthält Merkmale einer " +
+                "S/MIME-Signatur und einer S/MIME-Verschlüsselung. " +
+                "Die Signatur wurde noch nicht kryptografisch geprüft.";
+        }
+
+        if (HasSmimeEncryption)
+        {
+            return
+                "Die Nachricht wurde als S/MIME-verschlüsselter Inhalt erkannt. " +
+                "Eine Entschlüsselung ist in diesem Entwicklungsschritt noch nicht verfügbar.";
+        }
+
+        if (HasSmimeSignature)
+        {
+            return SmimeSignatureFormat switch
+            {
+                MailSmimeSignatureFormat.Detached =>
+                    "Eine S/MIME-Signatur wurde erkannt. " +
+                    "Gültigkeit und Zertifikat wurden noch nicht geprüft.",
+
+                MailSmimeSignatureFormat.Opaque =>
+                    "Eine eingebettete S/MIME-Signatur wurde erkannt. " +
+                    "Gültigkeit und Zertifikat wurden noch nicht geprüft.",
+
+                _ =>
+                    "Eine S/MIME-Signatur wurde erkannt. " +
+                    "Gültigkeit und Zertifikat wurden noch nicht geprüft."
+            };
+        }
+
+        if (HasUnclassifiedSmimeContent)
+        {
+            return
+                "Ein S/MIME-Inhalt wurde erkannt, sein Typ konnte anhand der " +
+                "MIME-Struktur jedoch nicht eindeutig bestimmt werden.";
+        }
+
+        return string.Empty;
+    }
+
     private static MailSecurityData
         CreateLegacySecurityData(
             bool hasSmimeSignature)
@@ -451,11 +526,11 @@ public sealed class MailMessageItemViewModel : BaseViewModel
         }
 
         /*
-         * Das bisherige Flag wurde ausschließlich über einen
-         * application/pkcs7-signature-Part gesetzt.
+         * Das historische Flag wurde ausschließlich über
+         * application/pkcs7-signature erkannt.
          *
-         * Für die kurze Übergangsphase entspricht das am
-         * ehesten einer detached S/MIME-Signatur.
+         * Für ältere Datenpfade entspricht das am ehesten
+         * einer detached S/MIME-Signatur.
          */
         return new MailSecurityData(
             HasSmimeSignature:
