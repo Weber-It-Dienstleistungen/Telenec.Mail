@@ -40,7 +40,8 @@ public sealed class MailMessageItemViewModel : BaseViewModel
         MailImportanceLevel importance = MailImportanceLevel.Normal,
         MailReadReceiptData? readReceipt = null,
         IReadOnlyList<MailReadReceiptData>? receivedReadReceipts = null,
-        IReadOnlyList<string>? keywords = null)
+        IReadOnlyList<string>? keywords = null,
+        MailSecurityData? securityData = null)
     {
         Sender =
             sender;
@@ -100,8 +101,21 @@ public sealed class MailMessageItemViewModel : BaseViewModel
             attachments
             ?? Array.Empty<MailAttachmentData>();
 
-        HasSmimeSignature =
-            hasSmimeSignature;
+        /*
+         * Übergangskompatibilität:
+         *
+         * Bis der neue Security-Detector im nächsten
+         * Minischritt direkt an die IMAP-BodyStructure
+         * angeschlossen ist, können ältere Aufrufer weiterhin
+         * ausschließlich das bisherige bool-Flag liefern.
+         *
+         * Sobald SecurityData vorhanden ist, ist ausschließlich
+         * dieses reichere Modell maßgeblich.
+         */
+        SecurityData =
+            securityData
+            ?? CreateLegacySecurityData(
+                hasSmimeSignature);
 
         MessageId =
             messageId;
@@ -226,7 +240,47 @@ public sealed class MailMessageItemViewModel : BaseViewModel
         Attachments
     { get; }
 
-    public bool HasSmimeSignature { get; }
+    /*
+     * Der vollständige strukturelle Security-Status.
+     *
+     * Eine kryptografische Validierung der Signatur ist hier
+     * ausdrücklich noch NICHT enthalten. Das folgt in einem
+     * späteren Security-Schritt.
+     */
+    public MailSecurityData SecurityData
+    { get; }
+
+    /*
+     * Bestehende Bindings und Drucklogik können dieses
+     * Property unverändert weiterverwenden.
+     */
+    public bool HasSmimeSignature =>
+        SecurityData.HasSmimeSignature;
+
+    public bool HasSmimeEncryption =>
+        SecurityData.HasSmimeEncryption;
+
+    public bool HasUnclassifiedSmimeContent =>
+        SecurityData.HasUnclassifiedSmimeContent;
+
+    public bool HasAnySmimeContent =>
+        SecurityData.HasAnySmimeContent;
+
+    public bool HasSmimeProtection =>
+        SecurityData.HasSmimeProtection;
+
+    public bool IsSmimeSignedAndEncrypted =>
+        SecurityData.IsSignedAndEncrypted;
+
+    public MailSmimeSignatureFormat
+        SmimeSignatureFormat =>
+            SecurityData
+                .SmimeSignatureFormat;
+
+    public MailSmimeEncryptionFormat
+        SmimeEncryptionFormat =>
+            SecurityData
+                .SmimeEncryptionFormat;
 
     public string? MessageId { get; }
 
@@ -385,6 +439,39 @@ public sealed class MailMessageItemViewModel : BaseViewModel
 
         OnPropertyChanged(
             nameof(AssignedCategories));
+    }
+
+    private static MailSecurityData
+        CreateLegacySecurityData(
+            bool hasSmimeSignature)
+    {
+        if (!hasSmimeSignature)
+        {
+            return MailSecurityData.None;
+        }
+
+        /*
+         * Das bisherige Flag wurde ausschließlich über einen
+         * application/pkcs7-signature-Part gesetzt.
+         *
+         * Für die kurze Übergangsphase entspricht das am
+         * ehesten einer detached S/MIME-Signatur.
+         */
+        return new MailSecurityData(
+            HasSmimeSignature:
+                true,
+
+            HasSmimeEncryption:
+                false,
+
+            HasUnclassifiedSmimeContent:
+                false,
+
+            SmimeSignatureFormat:
+                MailSmimeSignatureFormat.Detached,
+
+            SmimeEncryptionFormat:
+                MailSmimeEncryptionFormat.None);
     }
 
     private static IReadOnlyList<string>

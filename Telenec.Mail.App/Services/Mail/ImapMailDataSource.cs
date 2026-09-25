@@ -1562,9 +1562,17 @@ public sealed class ImapMailDataSource : IMailDataSource
                 .Trim()
                 .FirstOrDefault();
 
-        var hasSmimeSignature =
-            HasSmimeSignature(
-                summary);
+        /*
+         * Die IMAP-BodyStructure ist bereits Bestandteil des
+         * normalen Nachrichtenabrufs.
+         *
+         * Dadurch verursacht die S/MIME-Klassifikation
+         * keinerlei zusätzlichen Netzwerkzugriff.
+         */
+        var securityData =
+            MailSecurityDetectionService
+                .Detect(
+                    summary.Body);
 
         var attachments =
             CreateAttachmentData(
@@ -1674,8 +1682,14 @@ public sealed class ImapMailDataSource : IMailDataSource
             Attachments:
                 attachments,
 
+            /*
+             * Das alte bool-Flag bleibt für bestehende
+             * Datenpfade kompatibel.
+             *
+             * Maßgeblich ist ab jetzt aber SecurityData.
+             */
             HasSmimeSignature:
-                hasSmimeSignature,
+                securityData.HasSmimeSignature,
 
             MessageId:
                 messageId,
@@ -1699,7 +1713,10 @@ public sealed class ImapMailDataSource : IMailDataSource
                 readReceipt,
 
             Keywords:
-                keywords);
+                keywords,
+
+            SecurityData:
+                securityData);
     }
 
     private static IReadOnlyList<string>
@@ -1726,15 +1743,6 @@ public sealed class ImapMailDataSource : IMailDataSource
             .Distinct(
                 StringComparer.OrdinalIgnoreCase)
             .ToArray();
-    }
-
-    private static bool HasSmimeSignature(
-        IMessageSummary summary)
-    {
-        return summary
-            .Attachments
-            .Any(
-                IsSmimeSignaturePart);
     }
 
     private static IReadOnlyList<MailAttachmentData>
@@ -1881,7 +1889,7 @@ public sealed class ImapMailDataSource : IMailDataSource
                     fileName);
 
             return string.IsNullOrWhiteSpace(
-                    safeFileName)
+                safeFileName)
                 ? $"Anhang {attachmentNumber}"
                 : safeFileName;
         }

@@ -96,6 +96,9 @@ public static class MailMessageItemViewModelFactory
                 message.ReceivedReadReceipts,
 
             keywords:
-                message.Keywords);
+                message.Keywords,
+
+            securityData:
+                message.SecurityData);
     }
 }
