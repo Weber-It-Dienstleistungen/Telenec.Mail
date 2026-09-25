@@ -22,6 +22,9 @@ public sealed class LoggingMailDataSource :
     private readonly IMailMessageCacheStore
         _mailMessageCacheStore;
 
+    private readonly IMailFolderCacheStore
+        _mailFolderCacheStore;
+
     private readonly ILogger<LoggingMailDataSource>
         _logger;
 
@@ -56,32 +59,32 @@ public sealed class LoggingMailDataSource :
         _mailReadReceiptStore =
             mailReadReceiptStore;
 
-        /*
-         * AppDataPaths ist bereits ein regulär registrierter
-         * Singleton.
-         *
-         * Der Cache-Store selbst besitzt keinen Zustand und
-         * öffnet pro Operation eine eigene SQLite-Verbindung.
-         *
-         * Deshalb kann er hier als dünne lokale Persistenz-
-         * Komponente erstellt werden, ohne zusätzliche
-         * Anwendungsregistrierungen einzuführen.
-         */
         _mailMessageCacheStore =
             new SqliteMailMessageCacheStore(
+                appDataPaths);
+
+        _mailFolderCacheStore =
+            new SqliteMailFolderCacheStore(
                 appDataPaths);
 
         _logger =
             logger;
     }
 
-    public Task<IReadOnlyList<MailFolderData>>
+    public async Task<IReadOnlyList<MailFolderData>>
         GetFoldersAsync(
             CancellationToken cancellationToken = default)
     {
-        return _inner
-            .GetFoldersAsync(
-                cancellationToken);
+        var folders =
+            await _inner
+                .GetFoldersAsync(
+                    cancellationToken);
+
+        await PersistFolderCacheAsync(
+            folders,
+            cancellationToken);
+
+        return folders;
     }
 
     public async Task<IReadOnlyList<MailMessageData>>
@@ -106,15 +109,6 @@ public sealed class LoggingMailDataSource :
                 messages,
                 cancellationToken);
 
-        /*
-         * Nur ein regulärer sichtbarer Vollabruf darf den
-         * Offline-Snapshot ersetzen.
-         *
-         * Der New-Mail-Monitor verwendet bewusst einen
-         * temporären Sortierkontext und darf deshalb einen
-         * eventuell größeren sichtbaren Cache nicht auf seine
-         * kleine Hintergrundabfrage reduzieren.
-         */
         if (!MailSortState.HasTemporaryOverride)
         {
             await PersistMailCacheAsync(
@@ -145,19 +139,6 @@ public sealed class LoggingMailDataSource :
             messages,
             cancellationToken);
 
-        /*
-         * Paging wird in 7B bewusst noch nicht separat in den
-         * Cache geschrieben.
-         *
-         * SaveMessagesAsync repräsentiert aktuell einen
-         * vollständigen sichtbaren Snapshot und würde eine
-         * einzelne Folgeseite daher fälschlich als ganzen
-         * Ordner interpretieren.
-         *
-         * Die Erweiterung um echte Cache-Seiten erfolgt
-         * getrennt, nachdem der Grundpfad praktisch bestätigt
-         * wurde.
-         */
         return await AttachPersistedReadReceiptsAsync(
             messages,
             cancellationToken);
@@ -307,6 +288,57 @@ public sealed class LoggingMailDataSource :
                 cancellationToken);
     }
 
+    private async Task PersistFolderCacheAsync(
+        IReadOnlyList<MailFolderData> folders,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            var account =
+                await _mailAccountStore
+                    .GetActiveAccountAsync(
+                        cancellationToken);
+
+            if (account is null ||
+                account.AccountId == Guid.Empty)
+            {
+                return;
+            }
+
+            await _mailFolderCacheStore
+                .SaveFoldersAsync(
+                    account.AccountId,
+                    folders,
+                    cancellationToken);
+
+            _logger.LogInformation(
+                "Offline mail folder cache snapshot updated successfully. FolderCount={FolderCount}.",
+                folders.Count);
+        }
+        catch (OperationCanceledException)
+            when (cancellationToken.IsCancellationRequested)
+        {
+            throw;
+        }
+        catch (Exception exception)
+        {
+            var exceptionType =
+                exception.GetType().FullName
+                ?? exception.GetType().Name;
+
+            /*
+             * Ein lokaler Cache-Fehler darf den erfolgreichen
+             * Online-Abruf der Ordner niemals blockieren.
+             *
+             * Ordnernamen werden bewusst nicht protokolliert.
+             */
+            _logger.LogWarning(
+                "Offline mail folder cache snapshot could not be persisted. FolderCount={FolderCount}, ExceptionType={ExceptionType}.",
+                folders.Count,
+                exceptionType);
+        }
+    }
+
     private async Task PersistMailCacheAsync(
         string folderId,
         IReadOnlyList<MailMessageData> messages,
@@ -325,17 +357,6 @@ public sealed class LoggingMailDataSource :
                 return;
             }
 
-            /*
-             * UIDVALIDITY wurde unmittelbar vor dem
-             * vollständigen Mailabruf vom leichten
-             * Message-State-Service ermittelt.
-             *
-             * Ist keine solche bestätigte Ordneridentität
-             * vorhanden, wird bewusst NICHT gecacht.
-             *
-             * Wir erfinden niemals eine UIDVALIDITY und
-             * öffnen dafür auch keine zweite IMAP-Verbindung.
-             */
             if (!MailFolderIdentityState.TryGet(
                     account.AccountId,
                     folderId,
@@ -363,16 +384,6 @@ public sealed class LoggingMailDataSource :
         }
         catch (Exception exception)
         {
-            /*
-             * Der Offline-Cache ist eine Zusatzfunktion.
-             *
-             * Ein lokaler SQLite-/Serialisierungsfehler darf
-             * niemals den erfolgreichen Online-Mailabruf
-             * blockieren.
-             *
-             * Personenbezogene Maildaten werden bewusst nicht
-             * protokolliert.
-             */
             var exceptionType =
                 exception.GetType().FullName
                 ?? exception.GetType().Name;
@@ -444,19 +455,6 @@ public sealed class LoggingMailDataSource :
                 }
                 catch (Exception exception)
                 {
-                    /*
-                     * Die Persistenz einer Lesebestätigung ist
-                     * eine Zusatzfunktion.
-                     *
-                     * Ein lokaler SQLite-Fehler darf niemals
-                     * verhindern, dass der Benutzer seine
-                     * Nachrichten weiterhin laden und lesen
-                     * kann.
-                     *
-                     * Personenbezogene Daten wie Mailadresse,
-                     * Message-ID oder Betreff werden bewusst
-                     * nicht protokolliert.
-                     */
                     var exceptionType =
                         exception.GetType().FullName
                         ?? exception.GetType().Name;
@@ -474,11 +472,6 @@ public sealed class LoggingMailDataSource :
         }
         catch (Exception exception)
         {
-            /*
-             * Auch ein Fehler beim Ermitteln des aktiven
-             * Accounts darf den normalen Mailabruf nicht
-             * beeinträchtigen.
-             */
             var exceptionType =
                 exception.GetType().FullName
                 ?? exception.GetType().Name;
@@ -599,16 +592,6 @@ public sealed class LoggingMailDataSource :
         }
         catch (Exception exception)
         {
-            /*
-             * Das Anreichern mit lokal gespeicherten
-             * Lesebestätigungen ist eine Zusatzfunktion.
-             *
-             * Ein Fehler in SQLite darf den normalen
-             * Mailabruf nicht verhindern.
-             *
-             * Auch hier werden bewusst weder Message-IDs noch
-             * Mailadressen oder Betreffzeilen protokolliert.
-             */
             var exceptionType =
                 exception.GetType().FullName
                 ?? exception.GetType().Name;
@@ -654,14 +637,6 @@ public sealed class LoggingMailDataSource :
     private static bool CanPersistReadReceipt(
         MailReadReceiptData readReceipt)
     {
-        /*
-         * Der SQLite-Store ist bewusst streng.
-         *
-         * Eine Lesebestätigung ohne sichere Zuordnung zur
-         * ursprünglichen Nachricht wird zwar weiterhin als
-         * empfangene Nachricht angezeigt, aber nicht als
-         * dauerhafter Status einer gesendeten Mail gespeichert.
-         */
         return
             !string.IsNullOrWhiteSpace(
                 readReceipt.OriginalMessageId) &&
@@ -730,18 +705,6 @@ public sealed class LoggingMailDataSource :
             var result =
                 await action();
 
-            /*
-             * Dieser Eintrag erfolgt bewusst direkt nach der
-             * bestätigten Serveroperation.
-             *
-             * Ein eventuell anschließend im ViewModel
-             * ausgeführter Reload gehört nicht mehr zu dieser
-             * Mutation.
-             *
-             * Dadurch behauptet das Log bei einem späteren
-             * Synchronisierungsproblem nicht fälschlich, dass
-             * das Verschieben selbst fehlgeschlagen sei.
-             */
             _logger.LogInformation(
                 "{Operation} completed successfully. MessageCount={MessageCount}, UndoAvailable={UndoAvailable}.",
                 operation,
@@ -771,20 +734,6 @@ public sealed class LoggingMailDataSource :
         }
     }
 
-    /*
-     * Für Mutationsfehler wird bewusst nicht das komplette
-     * Exception-Objekt an den Logger übergeben.
-     *
-     * Die Produktionsdiagnostik benötigt hier zunächst:
-     *
-     * - Art der Mutation
-     * - Anzahl Nachrichten
-     * - technische Fehlerklasse
-     *
-     * Mailadressen, Betreffzeilen, Ordnernamen, UIDs und
-     * sonstige Nachrichteninhalte gehören ausdrücklich nicht
-     * in diese Logeinträge.
-     */
     private void LogMutationFailure(
         string operation,
         int messageCount,
@@ -822,14 +771,6 @@ public sealed class LoggingMailDataSource :
                 break;
 
             case OperationCanceledException:
-                /*
-                 * Der vom Aufrufer ausgelöste Abbruch wurde
-                 * bereits separat behandelt.
-                 *
-                 * Ein hier ankommender OperationCanceledException
-                 * deutet deshalb typischerweise auf einen internen
-                 * Timeout hin.
-                 */
                 _logger.LogWarning(
                     "{Operation} failed because the operation timed out. MessageCount={MessageCount}, ExceptionType={ExceptionType}.",
                     operation,

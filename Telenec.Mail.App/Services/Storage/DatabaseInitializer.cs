@@ -5,7 +5,7 @@ namespace Telenec.Mail.App.Services.Storage;
 
 public sealed class DatabaseInitializer
 {
-    private const int CurrentSchemaVersion = 6;
+    private const int CurrentSchemaVersion = 7;
 
     private readonly AppDataPaths _paths;
 
@@ -115,6 +115,16 @@ public sealed class DatabaseInitializer
 
             schemaVersion =
                 6;
+        }
+
+        if (schemaVersion == 6)
+        {
+            await UpgradeToSchemaVersion7Async(
+                connection,
+                cancellationToken);
+
+            schemaVersion =
+                7;
         }
 
         if (schemaVersion !=
@@ -460,22 +470,6 @@ public sealed class DatabaseInitializer
         command.Transaction =
             (SqliteTransaction)transaction;
 
-        /*
-         * SortPosition speichert bewusst nicht eine selbst
-         * berechnete Sortierung.
-         *
-         * Gespeichert wird exakt die Reihenfolge, in der der
-         * produktive Online-Abruf die Nachrichten geliefert
-         * hat.
-         *
-         * Dadurch bleibt auch eine Sortierung nach Absender
-         * oder Betreff offline exakt erhalten.
-         *
-         * Die Spalte ist für vorhandene v5-Zeilen zunächst
-         * nullable. Solche alten Cache-Zeilen werden vom
-         * Store nicht verwendet und beim nächsten erfolgreichen
-         * Online-Snapshot ersetzt.
-         */
         command.CommandText =
             """
             ALTER TABLE CachedMailMessages
@@ -495,6 +489,77 @@ public sealed class DatabaseInitializer
                 );
 
             PRAGMA user_version = 6;
+            """;
+
+        await command.ExecuteNonQueryAsync(
+            cancellationToken);
+
+        await transaction.CommitAsync(
+            cancellationToken);
+    }
+
+    private static async Task UpgradeToSchemaVersion7Async(
+        SqliteConnection connection,
+        CancellationToken cancellationToken)
+    {
+        await using var transaction =
+            await connection.BeginTransactionAsync(
+                cancellationToken);
+
+        await using var command =
+            connection.CreateCommand();
+
+        command.Transaction =
+            (SqliteTransaction)transaction;
+
+        /*
+         * Diese Tabelle bildet bewusst die komplette zuletzt
+         * erfolgreich vom Server gelieferte Ordnerliste ab.
+         *
+         * Sie ist getrennt von CachedMailFolders.
+         *
+         * CachedMailFolders beschreibt die IMAP-Identität
+         * eines Ordners mit UIDVALIDITY für gecachte
+         * Nachrichten.
+         *
+         * CachedMailboxFolders dagegen beschreibt ausschließlich
+         * die sichtbare Ordnerstruktur des Postfachs.
+         */
+        command.CommandText =
+            """
+            CREATE TABLE CachedMailboxFolders
+            (
+                AccountId TEXT NOT NULL,
+                FolderId TEXT NOT NULL,
+                SortPosition INTEGER NOT NULL
+                    CHECK (SortPosition >= 0),
+                CacheFormatVersion INTEGER NOT NULL
+                    CHECK (CacheFormatVersion > 0),
+                FolderJson TEXT NOT NULL,
+                CachedAtUtc TEXT NOT NULL,
+
+                PRIMARY KEY
+                (
+                    AccountId,
+                    FolderId
+                ),
+
+                FOREIGN KEY
+                (
+                    AccountId
+                )
+                REFERENCES Accounts(AccountId)
+                ON DELETE CASCADE
+            );
+
+            CREATE INDEX IX_CachedMailboxFolders_Order
+                ON CachedMailboxFolders
+                (
+                    AccountId,
+                    SortPosition
+                );
+
+            PRAGMA user_version = 7;
             """;
 
         await command.ExecuteNonQueryAsync(
