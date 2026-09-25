@@ -5,7 +5,7 @@ namespace Telenec.Mail.App.Services.Storage;
 
 public sealed class DatabaseInitializer
 {
-    private const int CurrentSchemaVersion = 4;
+    private const int CurrentSchemaVersion = 5;
 
     private readonly AppDataPaths _paths;
 
@@ -95,6 +95,16 @@ public sealed class DatabaseInitializer
 
             schemaVersion =
                 4;
+        }
+
+        if (schemaVersion == 4)
+        {
+            await UpgradeToSchemaVersion5Async(
+                connection,
+                cancellationToken);
+
+            schemaVersion =
+                5;
         }
 
         if (schemaVersion !=
@@ -328,6 +338,95 @@ public sealed class DatabaseInitializer
             );
 
             PRAGMA user_version = 4;
+            """;
+
+        await command.ExecuteNonQueryAsync(
+            cancellationToken);
+
+        await transaction.CommitAsync(
+            cancellationToken);
+    }
+
+    private static async Task UpgradeToSchemaVersion5Async(
+        SqliteConnection connection,
+        CancellationToken cancellationToken)
+    {
+        await using var transaction =
+            await connection.BeginTransactionAsync(
+                cancellationToken);
+
+        await using var command =
+            connection.CreateCommand();
+
+        command.Transaction =
+            (SqliteTransaction)transaction;
+
+        command.CommandText =
+            """
+            CREATE TABLE CachedMailFolders
+            (
+                AccountId TEXT NOT NULL,
+                FolderId TEXT NOT NULL,
+                UidValidity INTEGER NOT NULL
+                    CHECK (UidValidity > 0),
+                UpdatedAtUtc TEXT NOT NULL,
+
+                PRIMARY KEY
+                (
+                    AccountId,
+                    FolderId
+                ),
+
+                FOREIGN KEY
+                (
+                    AccountId
+                )
+                REFERENCES Accounts(AccountId)
+                ON DELETE CASCADE
+            );
+
+            CREATE TABLE CachedMailMessages
+            (
+                AccountId TEXT NOT NULL,
+                FolderId TEXT NOT NULL,
+                UidValidity INTEGER NOT NULL
+                    CHECK (UidValidity > 0),
+                UniqueId INTEGER NOT NULL
+                    CHECK (UniqueId > 0),
+                CacheFormatVersion INTEGER NOT NULL
+                    CHECK (CacheFormatVersion > 0),
+                MessageJson TEXT NOT NULL,
+                CachedAtUtc TEXT NOT NULL,
+
+                PRIMARY KEY
+                (
+                    AccountId,
+                    FolderId,
+                    UniqueId
+                ),
+
+                FOREIGN KEY
+                (
+                    AccountId,
+                    FolderId
+                )
+                REFERENCES CachedMailFolders
+                (
+                    AccountId,
+                    FolderId
+                )
+                ON DELETE CASCADE
+            );
+
+            CREATE INDEX IX_CachedMailMessages_Page
+                ON CachedMailMessages
+                (
+                    AccountId,
+                    FolderId,
+                    UniqueId DESC
+                );
+
+            PRAGMA user_version = 5;
             """;
 
         await command.ExecuteNonQueryAsync(
