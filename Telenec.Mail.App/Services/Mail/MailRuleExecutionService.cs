@@ -26,7 +26,12 @@ public sealed record MailRuleExecutionPlan(
 public sealed record MailRuleExecutionResult(
     int MovedMessageCount,
     int SkippedMessageCount,
-    int FailedMessageCount);
+    int FailedMessageCount)
+{
+    public IReadOnlyList<uint> MovedUniqueIds
+    { get; init; } =
+        Array.Empty<uint>();
+}
 
 public sealed class MailRuleExecutionService
 {
@@ -69,11 +74,69 @@ public sealed class MailRuleExecutionService
             logger;
     }
 
-    public async Task<MailRuleExecutionPlan>
+    /*
+     * Manuelle, rückwirkende Regelausführung.
+     *
+     * Der komplette aktuelle Posteingang wird analysiert.
+     */
+    public Task<MailRuleExecutionPlan>
         AnalyzeInboxAsync(
             Guid accountId,
             IReadOnlyList<MailRuleDefinition> rules,
             CancellationToken cancellationToken = default)
+    {
+        return AnalyzeInboxCoreAsync(
+            accountId,
+            rules,
+            expectedUidValidity:
+                null,
+            restrictedUniqueIds:
+                null,
+            cancellationToken);
+    }
+
+    /*
+     * Automatische Regelausführung.
+     *
+     * Hier werden ausdrücklich nur die UIDs geprüft,
+     * die der Eingangspoller gerade als neu erkannt hat.
+     *
+     * Dadurch werden beim Programmstart keine alten
+     * Nachrichten automatisch nachträglich verarbeitet.
+     */
+    public Task<MailRuleExecutionPlan>
+        AnalyzeInboxMessagesAsync(
+            Guid accountId,
+            IReadOnlyList<MailRuleDefinition> rules,
+            uint expectedUidValidity,
+            IReadOnlyCollection<uint> uniqueIds,
+            CancellationToken cancellationToken = default)
+    {
+        if (expectedUidValidity == 0)
+        {
+            throw new ArgumentOutOfRangeException(
+                nameof(expectedUidValidity),
+                "Die UIDVALIDITY darf nicht 0 sein.");
+        }
+
+        ArgumentNullException.ThrowIfNull(
+            uniqueIds);
+
+        return AnalyzeInboxCoreAsync(
+            accountId,
+            rules,
+            expectedUidValidity,
+            uniqueIds,
+            cancellationToken);
+    }
+
+    private async Task<MailRuleExecutionPlan>
+        AnalyzeInboxCoreAsync(
+            Guid accountId,
+            IReadOnlyList<MailRuleDefinition> rules,
+            uint? expectedUidValidity,
+            IReadOnlyCollection<uint>? restrictedUniqueIds,
+            CancellationToken cancellationToken)
     {
         ValidateAccountId(
             accountId);
@@ -103,6 +166,14 @@ public sealed class MailRuleExecutionService
                     StringComparer.CurrentCultureIgnoreCase)
                 .ToList();
 
+        var restrictedIds =
+            restrictedUniqueIds?
+                .Where(
+                    uniqueId =>
+                        uniqueId > 0)
+                .Distinct()
+                .ToArray();
+
         using var client =
             await CreateAuthenticatedClientAsync(
                 accountId,
@@ -124,6 +195,25 @@ public sealed class MailRuleExecutionService
             {
                 throw new InvalidOperationException(
                     "Der Mailserver hat für den Posteingang keine gültige UIDVALIDITY geliefert.");
+            }
+
+            /*
+             * Besonders wichtig für die automatische
+             * Regelausführung:
+             *
+             * Die UIDs stammen aus einem unmittelbar
+             * vorherigen Polling-Durchlauf.
+             *
+             * Falls sich UIDVALIDITY zwischen Erkennung und
+             * Regelanalyse geändert hat, dürfen diese UIDs
+             * keinesfalls mehr benutzt werden.
+             */
+            if (expectedUidValidity.HasValue &&
+                uidValidity !=
+                    expectedUidValidity.Value)
+            {
+                throw new InvalidOperationException(
+                    "Der Posteingang wurde seit der Erkennung neuer Nachrichten serverseitig verändert.");
             }
 
             var executableRules =
@@ -182,7 +272,9 @@ public sealed class MailRuleExecutionService
             }
 
             if (inbox.Count == 0 ||
-                executableRules.Count == 0)
+                executableRules.Count == 0 ||
+                restrictedIds is
+                { Length: 0 })
             {
                 return new MailRuleExecutionPlan(
                     SourceFolderId:
@@ -205,24 +297,46 @@ public sealed class MailRuleExecutionService
                             .ToArray());
             }
 
+            IList<IMessageSummary>
+                summaries;
+
             /*
-             * Für die Regelanalyse werden bewusst nur
-             * UID und Envelope geladen.
+             * Manuelle Ausführung:
+             * kompletter Posteingang.
              *
-             * Keine Bodies.
-             * Keine Anhänge.
-             * Keine HTML-Inhalte.
+             * Automatische Ausführung:
+             * ausschließlich die gerade neu erkannten UIDs.
              *
-             * Damit können auch größere bestehende
-             * Posteingänge effizient geprüft werden.
+             * In beiden Fällen werden nur UID + Envelope
+             * geladen. Keine Bodies, keine Anhänge.
              */
-            var summaries =
-                await inbox.FetchAsync(
-                    0,
-                    -1,
-                    MessageSummaryItems.UniqueId |
-                    MessageSummaryItems.Envelope,
-                    cancellationToken);
+            if (restrictedIds is null)
+            {
+                summaries =
+                    await inbox.FetchAsync(
+                        0,
+                        -1,
+                        MessageSummaryItems.UniqueId |
+                        MessageSummaryItems.Envelope,
+                        cancellationToken);
+            }
+            else
+            {
+                var requestedUniqueIds =
+                    restrictedIds
+                        .Select(
+                            uniqueId =>
+                                new UniqueId(
+                                    uniqueId))
+                        .ToList();
+
+                summaries =
+                    await inbox.FetchAsync(
+                        requestedUniqueIds,
+                        MessageSummaryItems.UniqueId |
+                        MessageSummaryItems.Envelope,
+                        cancellationToken);
+            }
 
             var validSummaries =
                 summaries
@@ -243,11 +357,10 @@ public sealed class MailRuleExecutionService
                     .ThrowIfCancellationRequested();
 
                 /*
-                 * Eine Nachricht wird absichtlich höchstens
-                 * von EINER Regel verarbeitet.
+                 * Eine Nachricht wird höchstens von einer
+                 * Regel verarbeitet.
                  *
-                 * Die erste passende aktive Regel in der
-                 * gespeicherten Reihenfolge gewinnt.
+                 * Die erste passende aktive Regel gewinnt.
                  */
                 var matchingRule =
                     executableRules
@@ -383,12 +496,7 @@ public sealed class MailRuleExecutionService
                 cancellationToken);
 
             /*
-             * Das ist die zentrale Schutzprüfung für einen
-             * zuvor analysierten Plan.
-             *
-             * Falls der Server den Ordner zwischen Vorschau
-             * und Ausführung neu aufgebaut hat, dürfen die
-             * alten UIDs keinesfalls verwendet werden.
+             * Schutz gegen inzwischen ungültige UIDs.
              */
             if (sourceFolder.UidValidity !=
                 plan.UidValidity)
@@ -426,11 +534,8 @@ public sealed class MailRuleExecutionService
             }
 
             /*
-             * Direkt vor der Mutation wird jede geplante
-             * Nachricht erneut über UID + Message-ID geprüft.
-             *
-             * Eine inzwischen gelöschte oder anderweitig
-             * veränderte Nachricht wird übersprungen.
+             * Unmittelbar vor der Mutation wird die
+             * Nachrichtenidentität noch einmal bestätigt.
              */
             var currentSummaries =
                 await sourceFolder.FetchAsync(
@@ -494,12 +599,12 @@ public sealed class MailRuleExecutionService
             var failedMessageCount =
                 0;
 
+            var movedUniqueIds =
+                new HashSet<uint>();
+
             /*
              * Nachrichten mit demselben Zielordner werden
              * gemeinsam verschoben.
-             *
-             * Das reduziert IMAP-Roundtrips bei größeren
-             * rückwirkenden Regelanwendungen erheblich.
              */
             var targetGroups =
                 validItems
@@ -556,13 +661,8 @@ public sealed class MailRuleExecutionService
                         cancellationToken);
 
                     /*
-                     * Nach dem Move prüfen wir, welche UIDs
-                     * tatsächlich noch im Quellordner
-                     * existieren.
-                     *
-                     * Dadurch behauptet die Oberfläche nicht
-                     * einfach Erfolg, nur weil der IMAP-Befehl
-                     * ohne Exception zurückkam.
+                     * Der Erfolg wird am Quellordner
+                     * bestätigt.
                      */
                     var remainingSummaries =
                         await sourceFolder.FetchAsync(
@@ -580,11 +680,22 @@ public sealed class MailRuleExecutionService
                                     summary.UniqueId.Id)
                             .ToHashSet();
 
+                    var movedItems =
+                        groupItems
+                            .Where(
+                                item =>
+                                    !remainingUniqueIds.Contains(
+                                        item.UniqueId))
+                            .ToList();
+
+                    foreach (var movedItem in movedItems)
+                    {
+                        movedUniqueIds.Add(
+                            movedItem.UniqueId);
+                    }
+
                     var movedInGroup =
-                        groupItems.Count(
-                            item =>
-                                !remainingUniqueIds.Contains(
-                                    item.UniqueId));
+                        movedItems.Count;
 
                     var failedInGroup =
                         groupItems.Count -
@@ -637,7 +748,15 @@ public sealed class MailRuleExecutionService
                     skippedMessageCount,
 
                 FailedMessageCount:
-                    failedMessageCount);
+                    failedMessageCount)
+            {
+                MovedUniqueIds =
+                    movedUniqueIds
+                        .OrderBy(
+                            uniqueId =>
+                                uniqueId)
+                        .ToArray()
+            };
         }
         finally
         {

@@ -1,4 +1,5 @@
 ﻿using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Interop;
@@ -72,6 +73,12 @@ public partial class MainWindow
 
     private ISettingsStore?
         _desktopNotificationSettingsStore;
+
+    private MailRuleStore?
+        _automaticMailRuleStore;
+
+    private MailRuleExecutionService?
+        _automaticMailRuleExecutionService;
 
     private InboxNotificationMonitor?
         _inboxNotificationMonitor;
@@ -154,16 +161,58 @@ public partial class MainWindow
                     .GetRequiredService<
                         IMailDataSource>();
 
+            var ruleExecutionLogger =
+                _serviceProvider
+                    .GetRequiredService<
+                        ILogger<MailRuleExecutionService>>();
+
             _desktopNotificationAccountId =
                 account.AccountId;
 
             _desktopNotificationSettingsStore =
                 settingsStore;
 
+            /*
+             * Regeln und Benachrichtigungen teilen sich
+             * bewusst denselben Eingangspoller.
+             *
+             * Dadurch gibt es nicht zwei unabhängige
+             * 30-Sekunden-Schleifen, die denselben
+             * Posteingang beobachten.
+             */
+            _automaticMailRuleStore =
+                new MailRuleStore(
+                    settingsStore);
+
+            _automaticMailRuleExecutionService =
+                new MailRuleExecutionService(
+                    _mailAccountStore,
+                    _credentialStore,
+                    ruleExecutionLogger);
+
             _inboxNotificationMonitor =
                 new InboxNotificationMonitor(
                     stateSource,
                     mailDataSource);
+
+            /*
+             * Die Baseline wird unabhängig davon aufgebaut,
+             * ob Desktop-Benachrichtigungen aktiviert sind.
+             *
+             * Automatische Regeln müssen auch dann zuverlässig
+             * nur zukünftige neue Nachrichten erkennen, wenn
+             * der Benutzer keinerlei Popups wünscht.
+             */
+            try
+            {
+                await _inboxNotificationMonitor
+                    .EstablishBaselineAsync();
+            }
+            catch
+            {
+                _inboxNotificationMonitor
+                    .Reset();
+            }
 
             Closed +=
                 MainWindowDesktopNotifications_OnClosed;
@@ -178,16 +227,23 @@ public partial class MainWindow
         catch
         {
             /*
-             * Benachrichtigungen sind eine Komfortfunktion.
+             * Eingangspolling, Benachrichtigungen und Regeln
+             * sind Zusatzfunktionen.
              *
              * Ein Fehler darf den normalen Mailclient niemals
-             * beeinträchtigen.
+             * am Start hindern.
              */
             _desktopNotificationInfrastructureInitialized =
                 false;
 
             _desktopNotificationsEnabled =
                 false;
+
+            _automaticMailRuleStore =
+                null;
+
+            _automaticMailRuleExecutionService =
+                null;
         }
     }
 
@@ -196,8 +252,7 @@ public partial class MainWindow
     {
         if (!_desktopNotificationInfrastructureInitialized ||
             _desktopNotificationSettingsStore is null ||
-            !_desktopNotificationAccountId.HasValue ||
-            _inboxNotificationMonitor is null)
+            !_desktopNotificationAccountId.HasValue)
         {
             return;
         }
@@ -212,11 +267,10 @@ public partial class MainWindow
                             .NotificationsDesktopEnabled);
 
             /*
-             * Wie im Einstellungsfenster:
              * Fehlt ein gespeicherter Wert, sind
              * Desktop-Benachrichtigungen standardmäßig an.
              */
-            var enabled =
+            _desktopNotificationsEnabled =
                 string.IsNullOrWhiteSpace(
                     storedValue)
                 ||
@@ -228,41 +282,17 @@ public partial class MainWindow
                     parsedValue
                 );
 
-            var wasEnabled =
-                _desktopNotificationsEnabled;
-
-            _desktopNotificationsEnabled =
-                enabled;
-
             /*
-             * Wird die Funktion neu aktiviert, beginnen wir
-             * mit dem JETZT vorhandenen Posteingang als
-             * Baseline.
+             * Der Eingangspoller wird beim Ausschalten der
+             * Benachrichtigungen ausdrücklich NICHT mehr
+             * zurückgesetzt.
              *
-             * Nachrichten, die während ausgeschalteter
-             * Benachrichtigungen eingegangen sind, werden
-             * dadurch nicht nachträglich gemeldet.
+             * Er dient inzwischen zusätzlich als Baseline für
+             * automatische Regeln und muss deshalb unabhängig
+             * vom Popup-Schalter weiterlaufen.
              */
-            if (enabled &&
-                !wasEnabled)
+            if (!_desktopNotificationsEnabled)
             {
-                try
-                {
-                    await _inboxNotificationMonitor
-                        .EstablishBaselineAsync();
-                }
-                catch
-                {
-                    _inboxNotificationMonitor
-                        .Reset();
-                }
-            }
-
-            if (!enabled)
-            {
-                _inboxNotificationMonitor
-                    .Reset();
-
                 CancelTemporaryNotificationTrayCleanup();
 
                 RemoveInAppMailNotification();
@@ -280,8 +310,7 @@ public partial class MainWindow
             /*
              * Wurde der normale Tray-Modus zwischenzeitlich
              * aktiviert, gehört ein vorhandenes Icon ab jetzt
-             * dem regulären Tray-Unterbau und darf nicht mehr
-             * vom Notification-Cleanup entfernt werden.
+             * dem regulären Tray-Unterbau.
              */
             if (_closeToTrayEnabled)
             {
@@ -293,11 +322,14 @@ public partial class MainWindow
         }
         catch
         {
+            /*
+             * Kann ausschließlich die Notification-Einstellung
+             * nicht gelesen werden, werden Popups deaktiviert.
+             *
+             * Die Regel-Baseline bleibt jedoch erhalten.
+             */
             _desktopNotificationsEnabled =
                 false;
-
-            _inboxNotificationMonitor
-                .Reset();
 
             RemoveInAppMailNotification();
         }
@@ -340,18 +372,24 @@ public partial class MainWindow
                 cancellationToken
                     .ThrowIfCancellationRequested();
 
-                if (!_desktopNotificationsEnabled ||
-                    _inboxNotificationMonitor is null)
+                /*
+                 * Der Eingangspoller läuft jetzt unabhängig
+                 * vom Notification-Schalter.
+                 *
+                 * Nur die spätere visuelle Meldung hängt noch
+                 * von _desktopNotificationsEnabled ab.
+                 */
+                if (_inboxNotificationMonitor is null)
                 {
                     continue;
                 }
 
                 InboxNotificationBatch?
-                    notificationBatch;
+                    incomingBatch;
 
                 try
                 {
-                    notificationBatch =
+                    incomingBatch =
                         await _inboxNotificationMonitor
                             .CheckForNewMailAsync(
                                 cancellationToken);
@@ -370,11 +408,98 @@ public partial class MainWindow
                     continue;
                 }
 
-                if (notificationBatch is null ||
-                    notificationBatch.NewMessageCount <= 0)
+                if (incomingBatch is null ||
+                    incomingBatch.NewUniqueIds.Count == 0)
                 {
                     continue;
                 }
+
+                var movedUniqueIds =
+                    new HashSet<uint>();
+
+                try
+                {
+                    movedUniqueIds =
+                        await ApplyAutomaticMailRulesAsync(
+                            incomingBatch,
+                            cancellationToken);
+                }
+                catch (OperationCanceledException)
+                    when (cancellationToken.IsCancellationRequested)
+                {
+                    throw;
+                }
+                catch
+                {
+                    /*
+                     * Ein Regelproblem darf normale
+                     * Benachrichtigungen nicht verhindern.
+                     *
+                     * Im Fehlerfall gelten alle neuen Mails
+                     * weiterhin als nicht weggefiltert.
+                     */
+                    movedUniqueIds.Clear();
+                }
+
+                /*
+                 * Nur neue ungelesene Nachrichten, die nach
+                 * der Regelverarbeitung tatsächlich noch im
+                 * Posteingang verblieben sind, dürfen eine
+                 * Benachrichtigung erzeugen.
+                 */
+                var remainingUnreadUniqueIds =
+                    incomingBatch
+                        .NewUnreadUniqueIds
+                        .Where(
+                            uniqueId =>
+                                !movedUniqueIds.Contains(
+                                    uniqueId))
+                        .ToArray();
+
+                if (!_desktopNotificationsEnabled ||
+                    remainingUnreadUniqueIds.Length == 0)
+                {
+                    continue;
+                }
+
+                var latestMessage =
+                    incomingBatch.LatestMessage;
+
+                /*
+                 * Wurde gerade die Nachricht verschoben, deren
+                 * Details für den Hinweis geladen wurden,
+                 * verwenden wir bewusst den generischen
+                 * Hinweis.
+                 *
+                 * Dadurch zeigen wir niemals Absender/Betreff
+                 * einer Mail an, die gar nicht mehr im
+                 * Posteingang liegt.
+                 */
+                if (latestMessage is not null &&
+                    !remainingUnreadUniqueIds.Contains(
+                        latestMessage.UniqueId))
+                {
+                    latestMessage =
+                        null;
+                }
+
+                var notificationBatch =
+                    new InboxNotificationBatch(
+                        NewMessageCount:
+                            remainingUnreadUniqueIds.Length,
+
+                        LatestMessage:
+                            latestMessage)
+                    {
+                        UidValidity =
+                            incomingBatch.UidValidity,
+
+                        NewUniqueIds =
+                            incomingBatch.NewUniqueIds,
+
+                        NewUnreadUniqueIds =
+                            remainingUnreadUniqueIds
+                    };
 
                 await Dispatcher.InvokeAsync(
                     () =>
@@ -405,6 +530,84 @@ public partial class MainWindow
         }
     }
 
+    private async Task<HashSet<uint>>
+        ApplyAutomaticMailRulesAsync(
+            InboxNotificationBatch incomingBatch,
+            CancellationToken cancellationToken)
+    {
+        var movedUniqueIds =
+            new HashSet<uint>();
+
+        if (!_desktopNotificationAccountId.HasValue ||
+            _automaticMailRuleStore is null ||
+            _automaticMailRuleExecutionService is null ||
+            incomingBatch.UidValidity == 0 ||
+            incomingBatch.NewUniqueIds.Count == 0)
+        {
+            return movedUniqueIds;
+        }
+
+        var rules =
+            await _automaticMailRuleStore
+                .GetRulesAsync(
+                    _desktopNotificationAccountId.Value,
+                    cancellationToken);
+
+        var activeRules =
+            rules
+                .Where(
+                    rule =>
+                        rule.IsEnabled)
+                .OrderBy(
+                    rule =>
+                        rule.SortOrder)
+                .ThenBy(
+                    rule =>
+                        rule.Name,
+                    StringComparer.CurrentCultureIgnoreCase)
+                .ToList();
+
+        if (activeRules.Count == 0)
+        {
+            return movedUniqueIds;
+        }
+
+        /*
+         * Anders als beim manuellen "Regeln jetzt anwenden"
+         * analysieren wir hier ausschließlich die UIDs, die
+         * der Poller gerade als neu erkannt hat.
+         */
+        var plan =
+            await _automaticMailRuleExecutionService
+                .AnalyzeInboxMessagesAsync(
+                    _desktopNotificationAccountId.Value,
+                    activeRules,
+                    incomingBatch.UidValidity,
+                    incomingBatch.NewUniqueIds,
+                    cancellationToken);
+
+        if (plan.Items.Count == 0)
+        {
+            return movedUniqueIds;
+        }
+
+        var result =
+            await _automaticMailRuleExecutionService
+                .ApplyAsync(
+                    _desktopNotificationAccountId.Value,
+                    plan,
+                    cancellationToken);
+
+        foreach (var uniqueId in
+                 result.MovedUniqueIds)
+        {
+            movedUniqueIds.Add(
+                uniqueId);
+        }
+
+        return movedUniqueIds;
+    }
+
     private void DispatchIncomingMailNotification(
         InboxNotificationBatch batch)
     {
@@ -412,10 +615,6 @@ public partial class MainWindow
          * Befindet sich Telenec Mail gerade sichtbar und
          * aktiv im Vordergrund, verwenden wir bewusst einen
          * eigenen In-App-Hinweis.
-         *
-         * Klassische Shell-Benachrichtigungen können von
-         * Windows bei der aktiven Anwendung unterdrückt
-         * werden.
          *
          * Ist Telenec Mail dagegen minimiert, verdeckt oder
          * im Tray, kommt der normale Windows-Hinweis.
@@ -446,11 +645,6 @@ public partial class MainWindow
 
         if (Content is not Grid rootGrid)
         {
-            /*
-             * Sollte sich die Hauptfensterstruktur später
-             * ändern, bleibt die Windows-Benachrichtigung als
-             * funktionaler Fallback erhalten.
-             */
             ShowDesktopMailNotification(
                 batch);
 
@@ -732,13 +926,6 @@ public partial class MainWindow
             return;
         }
 
-        /*
-         * Shell-Benachrichtigungen benötigen ein angemeldetes
-         * Notification-Area-Icon.
-         *
-         * Ist der normale Tray-Modus deaktiviert, wird deshalb
-         * vorübergehend dasselbe Telenec-Icon angelegt.
-         */
         var trayIconWasAlreadyVisible =
             _trayIconVisible;
 
@@ -862,11 +1049,6 @@ public partial class MainWindow
 
         RestoreMainWindowFromTray();
 
-        /*
-         * War das Icon ausschließlich für diese
-         * Benachrichtigung angelegt worden, darf es nach dem
-         * Klick wieder verschwinden.
-         */
         if (_desktopNotificationOwnsTemporaryTrayIcon &&
             !_closeToTrayEnabled)
         {
@@ -1170,6 +1352,12 @@ public partial class MainWindow
             false;
 
         _desktopNotificationSettingsStore =
+            null;
+
+        _automaticMailRuleStore =
+            null;
+
+        _automaticMailRuleExecutionService =
             null;
 
         _inboxNotificationMonitor =

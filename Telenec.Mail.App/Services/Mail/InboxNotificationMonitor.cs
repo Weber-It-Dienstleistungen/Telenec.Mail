@@ -4,27 +4,47 @@ namespace Telenec.Mail.App.Services.Mail;
 
 public sealed record InboxNotificationBatch(
     int NewMessageCount,
-    MailMessageData? LatestMessage);
+    MailMessageData? LatestMessage)
+{
+    /*
+     * UIDVALIDITY gehört zwingend zu den UIDs.
+     *
+     * Dadurch kann die nachgeschaltete Regel-Engine
+     * sicherstellen, dass sich der Posteingang zwischen
+     * Erkennung und Verarbeitung nicht neu aufgebaut hat.
+     */
+    public uint UidValidity
+    { get; init; }
+
+    /*
+     * Alle seit der letzten Baseline neu erkannten UIDs.
+     *
+     * Dazu gehören bewusst auch Nachrichten, die bereits als
+     * gelesen auf dem Server angekommen sind.
+     *
+     * Regeln sollen nicht von einem Seen-Flag abhängen.
+     */
+    public IReadOnlyList<uint> NewUniqueIds
+    { get; init; } =
+        Array.Empty<uint>();
+
+    /*
+     * Diese Teilmenge wird ausschließlich für
+     * Desktop-/In-App-Benachrichtigungen benötigt.
+     */
+    public IReadOnlyList<uint> NewUnreadUniqueIds
+    { get; init; } =
+        Array.Empty<uint>();
+}
 
 public sealed class InboxNotificationMonitor
 {
     private const string InboxFolderId =
         "INBOX";
 
-    /*
-     * Für die reine UID-Prüfung benötigen wir keine Bodies.
-     *
-     * 100 Zustände sind ausreichend großzügig, ohne die
-     * regelmäßige Abfrage unnötig groß zu machen.
-     */
     private const int StateSnapshotLimit =
         100;
 
-    /*
-     * Vollständige Nachrichtendaten werden ausschließlich
-     * dann geladen, wenn tatsächlich neue ungelesene UIDs
-     * erkannt wurden.
-     */
     private const int MessageDetailLimit =
         50;
 
@@ -99,11 +119,11 @@ public sealed class InboxNotificationMonitor
 
         /*
          * Der erste erfolgreiche Abruf ist ausschließlich
-         * unsere Baseline.
+         * Baseline.
          *
-         * Bereits vorhandene Nachrichten dürfen beim
-         * Programmstart niemals als "neu eingegangen"
-         * gemeldet werden.
+         * Bereits vorhandene Nachrichten dürfen weder als
+         * neue Nachricht gemeldet noch automatisch durch
+         * Regeln verarbeitet werden.
          */
         if (!_baselineEstablished)
         {
@@ -114,11 +134,10 @@ public sealed class InboxNotificationMonitor
         }
 
         /*
-         * Ändert sich UIDVALIDITY, besitzen die bisherigen
-         * UIDs keinerlei Bedeutung mehr.
+         * Bei geänderter UIDVALIDITY verlieren alle alten
+         * UIDs ihre Bedeutung.
          *
-         * Wir beginnen deshalb defensiv mit einer neuen
-         * Baseline und erzeugen keine Benachrichtigung.
+         * Wir beginnen daher neu mit einer Baseline.
          */
         if (snapshot.UidValidity == 0 ||
             snapshot.UidValidity !=
@@ -143,11 +162,6 @@ public sealed class InboxNotificationMonitor
             GetHighestUid(
                 snapshot);
 
-        /*
-         * Keine neue UID:
-         * Flag-Änderungen wie gelesen/ungelesen sind für
-         * diesen Monitor ausdrücklich keine neue Mail.
-         */
         if (newStates.Length == 0)
         {
             _highestKnownUid =
@@ -158,13 +172,6 @@ public sealed class InboxNotificationMonitor
             return null;
         }
 
-        /*
-         * Neue, aber bereits gelesene Nachrichten werden
-         * ebenfalls in die Baseline aufgenommen.
-         *
-         * Dadurch werden sie nicht bei einem späteren
-         * Durchlauf doch noch gemeldet.
-         */
         var newUnreadStates =
             newStates
                 .Where(
@@ -172,82 +179,82 @@ public sealed class InboxNotificationMonitor
                         message.IsUnread)
                 .ToArray();
 
+        /*
+         * Die Baseline wird sofort fortgeschrieben.
+         *
+         * Eine nachgeschaltete Regel oder Benachrichtigung
+         * darf bei einem späteren Durchlauf nicht dieselbe
+         * neue UID erneut behandeln.
+         */
         _highestKnownUid =
             Math.Max(
                 _highestKnownUid,
                 highestUidInSnapshot);
 
-        if (newUnreadStates.Length == 0)
-        {
-            return null;
-        }
-
         MailMessageData?
             latestMessage =
                 null;
 
-        try
+        if (newUnreadStates.Length > 0)
         {
-            /*
-             * Die sichtbare Mailansicht kann nach Absender
-             * oder Betreff sortiert sein.
-             *
-             * Für Benachrichtigungen benötigen wir dagegen
-             * immer die zeitlich neuesten Nachrichten.
-             *
-             * Der temporäre Sortier-Override gilt nur für
-             * diesen asynchronen Aufrufpfad und verändert
-             * nicht die sichtbare Sortierung des Benutzers.
-             */
-            using var sortOverride =
-                MailSortState.UseTemporarySort(
-                    MailSortState.DefaultSort);
+            try
+            {
+                /*
+                 * Für die Benachrichtigung benötigen wir
+                 * vollständige Daten nur dann, wenn mindestens
+                 * eine neue ungelesene Nachricht vorhanden ist.
+                 */
+                using var sortOverride =
+                    MailSortState.UseTemporarySort(
+                        MailSortState.DefaultSort);
 
-            var messages =
-                await _mailDataSource
-                    .GetMessagesAsync(
-                        InboxFolderId,
-                        maximumMessageCount:
-                            MessageDetailLimit,
-                        cancellationToken:
-                            cancellationToken);
+                var messages =
+                    await _mailDataSource
+                        .GetMessagesAsync(
+                            InboxFolderId,
+                            maximumMessageCount:
+                                MessageDetailLimit,
+                            cancellationToken:
+                                cancellationToken);
 
-            cancellationToken
-                .ThrowIfCancellationRequested();
+                cancellationToken
+                    .ThrowIfCancellationRequested();
 
-            var newUnreadUids =
-                newUnreadStates
-                    .Select(
-                        message =>
-                            message.UniqueId)
-                    .ToHashSet();
+                var newUnreadUids =
+                    newUnreadStates
+                        .Select(
+                            message =>
+                                message.UniqueId)
+                        .ToHashSet();
 
-            latestMessage =
-                messages
-                    .Where(
-                        message =>
-                            newUnreadUids.Contains(
-                                message.UniqueId))
-                    .OrderByDescending(
-                        message =>
-                            message.UniqueId)
-                    .FirstOrDefault();
-        }
-        catch (OperationCanceledException)
-            when (cancellationToken.IsCancellationRequested)
-        {
-            throw;
-        }
-        catch
-        {
-            /*
-             * Die UID-Prüfung war bereits erfolgreich.
-             *
-             * Können die vollständigen Maildaten gerade
-             * nicht geladen werden, zeigen wir lieber einen
-             * generischen Hinweis statt denselben Eingang
-             * beim nächsten Durchlauf nochmals zu melden.
-             */
+                latestMessage =
+                    messages
+                        .Where(
+                            message =>
+                                newUnreadUids.Contains(
+                                    message.UniqueId))
+                        .OrderByDescending(
+                            message =>
+                                message.UniqueId)
+                        .FirstOrDefault();
+            }
+            catch (OperationCanceledException)
+                when (cancellationToken.IsCancellationRequested)
+            {
+                throw;
+            }
+            catch
+            {
+                /*
+                 * Die UID-Erkennung war bereits erfolgreich.
+                 *
+                 * Die Regelverarbeitung kann auch ohne
+                 * vollständige Maildaten weiterarbeiten.
+                 *
+                 * Für Benachrichtigungen bleibt dann der
+                 * generische Hinweis als Fallback.
+                 */
+            }
         }
 
         return new InboxNotificationBatch(
@@ -255,7 +262,25 @@ public sealed class InboxNotificationMonitor
                 newUnreadStates.Length,
 
             LatestMessage:
-                latestMessage);
+                latestMessage)
+        {
+            UidValidity =
+                snapshot.UidValidity,
+
+            NewUniqueIds =
+                newStates
+                    .Select(
+                        message =>
+                            message.UniqueId)
+                    .ToArray(),
+
+            NewUnreadUniqueIds =
+                newUnreadStates
+                    .Select(
+                        message =>
+                            message.UniqueId)
+                    .ToArray()
+        };
     }
 
     private async Task<MailFolderMessageStateSnapshot>
@@ -263,9 +288,9 @@ public sealed class InboxNotificationMonitor
             CancellationToken cancellationToken)
     {
         /*
-         * Auch die leichte UID-Prüfung muss unabhängig von
-         * der sichtbaren Sortierung immer die neuesten
-         * Nachrichten betrachten.
+         * Die UID-Prüfung muss immer unabhängig von der
+         * sichtbaren Benutzersortierung auf den neuesten
+         * Nachrichten arbeiten.
          */
         using var sortOverride =
             MailSortState.UseTemporarySort(
