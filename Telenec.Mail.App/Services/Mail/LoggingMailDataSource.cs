@@ -75,16 +75,52 @@ public sealed class LoggingMailDataSource :
         GetFoldersAsync(
             CancellationToken cancellationToken = default)
     {
-        var folders =
-            await _inner
-                .GetFoldersAsync(
+        try
+        {
+            var folders =
+                await _inner
+                    .GetFoldersAsync(
+                        cancellationToken);
+
+            await PersistFolderCacheAsync(
+                folders,
+                cancellationToken);
+
+            return folders;
+        }
+        catch (OperationCanceledException)
+            when (cancellationToken.IsCancellationRequested)
+        {
+            throw;
+        }
+        catch (Exception exception)
+            when (CanUseOfflineCache(
+                exception,
+                cancellationToken))
+        {
+            var cachedFolders =
+                await TryLoadCachedFoldersAsync(
                     cancellationToken);
 
-        await PersistFolderCacheAsync(
-            folders,
-            cancellationToken);
+            if (cachedFolders is null)
+            {
+                _logger.LogWarning(
+                    "Mailbox folder list could not use offline cache because no cached folder snapshot is available.");
 
-        return folders;
+                throw;
+            }
+
+            var exceptionType =
+                exception.GetType().FullName
+                ?? exception.GetType().Name;
+
+            _logger.LogWarning(
+                "Mailbox folder list loaded from offline cache because the mail server is unavailable. FolderCount={FolderCount}, ExceptionType={ExceptionType}.",
+                cachedFolders.Count,
+                exceptionType);
+
+            return cachedFolders;
+        }
     }
 
     public async Task<IReadOnlyList<MailMessageData>>
@@ -93,31 +129,80 @@ public sealed class LoggingMailDataSource :
             int maximumMessageCount = 20,
             CancellationToken cancellationToken = default)
     {
-        var messages =
-            await _inner
-                .GetMessagesAsync(
-                    folderId,
-                    maximumMessageCount,
-                    cancellationToken);
+        try
+        {
+            var messages =
+                await _inner
+                    .GetMessagesAsync(
+                        folderId,
+                        maximumMessageCount,
+                        cancellationToken);
 
-        await PersistReadReceiptsAsync(
-            messages,
-            cancellationToken);
-
-        var enrichedMessages =
-            await AttachPersistedReadReceiptsAsync(
+            await PersistReadReceiptsAsync(
                 messages,
                 cancellationToken);
 
-        if (!MailSortState.HasTemporaryOverride)
-        {
-            await PersistMailCacheAsync(
-                folderId,
-                enrichedMessages,
-                cancellationToken);
-        }
+            var enrichedMessages =
+                await AttachPersistedReadReceiptsAsync(
+                    messages,
+                    cancellationToken);
 
-        return enrichedMessages;
+            if (!MailSortState.HasTemporaryOverride)
+            {
+                await PersistMailCacheAsync(
+                    folderId,
+                    enrichedMessages,
+                    cancellationToken);
+            }
+
+            return enrichedMessages;
+        }
+        catch (OperationCanceledException)
+            when (cancellationToken.IsCancellationRequested)
+        {
+            throw;
+        }
+        catch (Exception exception)
+            when (
+                !MailSortState.HasTemporaryOverride &&
+                CanUseOfflineCache(
+                    exception,
+                    cancellationToken))
+        {
+            var cachedMessages =
+                await TryLoadCachedMessagePageAsync(
+                    folderId,
+                    skipMessageCount:
+                        0,
+                    maximumMessageCount:
+                        maximumMessageCount,
+                    cancellationToken:
+                        cancellationToken);
+
+            if (cachedMessages is null)
+            {
+                _logger.LogWarning(
+                    "Mailbox messages could not use offline cache because no cached message snapshot is available.");
+
+                throw;
+            }
+
+            var enrichedCachedMessages =
+                await AttachPersistedReadReceiptsAsync(
+                    cachedMessages,
+                    cancellationToken);
+
+            var exceptionType =
+                exception.GetType().FullName
+                ?? exception.GetType().Name;
+
+            _logger.LogWarning(
+                "Mailbox messages loaded from offline cache because the mail server is unavailable. MessageCount={MessageCount}, ExceptionType={ExceptionType}.",
+                enrichedCachedMessages.Count,
+                exceptionType);
+
+            return enrichedCachedMessages;
+        }
     }
 
     public async Task<IReadOnlyList<MailMessageData>>
@@ -127,21 +212,67 @@ public sealed class LoggingMailDataSource :
             int maximumMessageCount,
             CancellationToken cancellationToken = default)
     {
-        var messages =
-            await _inner
-                .GetMessagePageAsync(
+        try
+        {
+            var messages =
+                await _inner
+                    .GetMessagePageAsync(
+                        folderId,
+                        skipMessageCount,
+                        maximumMessageCount,
+                        cancellationToken);
+
+            await PersistReadReceiptsAsync(
+                messages,
+                cancellationToken);
+
+            return await AttachPersistedReadReceiptsAsync(
+                messages,
+                cancellationToken);
+        }
+        catch (OperationCanceledException)
+            when (cancellationToken.IsCancellationRequested)
+        {
+            throw;
+        }
+        catch (Exception exception)
+            when (
+                !MailSortState.HasTemporaryOverride &&
+                CanUseOfflineCache(
+                    exception,
+                    cancellationToken))
+        {
+            var cachedMessages =
+                await TryLoadCachedMessagePageAsync(
                     folderId,
                     skipMessageCount,
                     maximumMessageCount,
                     cancellationToken);
 
-        await PersistReadReceiptsAsync(
-            messages,
-            cancellationToken);
+            if (cachedMessages is null)
+            {
+                _logger.LogWarning(
+                    "Mailbox message page could not use offline cache because no cached message snapshot is available.");
 
-        return await AttachPersistedReadReceiptsAsync(
-            messages,
-            cancellationToken);
+                throw;
+            }
+
+            var enrichedCachedMessages =
+                await AttachPersistedReadReceiptsAsync(
+                    cachedMessages,
+                    cancellationToken);
+
+            var exceptionType =
+                exception.GetType().FullName
+                ?? exception.GetType().Name;
+
+            _logger.LogWarning(
+                "Mailbox message page loaded from offline cache because the mail server is unavailable. MessageCount={MessageCount}, ExceptionType={ExceptionType}.",
+                enrichedCachedMessages.Count,
+                exceptionType);
+
+            return enrichedCachedMessages;
+        }
     }
 
     public Task DownloadAttachmentAsync(
@@ -285,6 +416,92 @@ public sealed class LoggingMailDataSource :
                         cancellationToken),
 
             cancellationToken:
+                cancellationToken);
+    }
+
+    private async Task<IReadOnlyList<MailFolderData>?>
+        TryLoadCachedFoldersAsync(
+            CancellationToken cancellationToken)
+    {
+        var account =
+            await _mailAccountStore
+                .GetActiveAccountAsync(
+                    cancellationToken);
+
+        if (account is null ||
+            account.AccountId == Guid.Empty)
+        {
+            return null;
+        }
+
+        var folders =
+            await _mailFolderCacheStore
+                .GetFoldersAsync(
+                    account.AccountId,
+                    cancellationToken);
+
+        /*
+         * Ein echtes IMAP-Postfach besitzt mindestens den
+         * Posteingang.
+         *
+         * Eine komplett leere lokale Ordnerliste wird daher
+         * nicht als belastbarer Offline-Snapshot behandelt.
+         */
+        return folders.Count == 0
+            ? null
+            : folders;
+    }
+
+    private async Task<IReadOnlyList<MailMessageData>?>
+        TryLoadCachedMessagePageAsync(
+            string folderId,
+            int skipMessageCount,
+            int maximumMessageCount,
+            CancellationToken cancellationToken)
+    {
+        var account =
+            await _mailAccountStore
+                .GetActiveAccountAsync(
+                    cancellationToken);
+
+        if (account is null ||
+            account.AccountId == Guid.Empty)
+        {
+            return null;
+        }
+
+        /*
+         * Der Folder-State unterscheidet zuverlässig zwischen
+         *
+         * - "dieser Ordner wurde gecacht und ist wirklich leer"
+         * - "für diesen Ordner existiert überhaupt kein Cache".
+         *
+         * Eine leere Nachrichtenliste allein könnte diese
+         * beiden Fälle nicht unterscheiden.
+         */
+        var folderState =
+            await _mailMessageCacheStore
+                .GetFolderStateAsync(
+                    account.AccountId,
+                    folderId,
+                    cancellationToken);
+
+        if (folderState is null)
+        {
+            return null;
+        }
+
+        if (maximumMessageCount <= 0)
+        {
+            return Array.Empty<MailMessageData>();
+        }
+
+        return await _mailMessageCacheStore
+            .GetMessagePageAsync(
+                account.AccountId,
+                folderId,
+                skipMessageCount,
+                maximumMessageCount,
                 cancellationToken);
     }
 
@@ -645,6 +862,33 @@ public sealed class LoggingMailDataSource :
             readReceipt.ReceiptDate.HasValue &&
             !string.IsNullOrWhiteSpace(
                 readReceipt.Disposition);
+    }
+
+    private static bool CanUseOfflineCache(
+        Exception exception,
+        CancellationToken cancellationToken)
+    {
+        /*
+         * Weder falsche Zugangsdaten noch TLS-/Zertifikats-
+         * probleme dürfen vom Offline-Cache verdeckt werden.
+         */
+        if (exception is AuthenticationException ||
+            exception is SslHandshakeException)
+        {
+            return false;
+        }
+
+        if (exception is OperationCanceledException)
+        {
+            return
+                !cancellationToken
+                    .IsCancellationRequested;
+        }
+
+        return
+            exception is SocketException ||
+            exception is IOException ||
+            exception is TimeoutException;
     }
 
     private async Task ExecuteMutationAsync(

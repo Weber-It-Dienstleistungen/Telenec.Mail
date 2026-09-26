@@ -2,6 +2,9 @@
 using MailKit.Net.Imap;
 using MailKit.Search;
 using MailKit.Security;
+using Microsoft.Extensions.Logging;
+using System.IO;
+using System.Net.Sockets;
 using Telenec.Mail.App.Models;
 using Telenec.Mail.App.Services.Security;
 using Telenec.Mail.App.Services.Storage;
@@ -23,9 +26,17 @@ public sealed class ImapMailMessageStateSource
     private readonly ICredentialStore
         _credentialStore;
 
+    private readonly IMailMessageCacheStore
+        _mailMessageCacheStore;
+
+    private readonly ILogger<ImapMailMessageStateSource>
+        _logger;
+
     public ImapMailMessageStateSource(
         IMailAccountStore mailAccountStore,
-        ICredentialStore credentialStore)
+        ICredentialStore credentialStore,
+        AppDataPaths appDataPaths,
+        ILogger<ImapMailMessageStateSource> logger)
     {
         ArgumentNullException.ThrowIfNull(
             mailAccountStore);
@@ -33,11 +44,24 @@ public sealed class ImapMailMessageStateSource
         ArgumentNullException.ThrowIfNull(
             credentialStore);
 
+        ArgumentNullException.ThrowIfNull(
+            appDataPaths);
+
+        ArgumentNullException.ThrowIfNull(
+            logger);
+
         _mailAccountStore =
             mailAccountStore;
 
         _credentialStore =
             credentialStore;
+
+        _mailMessageCacheStore =
+            new SqliteMailMessageCacheStore(
+                appDataPaths);
+
+        _logger =
+            logger;
     }
 
     public async Task<MailFolderMessageStateSnapshot>
@@ -73,6 +97,103 @@ public sealed class ImapMailMessageStateSource
                 "Es ist kein aktives Mailkonto eingerichtet.");
         }
 
+        try
+        {
+            return await GetOnlineMessageStatesAsync(
+                account,
+                folderId,
+                maximumMessageCount,
+                cancellationToken);
+        }
+        catch (OperationCanceledException)
+            when (cancellationToken.IsCancellationRequested)
+        {
+            throw;
+        }
+        catch (Exception exception)
+            when (
+                !MailSortState.HasTemporaryOverride &&
+                CanUseOfflineCache(
+                    exception,
+                    cancellationToken))
+        {
+            /*
+             * Nur reguläre sichtbare UI-Abrufe dürfen auf den
+             * lokalen Snapshot zurückfallen.
+             *
+             * Hintergrunddienste wie der New-Mail-Monitor
+             * verwenden einen temporären Sortierkontext.
+             * Für diese wäre der sichtbare Nachrichten-Cache
+             * keine belastbare Quelle, da er beispielsweise
+             * nach Absender sortiert sein kann.
+             */
+            var cachedFolderState =
+                await _mailMessageCacheStore
+                    .GetFolderStateAsync(
+                        account.AccountId,
+                        folderId,
+                        cancellationToken);
+
+            if (cachedFolderState is null)
+            {
+                _logger.LogWarning(
+                    "Mail message state could not use offline cache because no cached folder identity is available.");
+
+                throw;
+            }
+
+            var cachedMessages =
+                await _mailMessageCacheStore
+                    .GetMessagePageAsync(
+                        account.AccountId,
+                        folderId,
+                        skipMessageCount:
+                            0,
+                        maximumMessageCount:
+                            maximumMessageCount,
+                        cancellationToken:
+                            cancellationToken);
+
+            var cachedStates =
+                cachedMessages
+                    .Select(
+                        message =>
+                            new MailMessageStateData(
+                                UniqueId:
+                                    message.UniqueId,
+
+                                IsUnread:
+                                    message.IsUnread))
+                    .ToArray();
+
+            var exceptionType =
+                exception.GetType().FullName
+                ?? exception.GetType().Name;
+
+            _logger.LogWarning(
+                "Mail message state loaded from offline cache because the mail server is unavailable. MessageCount={MessageCount}, ExceptionType={ExceptionType}.",
+                cachedStates.Length,
+                exceptionType);
+
+            return new MailFolderMessageStateSnapshot(
+                FolderId:
+                    cachedFolderState.FolderId,
+
+                UidValidity:
+                    cachedFolderState.UidValidity,
+
+                Messages:
+                    cachedStates);
+        }
+    }
+
+    private async Task<MailFolderMessageStateSnapshot>
+        GetOnlineMessageStatesAsync(
+            MailAccount account,
+            string folderId,
+            int maximumMessageCount,
+            CancellationToken cancellationToken)
+    {
         using var client =
             await CreateAuthenticatedClientAsync(
                 account,
@@ -97,10 +218,8 @@ public sealed class ImapMailMessageStateSource
              * einem erfolgreich geöffneten IMAP-Ordner
              * übernommen.
              *
-             * Dadurch kann die nachgeschaltete Cache-Schicht
-             * dieselbe bereits geprüfte UIDVALIDITY verwenden,
-             * ohne hierfür eine zweite IMAP-Verbindung öffnen
-             * zu müssen.
+             * Ein Offline-Snapshot darf diese Online-Identität
+             * ausdrücklich nicht überschreiben.
              */
             MailFolderIdentityState.Set(
                 account.AccountId,
@@ -311,6 +430,43 @@ public sealed class ImapMailMessageStateSource
 
             throw;
         }
+    }
+
+    private static bool CanUseOfflineCache(
+        Exception exception,
+        CancellationToken cancellationToken)
+    {
+        /*
+         * Sicherheits- oder Authentifizierungsprobleme dürfen
+         * niemals durch lokale Cache-Daten verdeckt werden.
+         *
+         * Ein ungültiges Zertifikat oder falsches Passwort
+         * ist fachlich etwas völlig anderes als "kein Netz".
+         */
+        if (exception is AuthenticationException ||
+            exception is SslHandshakeException)
+        {
+            return false;
+        }
+
+        /*
+         * Ein vom Aufrufer gewünschter Abbruch ist ebenfalls
+         * kein Offline-Zustand.
+         *
+         * Ein interner Netzwerk-Timeout kann dagegen sinnvoll
+         * auf den letzten lokalen Snapshot zurückfallen.
+         */
+        if (exception is OperationCanceledException)
+        {
+            return
+                !cancellationToken
+                    .IsCancellationRequested;
+        }
+
+        return
+            exception is SocketException ||
+            exception is IOException ||
+            exception is TimeoutException;
     }
 
     private static void ValidateFolderId(
