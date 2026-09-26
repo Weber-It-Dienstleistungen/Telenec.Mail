@@ -138,10 +138,6 @@ public sealed class MainViewModel : BaseViewModel
             ? "\uE72B"
             : "\uE74D";
 
-    /*
-     * Diese Eigenschaft wird später direkt für den sichtbaren
-     * "Weitere 20 Nachrichten laden"-Button verwendet.
-     */
     public bool HasMoreMessages
     {
         get =>
@@ -165,13 +161,6 @@ public sealed class MainViewModel : BaseViewModel
         }
     }
 
-    /*
-     * Load-More verwendet bewusst einen eigenen Ladezustand.
-     *
-     * Der normale IsLoading-Zustand steuert die große
-     * Ordner-Ladeoberfläche. Beim Nachladen älterer Nachrichten
-     * soll die bereits sichtbare Liste dagegen stehen bleiben.
-     */
     public bool IsLoadingMoreMessages =>
         Volatile.Read(
             ref _messagePageLoadOperationState) != 0;
@@ -208,14 +197,6 @@ public sealed class MainViewModel : BaseViewModel
             _selectedFolder =
                 value;
 
-            /*
-             * Ein Ordnerwechsel beginnt bewusst wieder bei
-             * der ersten Seite.
-             *
-             * Dadurch halten wir nicht unnötig hunderte
-             * vollständige Nachrichten verschiedener Ordner
-             * gleichzeitig im Speicher.
-             */
             ResetMessagePagingState();
 
             OnPropertyChanged();
@@ -467,21 +448,6 @@ public sealed class MainViewModel : BaseViewModel
             cancellationToken);
     }
 
-    /*
-     * Lädt exakt die nächste Nachrichtenseite.
-     *
-     * Bestehende Bodies werden dabei nicht erneut über
-     * GetMessagePageAsync heruntergeladen.
-     *
-     * Vor und nach dem eigentlichen Seitenabruf prüfen wir
-     * jedoch den leichten UID-/Flag-Zustand der bereits
-     * sichtbaren Nachrichten.
-     *
-     * Dadurch erkennen wir, ob beispielsweise zwischenzeitlich
-     * eine neue Nachricht am Anfang des Ordners angekommen ist
-     * und das Offset dadurch nicht mehr zu unserer sichtbaren
-     * Liste passt.
-     */
     public async Task<bool> LoadMoreMessagesAsync(
         CancellationToken cancellationToken = default)
     {
@@ -521,16 +487,6 @@ public sealed class MainViewModel : BaseViewModel
             var currentlyLoadedCount =
                 Messages.Count;
 
-            /*
-             * Vorprüfung:
-             *
-             * Sind die aktuell sichtbaren Nachrichten noch
-             * exakt der aktuelle Anfang des Serverordners?
-             *
-             * Bei einer neu eingegangenen oder von einem
-             * anderen Client gelöschten Mail wäre das nicht
-             * mehr der Fall.
-             */
             var stateBeforePage =
                 await _mailMessageStateSource
                     .GetMessageStatesAsync(
@@ -565,11 +521,6 @@ public sealed class MainViewModel : BaseViewModel
                 return false;
             }
 
-            /*
-             * Erst nachdem der aktuelle Präfix bestätigt wurde,
-             * werden exakt die nächsten 20 vollständigen
-             * Nachrichten geladen.
-             */
             var page =
                 await _mailDataSource
                     .GetMessagePageAsync(
@@ -591,15 +542,6 @@ public sealed class MainViewModel : BaseViewModel
                 return false;
             }
 
-            /*
-             * Nachprüfung:
-             *
-             * Während des Abrufs der nächsten Bodies könnte
-             * sich der Ordner erneut verändert haben.
-             *
-             * In diesem Fall wird die geladene Seite verworfen
-             * und zuerst der echte Serverzustand synchronisiert.
-             */
             var stateAfterPage =
                 await _mailMessageStateSource
                     .GetMessageStatesAsync(
@@ -641,15 +583,6 @@ public sealed class MainViewModel : BaseViewModel
                             message.UniqueId)
                     .ToHashSet();
 
-            /*
-             * Eine Überschneidung sollte nach den beiden
-             * Präfixprüfungen nicht vorkommen.
-             *
-             * Falls der Serverzustand genau zwischen den
-             * Prüfungen verschoben wurde, behandeln wir eine
-             * Überschneidung trotzdem defensiv als Hinweis
-             * auf einen veralteten Paging-Zustand.
-             */
             if (page.Any(
                     message =>
                         existingUniqueIds.Contains(
@@ -678,13 +611,6 @@ public sealed class MainViewModel : BaseViewModel
                     message.UniqueId);
             }
 
-            /*
-             * Die gewünschte sichtbare Tiefe steigt immer um
-             * genau eine Seite.
-             *
-             * Diese Tiefe wird bei einer späteren normalen
-             * Synchronisation beibehalten.
-             */
             _loadedMessageLimit =
                 checked(
                     _loadedMessageLimit +
@@ -696,11 +622,6 @@ public sealed class MainViewModel : BaseViewModel
             if (page.Count <
                 MessagePageSize)
             {
-                /*
-                 * Eine unvollständige Seite bedeutet:
-                 * Zum Zeitpunkt des Serverabrufs war das Ende
-                 * des Ordners erreicht.
-                 */
                 HasMoreMessages =
                     false;
             }
@@ -709,7 +630,7 @@ public sealed class MainViewModel : BaseViewModel
                 UpdateHasMoreMessages();
             }
 
-            SetConnected();
+            SetSuccessfulLoadConnectionState();
 
             pageLoaded =
                 page.Count > 0;
@@ -723,11 +644,6 @@ public sealed class MainViewModel : BaseViewModel
         }
         catch (OverflowException)
         {
-            /*
-             * Praktisch nicht erreichbar, verhindert aber,
-             * dass ein theoretischer Integerüberlauf einen
-             * falschen Paging-Zustand erzeugt.
-             */
             HasMoreMessages =
                 false;
 
@@ -735,11 +651,6 @@ public sealed class MainViewModel : BaseViewModel
         }
         catch (Exception ex)
         {
-            /*
-             * Ein Fehler beim Nachladen darf die bereits
-             * sichtbaren Nachrichten nicht durch eine große
-             * Load-Error-Ansicht ersetzen.
-             */
             SetSynchronizationErrorState(
                 ex);
 
@@ -755,13 +666,6 @@ public sealed class MainViewModel : BaseViewModel
                     folder) &&
                 !cancellationToken.IsCancellationRequested)
             {
-                /*
-                 * Die eigentliche Paging-Operation ist bereits
-                 * beendet, bevor SynchronizeCoreAsync startet.
-                 *
-                 * Dadurch blockieren sich die beiden
-                 * Operationsguards nicht gegenseitig.
-                 */
                 await SynchronizeCoreAsync(
                     showUserFeedback: false,
                     cancellationToken);
@@ -844,23 +748,11 @@ public sealed class MainViewModel : BaseViewModel
                 IsEmptyFolder =
                     true;
 
-                SetConnected();
+                SetSuccessfulLoadConnectionState();
 
                 return;
             }
 
-            /*
-             * Anders als bisher synchronisieren wir nicht
-             * pauschal nur die ersten 20 Nachrichten.
-             *
-             * Hat der Benutzer beispielsweise bereits 60
-             * Nachrichten sichtbar gemacht, werden auch diese
-             * 60 UID-/Flag-Zustände geprüft.
-             *
-             * Bodies werden nur dann erneut geladen, wenn sich
-             * der sichtbare Serverzustand tatsächlich geändert
-             * hat.
-             */
             var synchronizationMessageLimit =
                 Math.Max(
                     _loadedMessageLimit,
@@ -896,22 +788,11 @@ public sealed class MainViewModel : BaseViewModel
 
             if (uidValidityChanged)
             {
-                /*
-                 * Wenn UIDVALIDITY wechselt, sind alle bisher
-                 * bekannten UIDs dieses Ordners ungültig.
-                 *
-                 * Alte Nachrichtenobjekte dürfen daher nicht
-                 * weiterverwendet werden.
-                 */
                 SetSelectedMessageWithoutReadMarking(
                     null);
 
                 Messages.Clear();
 
-                /*
-                 * Eine neue Ordneridentität beginnt bewusst
-                 * wieder mit der ersten Seite.
-                 */
                 _loadedMessageLimit =
                     MessagePageSize;
 
@@ -972,7 +853,7 @@ public sealed class MainViewModel : BaseViewModel
 
             UpdateHasMoreMessages();
 
-            SetConnected();
+            SetSuccessfulLoadConnectionState();
 
             _logger.LogInformation(
                 "Mailbox synchronization completed successfully. VisibleMessages={VisibleMessageCount}.",
@@ -1189,14 +1070,6 @@ public sealed class MainViewModel : BaseViewModel
         var trashFolder =
             _selectedFolder;
 
-        /*
-         * Permanentes Löschen darf ausschließlich aus dem
-         * aktuell ausgewählten Papierkorb ausgelöst werden.
-         *
-         * Außerdem führen wir während eines Ordnerlade-,
-         * Paging- oder Synchronisierungsvorgangs keine
-         * irreversible Operation aus.
-         */
         if (trashFolder is null ||
             !IsTrashFolderSelected ||
             IsLoading ||
@@ -1207,13 +1080,6 @@ public sealed class MainViewModel : BaseViewModel
             return false;
         }
 
-        /*
-         * Für jede irreversible Operation muss die zum
-         * aktuell geladenen Ordner gehörende UIDVALIDITY
-         * bekannt sein.
-         *
-         * Ohne diese Information wird nicht gelöscht.
-         */
         if (!_uidValidityByFolder.TryGetValue(
                 trashFolder.FolderId,
                 out var expectedUidValidity) ||
@@ -1238,14 +1104,6 @@ public sealed class MainViewModel : BaseViewModel
                         message.UniqueId)
                 .ToList();
 
-        /*
-         * Wir verwenden denselben Operationsschutz wie für
-         * Move/Undo/Restore.
-         *
-         * Dadurch kann innerhalb dieses ViewModels nicht
-         * gleichzeitig eine zweite Nachrichtenmutation
-         * gestartet werden.
-         */
         if (!TryBeginMailMoveOperation())
         {
             return false;
@@ -1260,14 +1118,6 @@ public sealed class MainViewModel : BaseViewModel
                     uniqueIds,
                     cancellationToken);
 
-            /*
-             * Nach erfolgreichem Permanent Delete existiert
-             * bewusst kein Undo.
-             *
-             * Auch ein eventuell älterer Move-Zustand wird
-             * verworfen, damit kein Undo mehr auf inzwischen
-             * endgültig entfernte UIDs zeigen kann.
-             */
             SetLastMoveOperation(
                 null);
 
@@ -1278,25 +1128,9 @@ public sealed class MainViewModel : BaseViewModel
         }
         catch
         {
-            /*
-             * Bei einem Verbindungsabbruch kann eine
-             * irreversible Serveroperation bereits erfolgreich
-             * gewesen sein, obwohl die Clientseite keine
-             * eindeutige Bestätigung mehr erhalten hat.
-             *
-             * Deshalb behalten wir in diesem Fall ebenfalls
-             * keinen alten Undo-Zustand.
-             */
             SetLastMoveOperation(
                 null);
 
-            /*
-             * Best effort: Nach einem Fehler versuchen wir,
-             * den tatsächlichen Serverzustand neu einzulesen.
-             *
-             * Wir wiederholen die Löschoperation ausdrücklich
-             * NICHT automatisch.
-             */
             try
             {
                 await ReloadAsync(
@@ -1304,10 +1138,6 @@ public sealed class MainViewModel : BaseViewModel
             }
             catch
             {
-                /*
-                 * Der ursprüngliche Fehler der
-                 * Permanent-Delete-Operation bleibt maßgeblich.
-                 */
             }
 
             throw;
@@ -1770,10 +1600,6 @@ public sealed class MainViewModel : BaseViewModel
             return;
         }
 
-        /*
-         * Die gespeicherten Undo-UIDs sind nach einem
-         * UIDVALIDITY-Wechsel nicht mehr vertrauenswürdig.
-         */
         SetLastMoveOperation(
             null);
     }
@@ -1902,7 +1728,7 @@ public sealed class MainViewModel : BaseViewModel
 
             if (_selectedFolder is null)
             {
-                SetConnected();
+                SetSuccessfulLoadConnectionState();
 
                 IsLoading =
                     false;
@@ -1981,10 +1807,6 @@ public sealed class MainViewModel : BaseViewModel
         var token =
             loadSource.Token;
 
-        /*
-         * Jeder vollständige Ordnerwechsel beginnt wieder mit
-         * der ersten Seite.
-         */
         ResetMessagePagingState();
 
         BeginLoading(
@@ -1998,14 +1820,6 @@ public sealed class MainViewModel : BaseViewModel
 
         try
         {
-            /*
-             * UIDVALIDITY wird bewusst bereits beim normalen
-             * Laden des Ordners erfasst.
-             *
-             * Für spätere irreversible Aktionen dürfen wir
-             * niemals mit UIDs arbeiten, deren UIDVALIDITY
-             * unbekannt ist.
-             */
             var stateSnapshot =
                 await _mailMessageStateSource
                     .GetMessageStatesAsync(
@@ -2069,13 +1883,6 @@ public sealed class MainViewModel : BaseViewModel
                                 preferredMessageId));
             }
 
-            /*
-             * Nach einem UIDVALIDITY-Wechsel wird absichtlich
-             * keine zuvor ausgewählte Nachricht rekonstruiert.
-             *
-             * Eine numerisch gleiche UID könnte jetzt eine
-             * andere Nachricht bezeichnen.
-             */
             SetSelectedMessageWithoutReadMarking(
                 preferredMessage);
 
@@ -2084,7 +1891,7 @@ public sealed class MainViewModel : BaseViewModel
 
             UpdateHasMoreMessages();
 
-            SetConnected();
+            SetSuccessfulLoadConnectionState();
         }
         catch (OperationCanceledException)
             when (token.IsCancellationRequested)
@@ -2158,14 +1965,6 @@ public sealed class MainViewModel : BaseViewModel
                    currentUidValidity;
     }
 
-    /*
-     * Prüft nicht nur die Menge, sondern bewusst auch die
-     * Reihenfolge.
-     *
-     * Paging mit Offset ist nur dann sinnvoll, wenn die
-     * sichtbaren Nachrichten noch exakt den Anfang der
-     * aktuellen serverseitigen Sortierreihenfolge bilden.
-     */
     private bool DoesStateSnapshotMatchLoadedPrefix(
         MailFolderMessageStateSnapshot snapshot)
     {
@@ -2400,12 +2199,6 @@ public sealed class MainViewModel : BaseViewModel
             return;
         }
 
-        /*
-         * Wenn der bisherige ausgewählte Ordner serverseitig
-         * verschwunden ist und wir auf einen anderen Ordner
-         * wechseln müssen, beginnt auch dessen Paging wieder
-         * bei der ersten Seite.
-         */
         ResetMessagePagingState();
 
         _selectedFolder =
@@ -2721,13 +2514,25 @@ public sealed class MainViewModel : BaseViewModel
             true;
     }
 
-    private void SetConnected()
+    private void SetSuccessfulLoadConnectionState()
     {
         HasLoadError =
             false;
 
         LoadErrorMessage =
             string.Empty;
+
+        if (MailboxConnectivityState
+            .IsOfflineCacheActive)
+        {
+            ConnectionState =
+                MailConnectionState.Offline;
+
+            ConnectionStatusText =
+                "Offline – lokale Daten";
+
+            return;
+        }
 
         ConnectionState =
             MailConnectionState.Connected;

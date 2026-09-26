@@ -99,11 +99,20 @@ public sealed class ImapMailMessageStateSource
 
         try
         {
-            return await GetOnlineMessageStatesAsync(
-                account,
-                folderId,
-                maximumMessageCount,
-                cancellationToken);
+            var snapshot =
+                await GetOnlineMessageStatesAsync(
+                    account,
+                    folderId,
+                    maximumMessageCount,
+                    cancellationToken);
+
+            if (!MailSortState.HasTemporaryOverride)
+            {
+                MailboxConnectivityState
+                    .MarkOnline();
+            }
+
+            return snapshot;
         }
         catch (OperationCanceledException)
             when (cancellationToken.IsCancellationRequested)
@@ -165,6 +174,9 @@ public sealed class ImapMailMessageStateSource
                                 IsUnread:
                                     message.IsUnread))
                     .ToArray();
+
+            MailboxConnectivityState
+                .MarkOfflineCacheActive();
 
             var exceptionType =
                 exception.GetType().FullName

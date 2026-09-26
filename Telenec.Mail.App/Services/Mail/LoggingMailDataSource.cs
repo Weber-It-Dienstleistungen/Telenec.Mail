@@ -82,6 +82,9 @@ public sealed class LoggingMailDataSource :
                     .GetFoldersAsync(
                         cancellationToken);
 
+            MailboxConnectivityState
+                .MarkOnline();
+
             await PersistFolderCacheAsync(
                 folders,
                 cancellationToken);
@@ -109,6 +112,9 @@ public sealed class LoggingMailDataSource :
 
                 throw;
             }
+
+            MailboxConnectivityState
+                .MarkOfflineCacheActive();
 
             var exceptionType =
                 exception.GetType().FullName
@@ -192,6 +198,9 @@ public sealed class LoggingMailDataSource :
                     cachedMessages,
                     cancellationToken);
 
+            MailboxConnectivityState
+                .MarkOfflineCacheActive();
+
             var exceptionType =
                 exception.GetType().FullName
                 ?? exception.GetType().Name;
@@ -261,6 +270,9 @@ public sealed class LoggingMailDataSource :
                 await AttachPersistedReadReceiptsAsync(
                     cachedMessages,
                     cancellationToken);
+
+            MailboxConnectivityState
+                .MarkOfflineCacheActive();
 
             var exceptionType =
                 exception.GetType().FullName
