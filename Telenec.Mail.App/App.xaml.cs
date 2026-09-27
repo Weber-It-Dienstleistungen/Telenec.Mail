@@ -62,13 +62,16 @@ public partial class App : Application
                      * ImapMailDataSource bleibt die einzige
                      * produktive IMAP-Datenquelle.
                      *
-                     * IMailDataSource zeigt jedoch auf eine
-                     * dünne Logging-Hülle.
+                     * Darüber liegen bewusst zwei dünne
+                     * Schichten:
                      *
-                     * Diese reicht alle normalen Lese- und
-                     * Statusoperationen unverändert weiter und
-                     * instrumentiert ausschließlich
-                     * Nachrichtenmutationen.
+                     * LoggingMailDataSource übernimmt Logging,
+                     * Read-Receipt-Anreicherung und Offline-
+                     * Cache-Fallback.
+                     *
+                     * OfflineGuardMailDataSource verhindert
+                     * serververändernde Aktionen, solange
+                     * lokale Offline-Daten angezeigt werden.
                      */
                     services.AddSingleton<
                         ImapMailDataSource>();
@@ -77,11 +80,14 @@ public partial class App : Application
                         LoggingMailDataSource>();
 
                     services.AddSingleton<
+                        OfflineGuardMailDataSource>();
+
+                    services.AddSingleton<
                         IMailDataSource>(
                         serviceProvider =>
                             serviceProvider
                                 .GetRequiredService<
-                                    LoggingMailDataSource>());
+                                    OfflineGuardMailDataSource>());
 
                     services.AddSingleton<
                         IMailMessageStateSource,
@@ -104,13 +110,18 @@ public partial class App : Application
                         MailKitSearchService>();
 
                     /*
-                     * Auch Permanent Delete verwendet eine
-                     * reine Logging-Hülle.
+                     * Permanent Delete bleibt weiterhin durch
+                     * seine Logging-Hülle instrumentiert.
+                     *
+                     * Zusätzlich verhindert die äußere
+                     * OfflineGuard-Hülle irreversible
+                     * Operationen auf Basis eines lokalen
+                     * Offline-Snapshots.
                      *
                      * Die sicherheitskritische und bereits
                      * getestete UIDPLUS-/UIDVALIDITY-Logik in
-                     * MailKitPermanentDeleteService wird
-                     * dadurch nicht verändert.
+                     * MailKitPermanentDeleteService bleibt
+                     * dabei unverändert.
                      */
                     services.AddSingleton<
                         MailKitPermanentDeleteService>();
@@ -119,11 +130,14 @@ public partial class App : Application
                         LoggingPermanentDeleteService>();
 
                     services.AddSingleton<
+                        OfflineGuardPermanentDeleteService>();
+
+                    services.AddSingleton<
                         IMailPermanentDeleteService>(
                         serviceProvider =>
                             serviceProvider
                                 .GetRequiredService<
-                                    LoggingPermanentDeleteService>());
+                                    OfflineGuardPermanentDeleteService>());
 
                     services.AddSingleton<
                         IMailSendService,
