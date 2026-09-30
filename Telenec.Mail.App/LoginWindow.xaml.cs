@@ -14,10 +14,14 @@ public partial class LoginWindow : Window
     {
         InitializeComponent();
 
-        _viewModel = viewModel;
-        _mainWindow = mainWindow;
+        _viewModel =
+            viewModel;
 
-        DataContext = _viewModel;
+        _mainWindow =
+            mainWindow;
+
+        DataContext =
+            _viewModel;
     }
 
     public void PrepareKnownAccount(
@@ -57,5 +61,18 @@ public partial class LoginWindow : Window
         _mainWindow.Show();
 
         Close();
+
+        /*
+         * Auch bei der erstmaligen Einrichtung bzw. einem
+         * manuellen Login muss dieselbe freiwillige
+         * Statistikentscheidung geprüft werden wie beim
+         * automatischen Programmstart.
+         */
+        if (Application.Current is App app)
+        {
+            await app
+                .ShowUsageStatisticsConsentIfNeededAsync(
+                    _mainWindow);
+        }
     }
 }

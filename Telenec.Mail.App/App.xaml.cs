@@ -491,6 +491,24 @@ public partial class App : Application
         ShutdownMode =
             ShutdownMode.OnMainWindowClose;
 
+        /*
+         * Die freiwillige Statistikentscheidung wird bewusst
+         * erst geprüft, nachdem das eigentliche Hauptfenster
+         * verfügbar ist.
+         *
+         * Dadurch bleibt Telenec Mail unabhängig von der
+         * Entscheidung vollständig nutzbar.
+         */
+        await ShowUsageStatisticsConsentIfNeededAsync(
+            mainWindow);
+
+        /*
+         * Release Notes erscheinen erst nach einer eventuell
+         * notwendigen Statistikentscheidung.
+         *
+         * Dadurch können niemals zwei modale Fenster
+         * gleichzeitig um den Fokus konkurrieren.
+         */
         ShowPendingReleaseNotes(
             mainWindow);
     }
