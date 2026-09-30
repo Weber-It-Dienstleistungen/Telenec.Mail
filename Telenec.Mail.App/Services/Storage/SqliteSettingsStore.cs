@@ -101,6 +101,42 @@ public sealed class SqliteSettingsStore
             cancellationToken);
     }
 
+    public async Task DeleteApplicationSettingAsync(
+        string key,
+        CancellationToken cancellationToken = default)
+    {
+        ValidateKey(
+            key);
+
+        await using var connection =
+            CreateConnection();
+
+        await connection.OpenAsync(
+            cancellationToken);
+
+        await using var command =
+            connection.CreateCommand();
+
+        command.CommandText =
+            """
+            DELETE FROM ApplicationSettings
+            WHERE SettingKey = $settingKey;
+            """;
+
+        command.Parameters.AddWithValue(
+            "$settingKey",
+            key.Trim());
+
+        /*
+         * Die Löschung ist bewusst idempotent.
+         *
+         * Existiert der Schlüssel nicht, ist der gewünschte
+         * Endzustand bereits erreicht und es ist kein Fehler.
+         */
+        await command.ExecuteNonQueryAsync(
+            cancellationToken);
+    }
+
     public async Task<string?> GetAccountSettingAsync(
         Guid accountId,
         string key,

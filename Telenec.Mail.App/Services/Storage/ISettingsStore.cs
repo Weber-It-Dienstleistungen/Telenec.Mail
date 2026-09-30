@@ -11,6 +11,10 @@ public interface ISettingsStore
         string value,
         CancellationToken cancellationToken = default);
 
+    Task DeleteApplicationSettingAsync(
+        string key,
+        CancellationToken cancellationToken = default);
+
     Task<string?> GetAccountSettingAsync(
         Guid accountId,
         string key,

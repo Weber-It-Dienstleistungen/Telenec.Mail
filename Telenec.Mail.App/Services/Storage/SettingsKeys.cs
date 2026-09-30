@@ -41,4 +41,23 @@ public static class SettingsKeys
 
     public const string ApplicationStartWithWindowsEnabled =
         "Application.Startup.StartWithWindows.Enabled";
+
+    /*
+     * Freiwillige Nutzungsstatistik:
+     *
+     * Der Einwilligungsstatus gilt für die gesamte lokale
+     * Installation und ist ausdrücklich nicht an ein
+     * Mailkonto gebunden.
+     *
+     * Ein fehlender Wert bedeutet später:
+     * Der Benutzer wurde noch nicht gefragt.
+     *
+     * Die Installations-ID darf erst erzeugt und gespeichert
+     * werden, nachdem der Benutzer ausdrücklich zugestimmt hat.
+     */
+    public const string UsageStatisticsConsentStatus =
+        "UsageStatistics.ConsentStatus";
+
+    public const string UsageStatisticsInstallationId =
+        "UsageStatistics.InstallationId";
 }
