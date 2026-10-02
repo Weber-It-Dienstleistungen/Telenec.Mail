@@ -74,6 +74,57 @@ public sealed class ReleaseNotesService
     {
         return version switch
         {
+            "0.1.0-test.8" =>
+                new ReleaseNotesInfo(
+                    Version:
+                        "0.1.0-test.8",
+                    Title:
+                        "Telenec Mail wurde aktualisiert",
+                    Intro:
+                        "Diese Testversion erweitert Telenec Mail vor allem bei den " +
+                        "Einstellungen, der Automatisierung und der Nutzung ohne aktive " +
+                        "Serververbindung. Zusätzlich wurde die freiwillige " +
+                        "Nutzungsstatistik eingeführt.",
+                    Changes:
+                    [
+                        "Signaturen können jetzt direkt in den Einstellungen verwaltet " +
+                        "und formatiert werden. Sie werden automatisch bei neuen " +
+                        "Nachrichten sowie beim Antworten und Weiterleiten eingefügt.",
+
+                        "Telenec Mail zeigt jetzt den verfügbaren Speicherplatz des " +
+                        "Postfachs an. Zusätzlich können Nachrichten global nach Name " +
+                        "und Datum auf- oder absteigend sortiert werden.",
+
+                        "Neue Nachrichten können über Windows-Benachrichtigungen gemeldet " +
+                        "werden. Telenec Mail unterstützt außerdem den Betrieb im " +
+                        "Infobereich der Taskleiste sowie einen optionalen automatischen " +
+                        "Start mit Windows.",
+
+                        "Mit den neuen Mailregeln können eingehende Nachrichten " +
+                        "automatisch verarbeitet werden. Regeln lassen sich verwalten, " +
+                        "manuell auf vorhandene Nachrichten anwenden und bei neuen " +
+                        "Nachrichten automatisch ausführen.",
+
+                        "Der Offline-Betrieb wurde deutlich erweitert. Bereits geladene " +
+                        "Ordner und Nachrichten können bei einer unterbrochenen Verbindung " +
+                        "weiter angezeigt werden. Aktionen, die das Postfach auf dem Server " +
+                        "verändern würden, werden im Offline-Modus sicher verhindert.",
+
+                        "Neu ist außerdem eine freiwillige Nutzungsstatistik. Beim ersten " +
+                        "Start nach dem Update kann selbst entschieden werden, ob daran " +
+                        "teilgenommen werden soll. Die Einstellung kann jederzeit geändert " +
+                        "und die Teilnahme widerrufen werden.",
+
+                        "Für die Nutzungsstatistik werden ausschließlich eine zufällig " +
+                        "erzeugte Installationskennung, die verwendete Programmversion und " +
+                        "die Version der Einwilligung übertragen. E-Mail-Adressen, " +
+                        "Nachrichten, Kontakte, Kalenderdaten oder andere Inhalte werden " +
+                        "nicht übertragen. Bei einem Widerruf wird der zugehörige " +
+                        "Statistikdatensatz serverseitig gelöscht."
+                    ],
+                    Footer:
+                        "Vielen Dank fürs Testen und für euer Feedback!"),
+
             "0.1.0-test.7" =>
                 new ReleaseNotesInfo(
                     Version:
