@@ -8,6 +8,15 @@ namespace Telenec.Mail.App;
 
 public partial class App
 {
+    private CancellationTokenSource?
+        _usageStatisticsHeartbeatCancellation;
+
+    private Task?
+        _usageStatisticsHeartbeatTask;
+
+    private bool
+        _usageStatisticsExitHandlerRegistered;
+
     internal async Task
         ShowUsageStatisticsConsentIfNeededAsync(
             Window owner)
@@ -17,6 +26,9 @@ public partial class App
 
         UsageStatisticsSettingsService
             usageStatisticsSettingsService;
+
+        UsageStatisticsHeartbeatService
+            heartbeatService;
 
         UsageStatisticsConsentStatus
             consentStatus;
@@ -32,6 +44,11 @@ public partial class App
                 new UsageStatisticsSettingsService(
                     settingsStore);
 
+            heartbeatService =
+                new UsageStatisticsHeartbeatService(
+                    usageStatisticsSettingsService,
+                    new UsageStatisticsApiClient());
+
             consentStatus =
                 await usageStatisticsSettingsService
                     .GetConsentStatusAsync();
@@ -42,10 +59,6 @@ public partial class App
              * Kann der lokale Zustimmungsstatus nicht sicher
              * ermittelt werden, wird kein Dialog erzwungen und
              * insbesondere keine Zustimmung angenommen.
-             *
-             * Spätere Statistikübertragungen dürfen ohnehin
-             * ausschließlich bei eindeutigem Status Granted
-             * stattfinden.
              */
             Trace.WriteLine(
                 $"Could not load usage statistics consent state: {exception}");
@@ -53,8 +66,30 @@ public partial class App
             return;
         }
 
-        if (consentStatus !=
-            UsageStatisticsConsentStatus.Unknown)
+        /*
+         * Bereits erteilte Zustimmung:
+         *
+         * Bei jedem normalen Programmstart wird unmittelbar
+         * ein Heartbeat gesendet.
+         *
+         * Danach hält ein sechs-stündlicher Hintergrundlauf
+         * LastSeen auch bei über mehrere Tage geöffneten
+         * Clients aktuell.
+         */
+        if (consentStatus ==
+            UsageStatisticsConsentStatus.Granted)
+        {
+            await heartbeatService
+                .TrySendHeartbeatAsync();
+
+            EnsureUsageStatisticsHeartbeatLoopStarted(
+                heartbeatService);
+
+            return;
+        }
+
+        if (consentStatus ==
+            UsageStatisticsConsentStatus.Declined)
         {
             return;
         }
@@ -78,22 +113,32 @@ public partial class App
             if (consentGranted)
             {
                 /*
-                 * Nur eine ausdrücklich positive Entscheidung
-                 * darf die zufällige Installations-ID erzeugen.
+                 * Erst die ausdrückliche positive Entscheidung
+                 * erzeugt bzw. aktiviert die Installations-ID.
                  */
                 await usageStatisticsSettingsService
                     .GrantConsentAsync();
+
+                /*
+                 * Direkt nach der Zustimmung wird der erste
+                 * Heartbeat gesendet.
+                 *
+                 * Ein Fehler hierbei ändert die gespeicherte
+                 * Einwilligung nicht und beeinträchtigt den
+                 * Mailclient nicht.
+                 */
+                await heartbeatService
+                    .TrySendHeartbeatAsync();
+
+                EnsureUsageStatisticsHeartbeatLoopStarted(
+                    heartbeatService);
             }
             else
             {
                 /*
                  * "Nicht teilnehmen", Escape und das Schließen
-                 * des Dialogs über X werden gleichermaßen als
+                 * über X werden gleichermaßen als
                  * Nicht-Zustimmung behandelt.
-                 *
-                 * Dadurch entsteht in keinem dieser Fälle eine
-                 * Installations-ID und die Frage erscheint beim
-                 * nächsten Start nicht erneut.
                  */
                 await usageStatisticsSettingsService
                     .DeclineConsentAsync();
@@ -111,6 +156,61 @@ public partial class App
                 "Telenec Mail",
                 MessageBoxButton.OK,
                 MessageBoxImage.Warning);
+        }
+    }
+
+    private void EnsureUsageStatisticsHeartbeatLoopStarted(
+        UsageStatisticsHeartbeatService heartbeatService)
+    {
+        if (_usageStatisticsHeartbeatTask is
+            {
+                IsCompleted: false
+            })
+        {
+            return;
+        }
+
+        _usageStatisticsHeartbeatCancellation?
+            .Dispose();
+
+        _usageStatisticsHeartbeatCancellation =
+            new CancellationTokenSource();
+
+        _usageStatisticsHeartbeatTask =
+            heartbeatService
+                .RunPeriodicHeartbeatAsync(
+                    _usageStatisticsHeartbeatCancellation.Token);
+
+        /*
+         * Der Exit-Handler wird genau einmal registriert.
+         *
+         * Dadurch wird der Timer beim normalen Programmende
+         * beendet, ohne den bestehenden App.OnExit-Code
+         * verändern zu müssen.
+         */
+        if (!_usageStatisticsExitHandlerRegistered)
+        {
+            Exit +=
+                (_, _) =>
+                {
+                    try
+                    {
+                        _usageStatisticsHeartbeatCancellation?
+                            .Cancel();
+                    }
+                    catch
+                    {
+                    }
+
+                    _usageStatisticsHeartbeatCancellation?
+                        .Dispose();
+
+                    _usageStatisticsHeartbeatCancellation =
+                        null;
+                };
+
+            _usageStatisticsExitHandlerRegistered =
+                true;
         }
     }
 }
