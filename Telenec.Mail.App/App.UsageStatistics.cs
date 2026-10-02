@@ -27,11 +27,11 @@ public partial class App
         UsageStatisticsSettingsService
             usageStatisticsSettingsService;
 
-        UsageStatisticsHeartbeatService
-            heartbeatService;
-
         UsageStatisticsConsentStatus
             consentStatus;
+
+        Guid?
+            pendingRevokeInstallationId;
 
         try
         {
@@ -44,10 +44,28 @@ public partial class App
                 new UsageStatisticsSettingsService(
                     settingsStore);
 
-            heartbeatService =
-                new UsageStatisticsHeartbeatService(
+            var apiClient =
+                new UsageStatisticsApiClient();
+
+            var revocationService =
+                new UsageStatisticsRevocationService(
                     usageStatisticsSettingsService,
-                    new UsageStatisticsApiClient());
+                    apiClient);
+
+            /*
+             * Ein eventuell früher fehlgeschlagener Widerruf
+             * wird bei jedem normalen Programmstart erneut
+             * versucht.
+             *
+             * Netzwerkfehler blockieren den Programmstart
+             * nicht.
+             */
+            await revocationService
+                .TryProcessPendingRevokeAsync();
+
+            pendingRevokeInstallationId =
+                await usageStatisticsSettingsService
+                    .GetPendingRevokeInstallationIdAsync();
 
             consentStatus =
                 await usageStatisticsSettingsService
@@ -67,23 +85,19 @@ public partial class App
         }
 
         /*
-         * Bereits erteilte Zustimmung:
-         *
-         * Bei jedem normalen Programmstart wird unmittelbar
-         * ein Heartbeat gesendet.
-         *
-         * Danach hält ein sechs-stündlicher Hintergrundlauf
-         * LastSeen auch bei über mehrere Tage geöffneten
-         * Clients aktuell.
+         * Solange ein Widerruf noch aussteht, darf unabhängig
+         * von einem eventuell inkonsistenten älteren
+         * Zustimmungswert kein neuer Heartbeat gesendet werden.
          */
+        if (pendingRevokeInstallationId.HasValue)
+        {
+            return;
+        }
+
         if (consentStatus ==
             UsageStatisticsConsentStatus.Granted)
         {
-            await heartbeatService
-                .TrySendHeartbeatAsync();
-
-            EnsureUsageStatisticsHeartbeatLoopStarted(
-                heartbeatService);
+            await StartUsageStatisticsHeartbeatIfEnabledAsync();
 
             return;
         }
@@ -119,19 +133,7 @@ public partial class App
                 await usageStatisticsSettingsService
                     .GrantConsentAsync();
 
-                /*
-                 * Direkt nach der Zustimmung wird der erste
-                 * Heartbeat gesendet.
-                 *
-                 * Ein Fehler hierbei ändert die gespeicherte
-                 * Einwilligung nicht und beeinträchtigt den
-                 * Mailclient nicht.
-                 */
-                await heartbeatService
-                    .TrySendHeartbeatAsync();
-
-                EnsureUsageStatisticsHeartbeatLoopStarted(
-                    heartbeatService);
+                await StartUsageStatisticsHeartbeatIfEnabledAsync();
             }
             else
             {
@@ -139,6 +141,10 @@ public partial class App
                  * "Nicht teilnehmen", Escape und das Schließen
                  * über X werden gleichermaßen als
                  * Nicht-Zustimmung behandelt.
+                 *
+                 * Da noch keine Statistikübertragung
+                 * stattgefunden hat, ist hier kein
+                 * serverseitiger Revoke erforderlich.
                  */
                 await usageStatisticsSettingsService
                     .DeclineConsentAsync();
@@ -156,6 +162,56 @@ public partial class App
                 "Telenec Mail",
                 MessageBoxButton.OK,
                 MessageBoxImage.Warning);
+        }
+    }
+
+    internal async Task
+        StartUsageStatisticsHeartbeatIfEnabledAsync()
+    {
+        try
+        {
+            var settingsStore =
+                _host.Services
+                    .GetRequiredService<
+                        ISettingsStore>();
+
+            var settingsService =
+                new UsageStatisticsSettingsService(
+                    settingsStore);
+
+            var pendingRevokeInstallationId =
+                await settingsService
+                    .GetPendingRevokeInstallationIdAsync();
+
+            /*
+             * Ein ausstehender Widerruf sperrt jeden neuen
+             * Heartbeat, bis er abgeschlossen wurde.
+             */
+            if (pendingRevokeInstallationId.HasValue)
+            {
+                return;
+            }
+
+            var heartbeatService =
+                new UsageStatisticsHeartbeatService(
+                    settingsService,
+                    new UsageStatisticsApiClient());
+
+            await heartbeatService
+                .TrySendHeartbeatAsync();
+
+            EnsureUsageStatisticsHeartbeatLoopStarted(
+                heartbeatService);
+        }
+        catch (Exception exception)
+        {
+            /*
+             * Auch Fehler beim Start der optionalen
+             * Statistikfunktion dürfen den Mailclient
+             * niemals beeinträchtigen.
+             */
+            Trace.WriteLine(
+                $"Could not start usage statistics heartbeat: {exception}");
         }
     }
 
@@ -181,13 +237,6 @@ public partial class App
                 .RunPeriodicHeartbeatAsync(
                     _usageStatisticsHeartbeatCancellation.Token);
 
-        /*
-         * Der Exit-Handler wird genau einmal registriert.
-         *
-         * Dadurch wird der Timer beim normalen Programmende
-         * beendet, ohne den bestehenden App.OnExit-Code
-         * verändern zu müssen.
-         */
         if (!_usageStatisticsExitHandlerRegistered)
         {
             Exit +=

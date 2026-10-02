@@ -49,7 +49,7 @@ public static class SettingsKeys
      * Installation und ist ausdrücklich nicht an ein
      * Mailkonto gebunden.
      *
-     * Ein fehlender Wert bedeutet später:
+     * Ein fehlender Wert bedeutet:
      * Der Benutzer wurde noch nicht gefragt.
      *
      * Die Installations-ID darf erst erzeugt und gespeichert
@@ -60,4 +60,17 @@ public static class SettingsKeys
 
     public const string UsageStatisticsInstallationId =
         "UsageStatistics.InstallationId";
+
+    /*
+     * Wird eine bereits erteilte Einwilligung widerrufen,
+     * muss die bisherige Installations-ID so lange lokal
+     * erhalten bleiben, bis der serverseitige Revoke
+     * erfolgreich bestätigt wurde.
+     *
+     * Dieser Wert ist ausschließlich ein lokaler
+     * Wiederholungsmarker und wird nach erfolgreichem
+     * Widerruf gelöscht.
+     */
+    public const string UsageStatisticsPendingRevokeInstallationId =
+        "UsageStatistics.PendingRevokeInstallationId";
 }

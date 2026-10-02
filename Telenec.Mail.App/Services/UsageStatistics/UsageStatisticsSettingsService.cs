@@ -52,12 +52,6 @@ public sealed class UsageStatisticsSettingsService
         /*
          * Ein fehlender oder unbekannter Wert wird bewusst
          * nicht als Zustimmung interpretiert.
-         *
-         * Damit bleibt das Verhalten auch bei beschädigten
-         * oder manuell veränderten Programmeinstellungen
-         * datenschutzfreundlich:
-         *
-         * Keine eindeutige Zustimmung = keine Statistik.
          */
         return UsageStatisticsConsentStatus
             .Unknown;
@@ -74,9 +68,6 @@ public sealed class UsageStatisticsSettingsService
          * Die Installations-ID darf für nachgelagerte
          * Statistikfunktionen ausschließlich sichtbar sein,
          * wenn eine ausdrückliche Zustimmung vorliegt.
-         *
-         * Selbst ein eventuell verwaister lokaler Wert wird
-         * bei Unknown oder Declined daher nicht ausgegeben.
          */
         if (consentStatus !=
             UsageStatisticsConsentStatus.Granted)
@@ -88,23 +79,66 @@ public sealed class UsageStatisticsSettingsService
             cancellationToken);
     }
 
+    public async Task<Guid?> GetPendingRevokeInstallationIdAsync(
+        CancellationToken cancellationToken = default)
+    {
+        return await GetStoredGuidAsync(
+            SettingsKeys
+                .UsageStatisticsPendingRevokeInstallationId,
+            cancellationToken);
+    }
+
     public async Task<Guid> GrantConsentAsync(
         CancellationToken cancellationToken = default)
     {
         /*
-         * Diese Methode darf ausschließlich als Folge einer
-         * ausdrücklichen positiven Benutzerentscheidung
-         * aufgerufen werden.
+         * Ein noch nicht abgeschlossener alter Widerruf muss
+         * zuerst serverseitig verarbeitet werden.
          *
-         * Erst an dieser Stelle darf überhaupt eine zufällige
-         * Installations-ID entstehen.
+         * Dadurch kann eine alte pseudonyme Installation
+         * nicht versehentlich mit einer neuen Einwilligung
+         * vermischt werden.
          */
-        var installationId =
-            await GetStoredInstallationIdAsync(
+        var pendingRevokeInstallationId =
+            await GetPendingRevokeInstallationIdAsync(
                 cancellationToken);
+
+        if (pendingRevokeInstallationId.HasValue)
+        {
+            throw new InvalidOperationException(
+                "Ein vorheriger Widerruf der Nutzungsstatistik ist noch nicht abgeschlossen.");
+        }
+
+        var previousConsentStatus =
+            await GetConsentStatusAsync(
+                cancellationToken);
+
+        Guid? installationId = null;
+
+        /*
+         * Nur eine bereits aktive Einwilligung darf ihre
+         * bestehende Installations-ID behalten.
+         *
+         * Nach einer früheren Ablehnung oder einem Widerruf
+         * entsteht bei erneuter Zustimmung bewusst eine neue
+         * zufällige ID.
+         */
+        if (previousConsentStatus ==
+            UsageStatisticsConsentStatus.Granted)
+        {
+            installationId =
+                await GetStoredInstallationIdAsync(
+                    cancellationToken);
+        }
 
         if (!installationId.HasValue)
         {
+            await _settingsStore
+                .DeleteApplicationSettingAsync(
+                    SettingsKeys
+                        .UsageStatisticsInstallationId,
+                    cancellationToken);
+
             installationId =
                 Guid.NewGuid();
 
@@ -120,9 +154,9 @@ public sealed class UsageStatisticsSettingsService
          * Die ID wird bewusst vor dem Zustimmungsstatus
          * gespeichert.
          *
-         * Falls das Schreiben des Status wider Erwarten
-         * fehlschlägt, bleibt der Zustand Unknown und damit
-         * für jede spätere Übertragung gesperrt.
+         * Schlägt das Schreiben des Status fehl, bleibt der
+         * Zustand nicht eindeutig Granted und damit für eine
+         * Übertragung gesperrt.
          */
         await _settingsStore
             .SetApplicationSettingAsync(
@@ -138,25 +172,93 @@ public sealed class UsageStatisticsSettingsService
         CancellationToken cancellationToken = default)
     {
         /*
-         * Bei Ablehnung darf lokal keine Installations-ID
-         * bestehen bleiben.
+         * Der Status wird zuerst auf Declined gesetzt.
          *
-         * Dieselbe Reihenfolge ist später auch für einen
-         * Widerruf geeignet, nachdem ein höherer Dienst eine
-         * eventuell notwendige serverseitige Löschung
-         * durchgeführt hat.
+         * Damit gibt GetInstallationIdAsync unmittelbar keine
+         * ID mehr frei, selbst wenn das anschließende Entfernen
+         * des lokalen ID-Werts fehlschlagen sollte.
          */
-        await _settingsStore
-            .DeleteApplicationSettingAsync(
-                SettingsKeys
-                    .UsageStatisticsInstallationId,
-                cancellationToken);
-
         await _settingsStore
             .SetApplicationSettingAsync(
                 SettingsKeys
                     .UsageStatisticsConsentStatus,
                 ConsentDeclinedValue,
+                cancellationToken);
+
+        await _settingsStore
+            .DeleteApplicationSettingAsync(
+                SettingsKeys
+                    .UsageStatisticsInstallationId,
+                cancellationToken);
+    }
+
+    public async Task<Guid?> PrepareRevokeAsync(
+        CancellationToken cancellationToken = default)
+    {
+        /*
+         * GetInstallationIdAsync liefert nur bei tatsächlich
+         * aktiver Einwilligung eine ID.
+         *
+         * Bei einer bloßen Ablehnung vor der ersten Teilnahme
+         * existiert daher nichts, was serverseitig widerrufen
+         * werden müsste.
+         */
+        var installationId =
+            await GetInstallationIdAsync(
+                cancellationToken);
+
+        if (!installationId.HasValue)
+        {
+            await DeclineConsentAsync(
+                cancellationToken);
+
+            return null;
+        }
+
+        /*
+         * Die bisherige ID wird zuerst als Pending-Revoke
+         * gesichert.
+         *
+         * Erst danach wird die lokale Teilnahme deaktiviert.
+         * Sollte der Prozess zwischen diesen Schritten
+         * abbrechen, kann der Widerruf beim nächsten Start
+         * anhand dieses Markers wieder aufgenommen werden.
+         */
+        await _settingsStore
+            .SetApplicationSettingAsync(
+                SettingsKeys
+                    .UsageStatisticsPendingRevokeInstallationId,
+                installationId.Value.ToString("D"),
+                cancellationToken);
+
+        await DeclineConsentAsync(
+            cancellationToken);
+
+        return installationId;
+    }
+
+    public async Task CompletePendingRevokeAsync(
+        Guid installationId,
+        CancellationToken cancellationToken = default)
+    {
+        var pendingInstallationId =
+            await GetPendingRevokeInstallationIdAsync(
+                cancellationToken);
+
+        /*
+         * Defensiv nur genau den Marker entfernen, der
+         * tatsächlich serverseitig verarbeitet wurde.
+         */
+        if (!pendingInstallationId.HasValue ||
+            pendingInstallationId.Value != installationId)
+        {
+            return;
+        }
+
+        await _settingsStore
+            .DeleteApplicationSettingAsync(
+                SettingsKeys
+                    .UsageStatisticsPendingRevokeInstallationId,
                 cancellationToken);
     }
 
@@ -164,15 +266,25 @@ public sealed class UsageStatisticsSettingsService
         GetStoredInstallationIdAsync(
             CancellationToken cancellationToken)
     {
+        return await GetStoredGuidAsync(
+            SettingsKeys
+                .UsageStatisticsInstallationId,
+            cancellationToken);
+    }
+
+    private async Task<Guid?> GetStoredGuidAsync(
+        string key,
+        CancellationToken cancellationToken)
+    {
         var storedValue =
             await _settingsStore
                 .GetApplicationSettingAsync(
-                    SettingsKeys
-                        .UsageStatisticsInstallationId,
+                    key,
                     cancellationToken);
 
-        if (!Guid.TryParse(
+        if (!Guid.TryParseExact(
                 storedValue,
+                "D",
                 out var installationId) ||
             installationId == Guid.Empty)
         {

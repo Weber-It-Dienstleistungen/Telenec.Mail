@@ -8,6 +8,12 @@ public partial class SettingsWindow
     private UsageStatisticsSettingsService?
         _usageStatisticsSettingsService;
 
+    private UsageStatisticsApiClient?
+        _usageStatisticsApiClient;
+
+    private UsageStatisticsRevocationService?
+        _usageStatisticsRevocationService;
+
     private bool
         _usageStatisticsSettingsLoaded;
 
@@ -19,6 +25,18 @@ public partial class SettingsWindow
             _usageStatisticsSettingsService ??=
                 new UsageStatisticsSettingsService(
                     _settingsStore);
+
+    private UsageStatisticsApiClient
+        UsageStatisticsApiClient =>
+            _usageStatisticsApiClient ??=
+                new UsageStatisticsApiClient();
+
+    private UsageStatisticsRevocationService
+        UsageStatisticsRevocationService =>
+            _usageStatisticsRevocationService ??=
+                new UsageStatisticsRevocationService(
+                    UsageStatisticsSettingsService,
+                    UsageStatisticsApiClient);
 
     private async void
         UsageStatisticsSettingsCard_OnLoaded(
@@ -47,22 +65,35 @@ public partial class SettingsWindow
                 await UsageStatisticsSettingsService
                     .GetConsentStatusAsync();
 
+            var pendingRevokeInstallationId =
+                await UsageStatisticsSettingsService
+                    .GetPendingRevokeInstallationIdAsync();
+
             UsageStatisticsEnabledCheckBox.IsChecked =
                 consentStatus ==
-                UsageStatisticsConsentStatus.Granted;
+                UsageStatisticsConsentStatus.Granted &&
+                !pendingRevokeInstallationId.HasValue;
 
-            UsageStatisticsStatusText.Text =
-                consentStatus switch
-                {
-                    UsageStatisticsConsentStatus.Granted =>
-                        "Teilnahme ist aktiviert.",
+            if (pendingRevokeInstallationId.HasValue)
+            {
+                UsageStatisticsStatusText.Text =
+                    "Teilnahme ist deaktiviert. Die serverseitige Löschung wird automatisch nachgeholt.";
+            }
+            else
+            {
+                UsageStatisticsStatusText.Text =
+                    consentStatus switch
+                    {
+                        UsageStatisticsConsentStatus.Granted =>
+                            "Teilnahme ist aktiviert.",
 
-                    UsageStatisticsConsentStatus.Declined =>
-                        "Teilnahme ist deaktiviert.",
+                        UsageStatisticsConsentStatus.Declined =>
+                            "Teilnahme ist deaktiviert.",
 
-                    _ =>
-                        "Noch keine Entscheidung gespeichert."
-                };
+                        _ =>
+                            "Noch keine Entscheidung gespeichert."
+                    };
+            }
 
             _usageStatisticsSettingsLoaded =
                 true;
@@ -124,12 +155,50 @@ public partial class SettingsWindow
                 true)
             {
                 /*
-                 * Erst durch diese ausdrücklich bestätigte
-                 * Einstellung wird eine zufällige
-                 * Installations-ID erzeugt.
+                 * Ein eventuell älterer, noch ausstehender
+                 * Widerruf wird vor einer erneuten Zustimmung
+                 * zuerst verarbeitet.
                  */
+                await UsageStatisticsRevocationService
+                    .TryProcessPendingRevokeAsync();
+
+                var pendingRevokeInstallationId =
+                    await UsageStatisticsSettingsService
+                        .GetPendingRevokeInstallationIdAsync();
+
+                if (pendingRevokeInstallationId.HasValue)
+                {
+                    UsageStatisticsEnabledCheckBox.IsChecked =
+                        false;
+
+                    UsageStatisticsStatusText.Text =
+                        "Die frühere serverseitige Löschung konnte noch nicht abgeschlossen werden.";
+
+                    MessageBox.Show(
+                        this,
+                        "Die Nutzungsstatistik kann erst wieder aktiviert werden, nachdem der vorherige Widerruf serverseitig abgeschlossen wurde.\n\n" +
+                        "Bitte prüfen Sie die Internetverbindung und versuchen Sie es später erneut.",
+                        "Telenec Mail",
+                        MessageBoxButton.OK,
+                        MessageBoxImage.Information);
+
+                    return;
+                }
+
                 await UsageStatisticsSettingsService
                     .GrantConsentAsync();
+
+                /*
+                 * Auch bei einer erneuten Aktivierung über die
+                 * Einstellungen wird unmittelbar ein
+                 * Heartbeat gesendet und der periodische Lauf
+                 * für die aktuelle Programmsitzung gestartet.
+                 */
+                if (Application.Current is App app)
+                {
+                    await app
+                        .StartUsageStatisticsHeartbeatIfEnabledAsync();
+                }
 
                 UsageStatisticsStatusText.Text =
                     "Teilnahme ist aktiviert.";
@@ -137,19 +206,20 @@ public partial class SettingsWindow
             else
             {
                 /*
-                 * Ablehnung und Widerruf entfernen die lokal
-                 * gespeicherte Installations-ID.
+                 * Die lokale Teilnahme wird sofort deaktiviert.
                  *
-                 * Solange noch kein Statistik-Backend
-                 * angebunden ist, existiert zusätzlich kein
-                 * serverseitiger Datensatz, der gelöscht
-                 * werden müsste.
+                 * Die bisherige Installations-ID bleibt nur in
+                 * einem lokalen Pending-Revoke-Marker erhalten,
+                 * bis der Server die Löschung bestätigt hat.
                  */
-                await UsageStatisticsSettingsService
-                    .DeclineConsentAsync();
+                var revokeCompleted =
+                    await UsageStatisticsRevocationService
+                        .RevokeConsentAsync();
 
                 UsageStatisticsStatusText.Text =
-                    "Teilnahme ist deaktiviert.";
+                    revokeCompleted
+                        ? "Teilnahme ist deaktiviert."
+                        : "Teilnahme ist deaktiviert. Die serverseitige Löschung wird automatisch nachgeholt.";
             }
         }
         catch (Exception exception)

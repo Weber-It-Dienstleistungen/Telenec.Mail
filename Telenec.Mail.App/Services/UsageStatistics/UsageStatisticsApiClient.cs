@@ -8,6 +8,9 @@ public sealed class UsageStatisticsApiClient
     private const string HeartbeatEndpoint =
         "https://dav.necnet.de/statistics/api/v1/usage/heartbeat";
 
+    private const string RevokeEndpoint =
+        "https://dav.necnet.de/statistics/api/v1/usage/revoke";
+
     private static readonly HttpClient HttpClient =
         new()
         {
@@ -36,8 +39,28 @@ public sealed class UsageStatisticsApiClient
         response.EnsureSuccessStatusCode();
     }
 
+    public async Task SendRevokeAsync(
+        Guid installationId,
+        CancellationToken cancellationToken = default)
+    {
+        var request =
+            new RevokeRequest(
+                installationId.ToString("D"));
+
+        using var response =
+            await HttpClient.PostAsJsonAsync(
+                RevokeEndpoint,
+                request,
+                cancellationToken);
+
+        response.EnsureSuccessStatusCode();
+    }
+
     private sealed record HeartbeatRequest(
         string InstallationId,
         string ApplicationVersion,
         int ConsentVersion);
+
+    private sealed record RevokeRequest(
+        string InstallationId);
 }
