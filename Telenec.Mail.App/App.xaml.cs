@@ -7,6 +7,7 @@ using System.Diagnostics;
 using System.IO;
 using System.Reflection;
 using System.Windows;
+using Telenec.Mail.App.Services.Archive;
 using Telenec.Mail.App.Services.Contacts;
 using Telenec.Mail.App.Services.Mail;
 using Telenec.Mail.App.Services.Security;
@@ -179,6 +180,29 @@ public partial class App : Application
                     services.AddSingleton<
                         IMailAccountStore,
                         SqliteMailAccountStore>();
+
+                    /*
+                     * Lokales Mailarchiv.
+                     *
+                     * LocalMailArchiveStorage verwaltet die
+                     * Archivwurzel unter "Dokumente",
+                     * die Archivdatenbank und die lokale
+                     * Ordnerstruktur.
+                     *
+                     * MailArchiveMessageStagingService lädt für
+                     * den Archivierungsworkflow vollständige
+                     * MIME-Nachrichten zunächst in den lokalen
+                     * Staging-Bereich und verifiziert dort
+                     * Dateigröße, MIME-Struktur und SHA-256.
+                     *
+                     * Beide Dienste verändern durch ihre bloße
+                     * Registrierung keinerlei Serverdaten.
+                     */
+                    services.AddSingleton<
+                        LocalMailArchiveStorage>();
+
+                    services.AddSingleton<
+                        MailArchiveMessageStagingService>();
 
                     /*
                      * Programmeinstellungen und
