@@ -224,6 +224,9 @@ public sealed class MailArchiveMessageStagingService
                     sourceFolderId:
                         folder.FullName,
 
+                    sourceFolderDirectorySeparator:
+                        folder.DirectorySeparator,
+
                     sourceUidValidity:
                         uidValidity,
 
@@ -650,6 +653,7 @@ public sealed class StagedArchiveMessage
         string accountKey,
         string accountEmailAddress,
         string sourceFolderId,
+        char sourceFolderDirectorySeparator,
         uint sourceUidValidity,
         uint sourceUniqueId,
         string sha256,
@@ -671,6 +675,9 @@ public sealed class StagedArchiveMessage
 
         SourceFolderId =
             sourceFolderId;
+
+        SourceFolderDirectorySeparator =
+            sourceFolderDirectorySeparator;
 
         SourceUidValidity =
             sourceUidValidity;
@@ -707,6 +714,8 @@ public sealed class StagedArchiveMessage
     public string AccountEmailAddress { get; }
 
     public string SourceFolderId { get; }
+
+    public char SourceFolderDirectorySeparator { get; }
 
     public uint SourceUidValidity { get; }
 
