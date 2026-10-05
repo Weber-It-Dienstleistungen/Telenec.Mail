@@ -9,39 +9,40 @@ namespace Telenec.Mail.App;
 
 public partial class MainWindow
 {
-    private const string ArchiveStagingTestActionTag =
-        "ArchiveStagingTestAction";
+    private const string ArchiveActionTag =
+        "ArchiveAction";
+
+    private bool
+        _isArchiveOperationInProgress;
 
     /*
-     * Temporärer Entwicklungstest für den vollständigen
-     * Einzelmail-Archivworkflow.
+     * Erste produktive Benutzerfunktion für das lokale
+     * Telenec-Mail-Archiv.
      *
-     * Ablauf:
+     * Sicherheitsablauf:
      *
-     * 1. Die rechtsgeklickte Servermail wird read-only in den
-     *    lokalen Stagingbereich geladen.
+     * 1. Die Servermail wird read-only in den lokalen
+     *    Stagingbereich geladen.
      *
-     * 2. Die Stagingdatei wird geprüft.
+     * 2. Die vollständige Rohmail wird lokal geprüft.
      *
-     * 3. Die Nachricht wird endgültig als lokale .eml-Datei
-     *    gespeichert.
+     * 3. Daraus wird die endgültige .eml-Datei im lokalen
+     *    Archiv erzeugt.
      *
-     * 4. Die endgültige Datei wird erneut über Dateigröße und
-     *    SHA-256 geprüft.
+     * 4. Die endgültige Datei wird erneut über Dateigröße
+     *    und SHA-256 geprüft.
      *
      * 5. archive.db wird auf LocalStored gesetzt.
      *
      * 6. Erst danach wird die Servermail erneut vollständig
-     *    gelesen und mit der lokalen Archivkopie verglichen.
+     *    gelesen und gegen die lokale Archivkopie geprüft.
      *
-     * 7. Nur wenn FolderId, UIDVALIDITY, UID, Dateigröße und
-     *    SHA-256 weiterhin exakt stimmen, wird genau diese
-     *    Servermail selektiv per UID EXPUNGE entfernt.
+     * 7. Nur bei identischer FolderId, UIDVALIDITY, UID,
+     *    Dateigröße und SHA-256 wird exakt diese Servermail
+     *    selektiv per UID EXPUNGE entfernt.
      *
-     * 8. Nach bestätigter Serverlöschung wird archive.db auf
-     *    Completed gesetzt.
-     *
-     * Dieser Test ist damit erstmals serververändernd.
+     * 8. Nach bestätigter Serverlöschung wird archive.db
+     *    auf Completed gesetzt.
      */
 
     protected override void OnPreviewMouseRightButtonDown(
@@ -53,7 +54,7 @@ public partial class MainWindow
 
         if (contextMenu is not null)
         {
-            EnsureArchiveStagingTestAction(
+            EnsureArchiveAction(
                 contextMenu);
         }
 
@@ -61,7 +62,7 @@ public partial class MainWindow
             e);
     }
 
-    private void EnsureArchiveStagingTestAction(
+    private void EnsureArchiveAction(
         ContextMenu contextMenu)
     {
         var existingItem =
@@ -72,7 +73,7 @@ public partial class MainWindow
                     item =>
                         string.Equals(
                             item.Tag?.ToString(),
-                            ArchiveStagingTestActionTag,
+                            ArchiveActionTag,
                             StringComparison.Ordinal));
 
         if (existingItem is not null)
@@ -80,19 +81,23 @@ public partial class MainWindow
             return;
         }
 
-        var archiveTestItem =
+        var archiveMenuItem =
             new MenuItem
             {
                 Header =
-                    "Archiv-Test: lokal archivieren + Servermail löschen",
+                    "Archivieren",
 
                 Tag =
-                    ArchiveStagingTestActionTag
+                    ArchiveActionTag
             };
 
-        archiveTestItem.Click +=
-            ArchiveStagingTestMenuItem_OnClick;
+        archiveMenuItem.Click +=
+            ArchiveMenuItem_OnClick;
 
+        /*
+         * Der Archivieren-Eintrag wird unmittelbar vor der
+         * normalen Löschen-/Wiederherstellen-Aktion eingefügt.
+         */
         var messageActionItem =
             contextMenu
                 .Items
@@ -107,7 +112,7 @@ public partial class MainWindow
         if (messageActionItem is null)
         {
             contextMenu.Items.Add(
-                archiveTestItem);
+                archiveMenuItem);
 
             return;
         }
@@ -119,29 +124,33 @@ public partial class MainWindow
         if (messageActionIndex < 0)
         {
             contextMenu.Items.Add(
-                archiveTestItem);
+                archiveMenuItem);
 
             return;
         }
 
         contextMenu.Items.Insert(
             messageActionIndex,
-            archiveTestItem);
+            archiveMenuItem);
     }
 
-    private async void ArchiveStagingTestMenuItem_OnClick(
+    private async void ArchiveMenuItem_OnClick(
         object sender,
         RoutedEventArgs e)
     {
         if (_viewModel.IsLoading ||
+            _isArchiveOperationInProgress ||
             sender is not MenuItem menuItem)
         {
             return;
         }
 
         /*
-         * Ausschließlich die tatsächlich rechtsgeklickte
-         * Nachricht wird verarbeitet.
+         * In diesem Entwicklungsschritt wird bewusst nur die
+         * tatsächlich rechtsgeklickte Nachricht archiviert.
+         *
+         * Mehrfachauswahl wird separat ergänzt, sobald der
+         * Einzelmail-Workflow als Benutzerfunktion geprüft ist.
          */
         var contextMenu =
             ItemsControl.ItemsControlFromItemContainer(
@@ -161,7 +170,7 @@ public partial class MainWindow
             MessageBox.Show(
                 this,
                 "Die ausgewählte Nachricht konnte nicht eindeutig bestimmt werden.",
-                "Archiv-Test",
+                "Archivieren",
                 MessageBoxButton.OK,
                 MessageBoxImage.Warning);
 
@@ -178,7 +187,7 @@ public partial class MainWindow
             MessageBox.Show(
                 this,
                 "Der aktuelle Mailordner konnte nicht eindeutig bestimmt werden.",
-                "Archiv-Test",
+                "Archivieren",
                 MessageBoxButton.OK,
                 MessageBoxImage.Warning);
 
@@ -189,8 +198,8 @@ public partial class MainWindow
         {
             MessageBox.Show(
                 this,
-                "Für die ausgewählte Nachricht liegt keine gültige IMAP-UID vor.",
-                "Archiv-Test",
+                "Für die ausgewählte Nachricht liegt keine gültige Server-ID vor.",
+                "Archivieren",
                 MessageBoxButton.OK,
                 MessageBoxImage.Warning);
 
@@ -198,35 +207,41 @@ public partial class MainWindow
         }
 
         /*
-         * Dieser Schritt ist erstmals destruktiv auf dem
-         * Mailserver.
+         * Für den Benutzer ist vor allem wichtig:
          *
-         * Deshalb wird sehr deutlich darauf hingewiesen, dass
-         * die Mail nach erfolgreicher lokaler Archivierung
-         * endgültig aus ihrem bisherigen Serverordner entfernt
-         * wird.
+         * Das Archiv liegt lokal auf diesem Computer.
+         * Nach erfolgreicher Archivierung wird die
+         * Serverkopie endgültig entfernt.
+         *
+         * Deshalb weisen wir ausdrücklich auf die notwendige
+         * Datensicherung des Archivordners hin.
          */
         var confirmation =
             MessageBox.Show(
                 this,
-                "ACHTUNG: Dieser Test entfernt die ausgewählte Mail nach erfolgreicher lokaler Archivierung endgültig vom Mailserver.\n\n" +
+                "Die Nachricht wird vollständig im lokalen Telenec-Mail-Archiv auf diesem Computer gespeichert.\n\n" +
                 $"Betreff:\n{clickedMessage.Subject}\n\n" +
                 $"Ordner:\n{selectedFolder.DisplayName}\n\n" +
-                "Vor der Löschung wird die vollständige Mail lokal als .eml gespeichert, mehrfach geprüft und in archive.db eingetragen.\n\n" +
-                "Danach wird die Servermail nochmals vollständig gelesen und per SHA-256 mit der lokalen Archivkopie verglichen.\n\n" +
-                "Nur bei vollständiger Übereinstimmung wird exakt diese eine IMAP-UID endgültig vom Server gelöscht.\n\n" +
-                "Die Mail wird NICHT in den Papierkorb verschoben.\n\n" +
-                "Bitte nur mit einer entbehrlichen Testmail fortfahren.",
-                "Archiv-Test: Servermail endgültig entfernen",
-                MessageBoxButton.OKCancel,
+                "Nach erfolgreicher Speicherung und Prüfung wird die Nachricht endgültig vom Mailserver entfernt. " +
+                "Sie wird nicht in den Papierkorb verschoben.\n\n" +
+                "Das lokale Mailarchiv befindet sich im Ordner\n" +
+                "„Dokumente\\Telenec Mail Archiv“.\n\n" +
+                "Wichtig: Das lokale Archiv ist kein Server- oder Cloud-Backup. " +
+                "Stellen Sie sicher, dass der Archivordner in Ihrer Datensicherung enthalten ist.\n\n" +
+                "Möchten Sie die Nachricht jetzt archivieren?",
+                "Nachricht archivieren",
+                MessageBoxButton.YesNo,
                 MessageBoxImage.Warning,
-                MessageBoxResult.Cancel);
+                MessageBoxResult.No);
 
         if (confirmation !=
-            MessageBoxResult.OK)
+            MessageBoxResult.Yes)
         {
             return;
         }
+
+        _isArchiveOperationInProgress =
+            true;
 
         try
         {
@@ -264,10 +279,10 @@ public partial class MainWindow
                             _serviceProvider);
 
             /*
-             * Staging:
+             * Phase 1:
              *
-             * Die Servermail wird ausschließlich read-only
-             * geladen und lokal verifiziert.
+             * Vollständige Servermail read-only herunterladen
+             * und lokal verifizieren.
              */
             using var stagedMessage =
                 await stagingService
@@ -276,11 +291,11 @@ public partial class MainWindow
                         clickedMessage.UniqueId);
 
             /*
-             * Lokale Finalisierung:
+             * Phase 2:
              *
-             * Erst danach existiert eine endgültige,
-             * erneut geprüfte .eml-Datei und archive.db steht
-             * auf LocalStored.
+             * Endgültige lokale .eml erzeugen,
+             * erneut verifizieren und archive.db auf
+             * LocalStored setzen.
              */
             var finalizedMessage =
                 await finalizationService
@@ -288,19 +303,19 @@ public partial class MainWindow
                         stagedMessage);
 
             /*
-             * Serverlöschung:
+             * Phase 3:
              *
-             * Der Löschservice erhält bewusst nur die
+             * Der Löschservice erhält ausschließlich die
              * ArchiveMessageId.
              *
-             * FolderId, UIDVALIDITY, UID, Dateipfad,
-             * Dateigröße und SHA-256 werden anschließend
-             * unabhängig aus archive.db geladen.
+             * Sämtliche sicherheitsrelevanten Daten werden
+             * anschließend erneut aus archive.db gelesen.
              */
             var deletionResult =
                 await serverDeletionService
                     .DeleteArchivedServerMessageAsync(
-                        finalizedMessage.ArchiveMessageId);
+                        finalizedMessage
+                            .ArchiveMessageId);
 
             if (!deletionResult
                     .ServerDeletionConfirmed)
@@ -313,24 +328,45 @@ public partial class MainWindow
                     .DatabaseCompletionRecorded)
             {
                 throw new InvalidOperationException(
-                    "Die Serverlöschung wurde bestätigt, aber der Abschlussstatus wurde nicht vollständig gespeichert.");
+                    "Die Serverlöschung wurde bestätigt, aber der Abschlussstatus konnte nicht vollständig gespeichert werden.");
             }
+
+            /*
+             * Die Archivierung selbst ist an dieser Stelle
+             * bereits vollständig abgeschlossen.
+             *
+             * Eine anschließend fehlschlagende Aktualisierung
+             * der Benutzeroberfläche darf diesen Erfolg nicht
+             * nachträglich in einen Archivierungsfehler
+             * verwandeln.
+             */
+            var mailboxRefreshSucceeded =
+                true;
+
+            try
+            {
+                await RefreshMailboxFromUiAsync();
+            }
+            catch
+            {
+                mailboxRefreshSucceeded =
+                    false;
+            }
+
+            var refreshNotice =
+                mailboxRefreshSucceeded
+                    ? string.Empty
+                    : "\n\nDie Mailansicht konnte nicht automatisch aktualisiert werden. " +
+                      "Drücken Sie bitte F5.";
 
             MessageBox.Show(
                 this,
-                "Die Nachricht wurde vollständig archiviert.\n\n" +
+                "Die Nachricht wurde erfolgreich archiviert und vom Mailserver entfernt.\n\n" +
                 $"Betreff:\n{clickedMessage.Subject}\n\n" +
-                $"FolderId:\n{finalizedMessage.SourceFolderId}\n\n" +
-                $"UIDVALIDITY:\n{finalizedMessage.SourceUidValidity}\n\n" +
-                $"UID:\n{finalizedMessage.SourceUniqueId}\n\n" +
-                $"Dateigröße:\n{finalizedMessage.FileSizeBytes:N0} Bytes\n\n" +
-                $"SHA-256:\n{finalizedMessage.Sha256}\n\n" +
-                $"Endgültige .eml:\n{finalizedMessage.FinalFilePath}\n\n" +
-                "Lokale Archivdatei: VERIFIZIERT\n" +
-                "archive.db: COMPLETED\n" +
-                "Servermail: GELÖSCHT\n\n" +
-                "Die Nachricht befindet sich jetzt ausschließlich im lokalen Telenec-Mail-Archiv.",
-                "Archivierung vollständig",
+                $"Archivdatei:\n{finalizedMessage.FinalFilePath}\n\n" +
+                "Bitte berücksichtigen Sie den Ordner „Telenec Mail Archiv“ in Ihrer regelmäßigen Datensicherung." +
+                refreshNotice,
+                "Archivierung abgeschlossen",
                 MessageBoxButton.OK,
                 MessageBoxImage.Information);
         }
@@ -339,15 +375,10 @@ public partial class MainWindow
                 "bereits im lokalen Mailarchiv",
                 StringComparison.OrdinalIgnoreCase))
         {
-            /*
-             * Eine bereits archivierte Nachricht wird durch
-             * diesen temporären Test nicht automatisch erneut
-             * verarbeitet.
-             */
             MessageBox.Show(
                 this,
                 "Diese Nachricht befindet sich bereits im lokalen Mailarchiv.\n\n" +
-                "Es wurde keine zweite Archivkopie angelegt und kein neuer Löschvorgang gestartet.",
+                "Es wurde keine zweite Archivkopie angelegt.",
                 "Bereits archiviert",
                 MessageBoxButton.OK,
                 MessageBoxImage.Information);
@@ -356,25 +387,20 @@ public partial class MainWindow
             when (exception.ServerDeletionConfirmed)
         {
             /*
-             * Besonders wichtiger Sonderfall:
+             * Die Servermail ist sicher entfernt und die lokale
+             * Archivkopie vorhanden.
              *
-             * Die Servermail ist sicher gelöscht worden, aber
-             * anschließend konnte beispielsweise archive.db
-             * nicht mehr auf Completed gesetzt werden.
-             *
-             * Die lokale Archivdatei bleibt dabei erhalten.
-             *
-             * Ein automatischer zweiter Löschversuch wäre hier
-             * falsch.
+             * Nur der lokale Abschlussstatus konnte nicht
+             * vollständig persistiert werden.
              */
             MessageBox.Show(
                 this,
-                "Die Servermail wurde nachweislich erfolgreich gelöscht und die lokale Archivkopie ist vorhanden.\n\n" +
-                "Der lokale Abschlussstatus konnte jedoch nicht vollständig gespeichert werden.\n\n" +
-                "Bitte KEINEN erneuten Archivierungs- oder Löschversuch mit dieser Nachricht starten.\n\n" +
+                "Die Nachricht wurde lokal archiviert und die Serverkopie wurde erfolgreich entfernt.\n\n" +
+                "Der lokale Archivstatus konnte anschließend jedoch nicht vollständig gespeichert werden.\n\n" +
+                "Bitte archivieren Sie diese Nachricht nicht erneut.\n\n" +
                 "Fehler:\n" +
                 exception.Message,
-                "Archivierung: Statusprüfung erforderlich",
+                "Archivstatus prüfen",
                 MessageBoxButton.OK,
                 MessageBoxImage.Warning);
         }
@@ -382,57 +408,59 @@ public partial class MainWindow
             when (exception.ServerStateUncertain)
         {
             /*
-             * Bei einem Verbindungsabbruch mitten während der
-             * Löschoperation kann weder blind behauptet werden,
-             * dass die Mail gelöscht wurde, noch darf einfach
-             * erneut gelöscht werden.
+             * Nach einer begonnenen Servermutation konnte der
+             * tatsächliche Endzustand nicht sicher festgestellt
+             * werden.
+             *
+             * Ein automatischer zweiter Löschversuch wäre in
+             * diesem Zustand gefährlich.
              */
             MessageBox.Show(
                 this,
-                "Die lokale Archivkopie wurde erfolgreich erstellt und bleibt erhalten.\n\n" +
-                "Während der Serverlöschung konnte der endgültige Serverzustand jedoch nicht sicher festgestellt werden.\n\n" +
-                "Bitte das Postfach neu synchronisieren und NICHT sofort erneut archivieren.\n\n" +
+                "Die Nachricht wurde erfolgreich lokal archiviert.\n\n" +
+                "Während der Entfernung der Serverkopie konnte der endgültige Serverzustand jedoch nicht sicher festgestellt werden.\n\n" +
+                "Bitte aktualisieren Sie das Postfach mit F5 und archivieren Sie die Nachricht nicht sofort erneut.\n\n" +
                 "Fehler:\n" +
                 exception.Message,
-                "Archivierung: Serverzustand unklar",
+                "Serverzustand prüfen",
                 MessageBoxButton.OK,
                 MessageBoxImage.Warning);
         }
         catch (MailArchiveServerDeletionException exception)
         {
-            /*
-             * Die lokale Kopie bleibt erhalten, die
-             * Serverlöschung wurde aber sicher nicht als
-             * erfolgreich bestätigt.
-             */
             MessageBox.Show(
                 this,
                 "Die Nachricht wurde lokal archiviert, konnte aber nicht sicher vom Mailserver entfernt werden.\n\n" +
-                "Die lokale .eml bleibt erhalten.\n" +
-                "Die Servermail wurde nicht als erfolgreich gelöscht bestätigt.\n\n" +
+                "Die lokale Archivkopie bleibt erhalten.\n\n" +
                 "Fehler:\n" +
                 exception.Message,
-                "Serverlöschung fehlgeschlagen",
+                "Serverkopie konnte nicht entfernt werden",
                 MessageBoxButton.OK,
                 MessageBoxImage.Error);
         }
         catch (Exception exception)
         {
             /*
-             * Jeder sonstige Fehler beendet den Ablauf.
+             * Jeder Fehler beendet den Ablauf.
              *
-             * Es gibt keinerlei Fallback, das anschließend
-             * trotzdem versucht, eine Servermail zu löschen.
+             * Es existiert bewusst kein Fallback, der nach
+             * einem lokalen Fehler trotzdem versucht, die
+             * Servermail zu entfernen.
              */
             MessageBox.Show(
                 this,
-                "Die Archivierung konnte nicht vollständig abgeschlossen werden.\n\n" +
-                "Ein nicht bestätigter Löschschritt wird niemals automatisch wiederholt.\n\n" +
+                "Die Nachricht konnte nicht vollständig archiviert werden.\n\n" +
+                "Eine Serverkopie wird nur dann entfernt, wenn die lokale Archivierung zuvor vollständig erfolgreich und verifiziert war.\n\n" +
                 "Fehler:\n" +
                 exception.Message,
                 "Archivierung fehlgeschlagen",
                 MessageBoxButton.OK,
                 MessageBoxImage.Error);
+        }
+        finally
+        {
+            _isArchiveOperationInProgress =
+                false;
         }
     }
 }
