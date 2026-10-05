@@ -11,6 +11,11 @@ public interface IMailFolderManagementService
         string folderName,
         CancellationToken cancellationToken = default);
 
+    Task<string> RenameFolderAsync(
+        string folderId,
+        string newFolderName,
+        CancellationToken cancellationToken = default);
+
     Task DeleteFolderAsync(
         string folderId,
         CancellationToken cancellationToken = default);

@@ -152,10 +152,6 @@ public sealed class MailKitFolderManagementService :
                     "Der übergeordnete Ordner existiert nicht mehr.");
             }
 
-            /*
-             * \NoInferiors bedeutet ausdrücklich, dass dieser
-             * Ordner keine Unterordner besitzen darf.
-             */
             if (parentFolder.Attributes.HasFlag(
                     FolderAttributes.NoInferiors))
             {
@@ -168,12 +164,6 @@ public sealed class MailKitFolderManagementService :
                 parentFolder,
                 normalizedFolderName);
 
-            /*
-             * CREATE relativ zum ausgewählten Elternordner.
-             *
-             * MailKit berücksichtigt dabei automatisch das
-             * vom Server verwendete IMAP-Trennzeichen.
-             */
             var createdFolder =
                 await parentFolder.CreateAsync(
                     normalizedFolderName,
@@ -185,6 +175,132 @@ public sealed class MailKitFolderManagementService :
                 operationCancellationToken);
 
             return createdFolder.FullName;
+        }
+        finally
+        {
+            await DisconnectSafelyAsync(
+                client);
+        }
+    }
+
+    public async Task<string> RenameFolderAsync(
+        string folderId,
+        string newFolderName,
+        CancellationToken cancellationToken = default)
+    {
+        var normalizedFolderId =
+            NormalizeFolderId(
+                folderId);
+
+        var normalizedFolderName =
+            NormalizeFolderName(
+                newFolderName);
+
+        using var client =
+            await CreateAuthenticatedClientAsync(
+                cancellationToken);
+
+        try
+        {
+            using var operationTimeoutSource =
+                CreateOperationTimeoutSource(
+                    cancellationToken);
+
+            var operationCancellationToken =
+                operationTimeoutSource.Token;
+
+            var folder =
+                await client.GetFolderAsync(
+                    normalizedFolderId,
+                    operationCancellationToken);
+
+            if (folder.Attributes.HasFlag(
+                    FolderAttributes.NonExistent))
+            {
+                throw new InvalidOperationException(
+                    "Der Ordner existiert nicht mehr.");
+            }
+
+            if (string.Equals(
+                    folder.FullName,
+                    client.Inbox.FullName,
+                    StringComparison.OrdinalIgnoreCase))
+            {
+                throw new InvalidOperationException(
+                    "Der Posteingang kann nicht umbenannt werden.");
+            }
+
+            if ((folder.Attributes &
+                 ProtectedFolderAttributes) != 0)
+            {
+                throw new InvalidOperationException(
+                    "Dieser Systemordner kann nicht umbenannt werden.");
+            }
+
+            /*
+             * Exakt gleicher Name:
+             * Es gibt nichts zu tun.
+             */
+            if (string.Equals(
+                    folder.Name,
+                    normalizedFolderName,
+                    StringComparison.Ordinal))
+            {
+                return folder.FullName;
+            }
+
+            var parentFolder =
+                folder.ParentFolder;
+
+            /*
+             * Bei einem Ordner auf oberster Ebene liefert der
+             * Server nicht zwingend einen normalen ParentFolder.
+             * In diesem Fall verwenden wir den persönlichen
+             * IMAP-Namensraum.
+             */
+            if (parentFolder is null)
+            {
+                if (client.PersonalNamespaces.Count == 0)
+                {
+                    throw new InvalidOperationException(
+                        "Der übergeordnete IMAP-Namensraum " +
+                        "konnte nicht bestimmt werden.");
+                }
+
+                parentFolder =
+                    client.GetFolder(
+                        client.PersonalNamespaces[0]);
+            }
+
+            ValidateChildFolderName(
+                parentFolder,
+                normalizedFolderName);
+
+            /*
+             * MailKit führt hier ein echtes IMAP RENAME aus.
+             *
+             * Bei einem Unterordner bleibt damit seine
+             * Position innerhalb der Hierarchie erhalten.
+             *
+             * Bei einem Elternordner kann der Server zugleich
+             * die FullNames vorhandener Unterordner anpassen.
+             * Die UI lädt die Ordnerliste deshalb nach dem
+             * Vorgang vollständig neu.
+             */
+            await folder.RenameAsync(
+                parentFolder,
+                normalizedFolderName,
+                operationCancellationToken);
+
+            if (string.IsNullOrWhiteSpace(
+                    folder.FullName))
+            {
+                throw new InvalidOperationException(
+                    "Der Mailserver hat den neuen Ordnernamen " +
+                    "nicht bestätigt.");
+            }
+
+            return folder.FullName;
         }
         finally
         {
@@ -235,12 +351,6 @@ public sealed class MailKitFolderManagementService :
                     "Dieser Systemordner kann nicht gelöscht werden.");
             }
 
-            /*
-             * Ein Elternordner mit vorhandenen Unterordnern wird
-             * absichtlich nicht rekursiv gelöscht.
-             *
-             * Der Benutzer muss zuerst die Unterordner entfernen.
-             */
             if (folder.Attributes.HasFlag(
                     FolderAttributes.HasChildren))
             {
@@ -299,12 +409,6 @@ public sealed class MailKitFolderManagementService :
                 "Der Mailserver hat den neuen Ordner nicht bestätigt.");
         }
 
-        /*
-         * Auch Unterordner werden unmittelbar abonniert.
-         *
-         * Damit erscheinen sie in Roundcube ohne zusätzliche
-         * manuelle Aktivierung.
-         */
         if (!createdFolder.IsSubscribed)
         {
             await createdFolder.SubscribeAsync(
