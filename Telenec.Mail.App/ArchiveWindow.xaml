@@ -42,8 +42,8 @@
                 Value="0" />
 
             <Setter
-                Property="Focusable"
-                Value="False" />
+                Property="Cursor"
+                Value="Hand" />
 
         </Style>
 
@@ -264,25 +264,48 @@
 
                     <Border
                         Grid.Row="0"
-                        Padding="18,15"
+                        Padding="18,11"
                         BorderBrush="{StaticResource Border.Default}"
                         BorderThickness="0,0,0,1">
 
-                        <TextBlock
-                            Text="Archivordner"
-                            FontSize="14"
-                            FontWeight="SemiBold"
-                            Foreground="{StaticResource Text.Primary}" />
+                        <Grid>
+
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+
+                            <TextBlock
+                                Text="Archivordner"
+                                VerticalAlignment="Center"
+                                FontSize="14"
+                                FontWeight="SemiBold"
+                                Foreground="{StaticResource Text.Primary}" />
+
+                            <Button
+                                x:Name="ShowAllMessagesButton"
+                                Grid.Column="1"
+                                MinWidth="54"
+                                Height="30"
+                                Padding="10,4"
+                                Content="Alle"
+                                Cursor="Hand"
+                                ToolTip="Alle archivierten Nachrichten anzeigen"
+                                Click="ShowAllMessagesButton_OnClick" />
+
+                        </Grid>
 
                     </Border>
 
                     <ListBox
+                        x:Name="ArchiveFolderListBox"
                         Grid.Row="1"
                         ItemsSource="{Binding Folders}"
                         Background="Transparent"
                         BorderThickness="0"
                         Padding="10"
                         ItemContainerStyle="{StaticResource ArchiveListItemStyle}"
+                        SelectionChanged="ArchiveFolderListBox_OnSelectionChanged"
                         ScrollViewer.HorizontalScrollBarVisibility="Disabled"
                         ScrollViewer.VerticalScrollBarVisibility="Auto">
 
@@ -380,6 +403,7 @@
                         BorderThickness="0,0,0,1">
 
                         <TextBlock
+                            x:Name="ArchiveMessageHeaderText"
                             Text="Archivierte Nachrichten"
                             FontSize="14"
                             FontWeight="SemiBold"
@@ -388,6 +412,7 @@
                     </Border>
 
                     <ListBox
+                        x:Name="ArchiveMessageListBox"
                         Grid.Row="1"
                         ItemsSource="{Binding Messages}"
                         Background="Transparent"

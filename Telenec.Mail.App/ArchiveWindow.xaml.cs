@@ -1,6 +1,9 @@
-﻿using System.Diagnostics;
+﻿using System.ComponentModel;
+using System.Diagnostics;
 using System.IO;
 using System.Windows;
+using System.Windows.Controls;
+using System.Windows.Data;
 using Telenec.Mail.App.Services.Archive;
 
 namespace Telenec.Mail.App;
@@ -12,6 +15,9 @@ public partial class ArchiveWindow : Window
 
     private LocalMailArchiveSnapshot?
         _archiveSnapshot;
+
+    private ICollectionView?
+        _archiveMessagesView;
 
     private bool
         _isLoading;
@@ -73,6 +79,16 @@ public partial class ArchiveWindow : Window
             DataContext =
                 snapshot;
 
+            _archiveMessagesView =
+                CollectionViewSource
+                    .GetDefaultView(
+                        snapshot.Messages);
+
+            ArchiveMessageListBox.ItemsSource =
+                _archiveMessagesView;
+
+            ShowAllMessages();
+
             OpenArchiveFolderButton.IsEnabled =
                 Directory.Exists(
                     snapshot
@@ -88,6 +104,9 @@ public partial class ArchiveWindow : Window
         catch (Exception exception)
         {
             _archiveSnapshot =
+                null;
+
+            _archiveMessagesView =
                 null;
 
             ArchiveContentGrid.Visibility =
@@ -107,6 +126,64 @@ public partial class ArchiveWindow : Window
             _isLoading =
                 false;
         }
+    }
+
+    private void ArchiveFolderListBox_OnSelectionChanged(
+        object sender,
+        SelectionChangedEventArgs e)
+    {
+        if (_archiveMessagesView is null ||
+            ArchiveFolderListBox.SelectedItem
+                is not LocalMailArchiveFolderInfo selectedFolder)
+        {
+            return;
+        }
+
+        /*
+         * Ein Archivordner zeigt bewusst nur die Nachrichten,
+         * die direkt aus genau diesem ursprünglichen
+         * IMAP-Ordner archiviert wurden.
+         *
+         * Unterordner bleiben eigenständige Archivordner.
+         */
+        _archiveMessagesView.Filter =
+            item =>
+                item is LocalMailArchiveMessageInfo message &&
+                string.Equals(
+                    message.ArchiveFolderId,
+                    selectedFolder.ArchiveFolderId,
+                    StringComparison.Ordinal);
+
+        _archiveMessagesView.Refresh();
+
+        ArchiveMessageHeaderText.Text =
+            $"Archivierte Nachrichten – {selectedFolder.DisplayName}";
+    }
+
+    private void ShowAllMessagesButton_OnClick(
+        object sender,
+        RoutedEventArgs e)
+    {
+        ShowAllMessages();
+    }
+
+    private void ShowAllMessages()
+    {
+        if (_archiveMessagesView is null)
+        {
+            return;
+        }
+
+        ArchiveFolderListBox.SelectedItem =
+            null;
+
+        _archiveMessagesView.Filter =
+            null;
+
+        _archiveMessagesView.Refresh();
+
+        ArchiveMessageHeaderText.Text =
+            "Archivierte Nachrichten";
     }
 
     private void OpenArchiveFolderButton_OnClick(
