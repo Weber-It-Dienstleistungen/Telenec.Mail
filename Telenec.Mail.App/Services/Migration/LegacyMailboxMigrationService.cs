@@ -1187,7 +1187,7 @@ public sealed class LegacyMailboxMigrationService
                 continue;
             }
 
-            IMailFolder child;
+            IMailFolder? child;
 
             try
             {
@@ -1203,6 +1203,12 @@ public sealed class LegacyMailboxMigrationService
                         segment,
                         isMessageFolder: true,
                         cancellationToken);
+            }
+
+            if (child is null)
+            {
+                throw new InvalidOperationException(
+                    $"Der Zielordner „{segment}“ konnte auf dem neuen Mailserver nicht bestätigt werden.");
             }
 
             parent =

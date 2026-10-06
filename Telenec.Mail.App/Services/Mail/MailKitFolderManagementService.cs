@@ -101,6 +101,12 @@ public sealed class MailKitFolderManagementService :
                     isMessageFolder: true,
                     operationCancellationToken);
 
+            if (createdFolder is null)
+            {
+                throw new InvalidOperationException(
+                    "Der Mailserver hat den neuen Ordner nicht bestätigt.");
+            }
+
             await FinalizeCreatedFolderAsync(
                 createdFolder,
                 operationCancellationToken);
@@ -170,6 +176,12 @@ public sealed class MailKitFolderManagementService :
                     isMessageFolder: true,
                     operationCancellationToken);
 
+            if (createdFolder is null)
+            {
+                throw new InvalidOperationException(
+                    "Der Mailserver hat den neuen Unterordner nicht bestätigt.");
+            }
+
             await FinalizeCreatedFolderAsync(
                 createdFolder,
                 operationCancellationToken);
@@ -237,10 +249,6 @@ public sealed class MailKitFolderManagementService :
                     "Dieser Systemordner kann nicht umbenannt werden.");
             }
 
-            /*
-             * Exakt gleicher Name:
-             * Es gibt nichts zu tun.
-             */
             if (string.Equals(
                     folder.Name,
                     normalizedFolderName,
@@ -252,12 +260,6 @@ public sealed class MailKitFolderManagementService :
             var parentFolder =
                 folder.ParentFolder;
 
-            /*
-             * Bei einem Ordner auf oberster Ebene liefert der
-             * Server nicht zwingend einen normalen ParentFolder.
-             * In diesem Fall verwenden wir den persönlichen
-             * IMAP-Namensraum.
-             */
             if (parentFolder is null)
             {
                 if (client.PersonalNamespaces.Count == 0)
@@ -276,17 +278,6 @@ public sealed class MailKitFolderManagementService :
                 parentFolder,
                 normalizedFolderName);
 
-            /*
-             * MailKit führt hier ein echtes IMAP RENAME aus.
-             *
-             * Bei einem Unterordner bleibt damit seine
-             * Position innerhalb der Hierarchie erhalten.
-             *
-             * Bei einem Elternordner kann der Server zugleich
-             * die FullNames vorhandener Unterordner anpassen.
-             * Die UI lädt die Ordnerliste deshalb nach dem
-             * Vorgang vollständig neu.
-             */
             await folder.RenameAsync(
                 parentFolder,
                 normalizedFolderName,
@@ -401,8 +392,7 @@ public sealed class MailKitFolderManagementService :
         IMailFolder createdFolder,
         CancellationToken cancellationToken)
     {
-        if (createdFolder is null ||
-            string.IsNullOrWhiteSpace(
+        if (string.IsNullOrWhiteSpace(
                 createdFolder.FullName))
         {
             throw new InvalidOperationException(
