@@ -62,21 +62,16 @@ internal static class MessageListDoubleClickBootstrapper
         e.Handled =
             true;
 
-        var messageWindow =
-            new MailMessageWindow(
-                message)
-            {
-                Owner =
-                    mainWindow
-            };
-
         /*
-         * Bewusst nicht ShowDialog():
+         * Das MainWindow kennt den Serverkontext der
+         * geöffneten Nachricht.
          *
-         * Der Benutzer darf mehrere Nachrichten parallel
-         * öffnen und weiterhin mit dem Hauptfenster arbeiten.
+         * Dadurch kann das Nachrichtenfenster echte Aktionen
+         * anbieten, ohne selbst IMAP-/Compose-Logik zu
+         * duplizieren.
          */
-        messageWindow.Show();
+        mainWindow.OpenMessageWindowFromUi(
+            message);
     }
 
     private static T?

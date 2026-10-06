@@ -15,6 +15,7 @@
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto" />
             <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
             <RowDefinition Height="*" />
         </Grid.RowDefinitions>
 
@@ -124,11 +125,91 @@
 
         </Border>
 
+        <!-- Nachrichtenaktionen -->
+
+        <Border
+            x:Name="MessageActionsBar"
+            Grid.Row="1"
+            Visibility="Collapsed"
+            Padding="24,10"
+            Background="{StaticResource Surface.Card}"
+            BorderBrush="{StaticResource Border.Default}"
+            BorderThickness="0,0,0,1">
+
+            <WrapPanel>
+
+                <Button
+                    x:Name="ReplyButton"
+                    MinWidth="105"
+                    Height="36"
+                    Margin="0,0,8,4"
+                    Padding="14,0"
+                    Content="Antworten"
+                    Cursor="Hand"
+                    Style="{StaticResource Button.Primary}"
+                    Click="ReplyButton_OnClick" />
+
+                <Button
+                    x:Name="ReplyAllButton"
+                    MinWidth="125"
+                    Height="36"
+                    Margin="0,0,8,4"
+                    Padding="14,0"
+                    Content="Allen antworten"
+                    Cursor="Hand"
+                    Click="ReplyAllButton_OnClick" />
+
+                <Button
+                    x:Name="ForwardButton"
+                    MinWidth="115"
+                    Height="36"
+                    Margin="0,0,8,4"
+                    Padding="14,0"
+                    Content="Weiterleiten"
+                    Cursor="Hand"
+                    Click="ForwardButton_OnClick" />
+
+                <Button
+                    x:Name="PrimaryMessageActionButton"
+                    MinWidth="110"
+                    Height="36"
+                    Margin="0,0,8,4"
+                    Padding="14,0"
+                    Content="Löschen"
+                    Cursor="Hand"
+                    Click="PrimaryMessageActionButton_OnClick" />
+
+                <Button
+                    x:Name="PermanentDeleteButton"
+                    MinWidth="130"
+                    Height="36"
+                    Margin="0,0,8,4"
+                    Padding="14,0"
+                    Content="Endgültig löschen"
+                    Cursor="Hand"
+                    Visibility="Collapsed"
+                    Foreground="{StaticResource Status.Error}"
+                    Click="PermanentDeleteButton_OnClick" />
+
+                <Button
+                    x:Name="PrintButton"
+                    MinWidth="100"
+                    Height="36"
+                    Margin="0,0,0,4"
+                    Padding="14,0"
+                    Content="Drucken"
+                    Cursor="Hand"
+                    Click="PrintButton_OnClick" />
+
+            </WrapPanel>
+
+        </Border>
+
         <!-- Hinweis auf blockierte externe Bilder -->
 
         <Border
             x:Name="ExternalImagesNotice"
-            Grid.Row="1"
+            Grid.Row="2"
             Visibility="Collapsed"
             Padding="16,10"
             Background="{StaticResource Brand.PrimaryLight}"
@@ -186,7 +267,7 @@
 
         <!-- Nachricht -->
 
-        <Grid Grid.Row="2">
+        <Grid Grid.Row="3">
 
             <!-- Plaintext-Fallback -->
 
