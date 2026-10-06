@@ -185,24 +185,33 @@ public partial class App : Application
                      * Lokales Mailarchiv.
                      *
                      * LocalMailArchiveStorage verwaltet die
-                     * Archivwurzel unter "Dokumente",
-                     * die Archivdatenbank und die lokale
+                     * Archivwurzel, Datenbank und lokale
                      * Ordnerstruktur.
                      *
-                     * MailArchiveMessageStagingService lädt für
-                     * den Archivierungsworkflow vollständige
-                     * MIME-Nachrichten zunächst in den lokalen
-                     * Staging-Bereich und verifiziert dort
-                     * Dateigröße, MIME-Struktur und SHA-256.
+                     * MailArchiveMessageStagingService lädt
+                     * vollständige Rohmails read-only vom
+                     * Mailserver und verifiziert sie lokal.
                      *
-                     * Beide Dienste verändern durch ihre bloße
-                     * Registrierung keinerlei Serverdaten.
+                     * LocalMailArchiveFinalizationService
+                     * erzeugt daraus die endgültige lokale
+                     * Archivdatei und persistiert LocalStored.
+                     *
+                     * MailArchiveServerDeletionService entfernt
+                     * erst nach vollständiger erneuter Prüfung
+                     * exakt die archivierte Servermail und
+                     * persistiert anschließend Completed.
                      */
                     services.AddSingleton<
                         LocalMailArchiveStorage>();
 
                     services.AddSingleton<
                         MailArchiveMessageStagingService>();
+
+                    services.AddSingleton<
+                        LocalMailArchiveFinalizationService>();
+
+                    services.AddSingleton<
+                        MailArchiveServerDeletionService>();
 
                     /*
                      * Programmeinstellungen und
@@ -306,11 +315,6 @@ public partial class App : Application
                 .TryApplyAvailableUpdateAsync(
                     splashWindow.SetStatus);
 
-        /*
-         * ApplyUpdatesAndRestart beendet den Prozess normalerweise
-         * bereits selbst. Dieser Rücksprung verhindert defensiv,
-         * dass parallel noch der normale Mail-Startup beginnt.
-         */
         if (updateRestartInitiated)
         {
             return;
@@ -360,15 +364,6 @@ public partial class App : Application
         IServiceProvider serviceProvider,
         LoggerConfiguration loggerConfiguration)
     {
-        /*
-         * Standardmäßig protokollieren wir unsere eigenen
-         * technischen Ereignisse ab Information.
-         *
-         * Framework-interne Meldungen von Microsoft/System
-         * werden auf Warning begrenzt, damit die Feldtestlogs
-         * nicht mit wenig hilfreichem Frameworkrauschen
-         * überfüllt werden.
-         */
         loggerConfiguration
             .MinimumLevel.Information()
             .MinimumLevel.Override(
@@ -425,15 +420,6 @@ public partial class App : Application
         }
         catch (Exception exception)
         {
-            /*
-             * Logging ist für Diagnose und Support wichtig,
-             * darf aber niemals verhindern, dass der Benutzer
-             * seine E-Mails erreicht.
-             *
-             * Falls beispielsweise das lokale Profil oder der
-             * Logordner nicht beschreibbar ist, läuft Telenec
-             * Mail deshalb trotzdem weiter.
-             */
             Trace.WriteLine(
                 $"Could not initialize persistent logging: {exception}");
         }
@@ -454,10 +440,6 @@ public partial class App : Application
         }
         catch (Exception exception)
         {
-            /*
-             * Auch das Erstellen bzw. Abrufen des Loggers
-             * darf den normalen Programmstart nicht verhindern.
-             */
             Trace.WriteLine(
                 $"Could not initialize application logger: {exception}");
         }
@@ -515,24 +497,9 @@ public partial class App : Application
         ShutdownMode =
             ShutdownMode.OnMainWindowClose;
 
-        /*
-         * Die freiwillige Statistikentscheidung wird bewusst
-         * erst geprüft, nachdem das eigentliche Hauptfenster
-         * verfügbar ist.
-         *
-         * Dadurch bleibt Telenec Mail unabhängig von der
-         * Entscheidung vollständig nutzbar.
-         */
         await ShowUsageStatisticsConsentIfNeededAsync(
             mainWindow);
 
-        /*
-         * Release Notes erscheinen erst nach einer eventuell
-         * notwendigen Statistikentscheidung.
-         *
-         * Dadurch können niemals zwei modale Fenster
-         * gleichzeitig um den Fokus konkurrieren.
-         */
         ShowPendingReleaseNotes(
             mainWindow);
     }
@@ -570,23 +537,11 @@ public partial class App : Application
 
             whatsNewWindow.ShowDialog();
 
-            /*
-             * Erst nachdem das Fenster tatsächlich angezeigt
-             * und geschlossen wurde, gilt diese Version als gesehen.
-             */
             releaseNotesService
                 .MarkAsShown();
         }
         catch (Exception exception)
         {
-            /*
-             * Ein Fehler in der Komfortfunktion
-             * darf Telenec Mail nicht beeinträchtigen.
-             *
-             * Der Marker bleibt erhalten, damit beim nächsten
-             * Programmstart erneut versucht werden kann,
-             * die Hinweise anzuzeigen.
-             */
             Trace.WriteLine(
                 $"Could not show release notes: {exception}");
         }

@@ -16,7 +16,7 @@ public partial class MainWindow
         _isArchiveOperationInProgress;
 
     /*
-     * Erste produktive Benutzerfunktion für das lokale
+     * Produktive Benutzerfunktion für das lokale
      * Telenec-Mail-Archiv.
      *
      * Sicherheitsablauf:
@@ -94,10 +94,6 @@ public partial class MainWindow
         archiveMenuItem.Click +=
             ArchiveMenuItem_OnClick;
 
-        /*
-         * Der Archivieren-Eintrag wird unmittelbar vor der
-         * normalen Löschen-/Wiederherstellen-Aktion eingefügt.
-         */
         var messageActionItem =
             contextMenu
                 .Items
@@ -146,11 +142,11 @@ public partial class MainWindow
         }
 
         /*
-         * In diesem Entwicklungsschritt wird bewusst nur die
-         * tatsächlich rechtsgeklickte Nachricht archiviert.
+         * Vorerst wird ausschließlich die tatsächlich
+         * rechtsgeklickte Nachricht archiviert.
          *
-         * Mehrfachauswahl wird separat ergänzt, sobald der
-         * Einzelmail-Workflow als Benutzerfunktion geprüft ist.
+         * Mehrfachauswahl wird als eigener Entwicklungsschritt
+         * ergänzt.
          */
         var contextMenu =
             ItemsControl.ItemsControlFromItemContainer(
@@ -206,16 +202,6 @@ public partial class MainWindow
             return;
         }
 
-        /*
-         * Für den Benutzer ist vor allem wichtig:
-         *
-         * Das Archiv liegt lokal auf diesem Computer.
-         * Nach erfolgreicher Archivierung wird die
-         * Serverkopie endgültig entfernt.
-         *
-         * Deshalb weisen wir ausdrücklich auf die notwendige
-         * Datensicherung des Archivordners hin.
-         */
         var confirmation =
             MessageBox.Show(
                 this,
@@ -245,38 +231,27 @@ public partial class MainWindow
 
         try
         {
+            /*
+             * Sämtliche Archivdienste sind regulär im
+             * DI-Container registriert.
+             *
+             * Dadurch gibt es im produktiven Workflow keine
+             * temporäre ActivatorUtilities-Fallbacklogik mehr.
+             */
             var stagingService =
                 _serviceProvider
-                    .GetService<
+                    .GetRequiredService<
                         MailArchiveMessageStagingService>();
-
-            stagingService ??=
-                ActivatorUtilities
-                    .CreateInstance<
-                        MailArchiveMessageStagingService>(
-                            _serviceProvider);
 
             var finalizationService =
                 _serviceProvider
-                    .GetService<
+                    .GetRequiredService<
                         LocalMailArchiveFinalizationService>();
-
-            finalizationService ??=
-                ActivatorUtilities
-                    .CreateInstance<
-                        LocalMailArchiveFinalizationService>(
-                            _serviceProvider);
 
             var serverDeletionService =
                 _serviceProvider
-                    .GetService<
+                    .GetRequiredService<
                         MailArchiveServerDeletionService>();
-
-            serverDeletionService ??=
-                ActivatorUtilities
-                    .CreateInstance<
-                        MailArchiveServerDeletionService>(
-                            _serviceProvider);
 
             /*
              * Phase 1:
@@ -386,13 +361,6 @@ public partial class MainWindow
         catch (MailArchiveServerDeletionException exception)
             when (exception.ServerDeletionConfirmed)
         {
-            /*
-             * Die Servermail ist sicher entfernt und die lokale
-             * Archivkopie vorhanden.
-             *
-             * Nur der lokale Abschlussstatus konnte nicht
-             * vollständig persistiert werden.
-             */
             MessageBox.Show(
                 this,
                 "Die Nachricht wurde lokal archiviert und die Serverkopie wurde erfolgreich entfernt.\n\n" +
@@ -407,14 +375,6 @@ public partial class MainWindow
         catch (MailArchiveServerDeletionException exception)
             when (exception.ServerStateUncertain)
         {
-            /*
-             * Nach einer begonnenen Servermutation konnte der
-             * tatsächliche Endzustand nicht sicher festgestellt
-             * werden.
-             *
-             * Ein automatischer zweiter Löschversuch wäre in
-             * diesem Zustand gefährlich.
-             */
             MessageBox.Show(
                 this,
                 "Die Nachricht wurde erfolgreich lokal archiviert.\n\n" +
@@ -440,13 +400,6 @@ public partial class MainWindow
         }
         catch (Exception exception)
         {
-            /*
-             * Jeder Fehler beendet den Ablauf.
-             *
-             * Es existiert bewusst kein Fallback, der nach
-             * einem lokalen Fehler trotzdem versucht, die
-             * Servermail zu entfernen.
-             */
             MessageBox.Show(
                 this,
                 "Die Nachricht konnte nicht vollständig archiviert werden.\n\n" +
