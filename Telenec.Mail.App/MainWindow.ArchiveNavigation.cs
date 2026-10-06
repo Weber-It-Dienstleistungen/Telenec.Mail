@@ -169,32 +169,28 @@ public partial class MainWindow
         return -1;
     }
 
-    private async void
-        ArchiveNavigationMenuItem_OnClick(
-            object sender,
-            RoutedEventArgs e)
+    private void ArchiveNavigationMenuItem_OnClick(
+        object sender,
+        RoutedEventArgs e)
     {
         try
         {
-            var archiveLocation =
-                await GetArchiveLocationAsync();
+            /*
+             * Der Menüpunkt öffnet nun die echte lokale
+             * Archivansicht.
+             *
+             * Das Fenster selbst lädt beim Öffnen einen
+             * frischen read-only Snapshot aus archive.db.
+             */
+            var archiveWindow =
+                _serviceProvider
+                    .GetRequiredService<
+                        ArchiveWindow>();
 
-            if (!Directory.Exists(
-                    archiveLocation.AccountDirectory))
-            {
-                throw new DirectoryNotFoundException(
-                    "Der lokale Archivordner konnte nicht gefunden werden.");
-            }
+            archiveWindow.Owner =
+                this;
 
-            Process.Start(
-                new ProcessStartInfo
-                {
-                    FileName =
-                        archiveLocation.AccountDirectory,
-
-                    UseShellExecute =
-                        true
-                });
+            archiveWindow.ShowDialog();
         }
         catch (Exception exception)
         {
@@ -223,10 +219,11 @@ public partial class MainWindow
     /*
      * Komfortfunktion für den Archivworkflow.
      *
-     * Sie wird im nächsten Schritt nach einer erfolgreich
-     * archivierten Nachricht aufgerufen.
+     * Sie wird nach mindestens einer erfolgreich archivierten
+     * Nachricht aufgerufen.
      *
-     * Existiert die Verknüpfung bereits, geschieht nichts.
+     * Existiert die Desktop-Verknüpfung bereits, geschieht
+     * nichts.
      *
      * Ein Fehler beim Erstellen der Verknüpfung darf niemals
      * den eigentlichen Archivierungsvorgang fehlschlagen
@@ -341,11 +338,11 @@ public partial class MainWindow
                 $"Lokales Telenec-Mail-Archiv für {emailAddress}";
 
             /*
-             * Als Symbol verwenden wir bewusst das Icon der
-             * laufenden Telenec-Mail-Anwendung.
+             * Aktuell verwenden wir das Programmsymbol von
+             * Telenec Mail.
              *
-             * Damit erhält der Archivlink kein generisches
-             * Windows-Ordnersymbol mehr.
+             * Ein eigenes Archivsymbol kann später als reines
+             * Polishing ergänzt werden.
              */
             var applicationPath =
                 Environment.ProcessPath;

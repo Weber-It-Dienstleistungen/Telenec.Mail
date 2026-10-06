@@ -188,6 +188,10 @@ public partial class App : Application
                      * Archivwurzel, Datenbank und lokale
                      * Ordnerstruktur.
                      *
+                     * LocalMailArchiveReader liest den
+                     * vorhandenen Archivbestand ausschließlich
+                     * read-only für die Archivoberfläche.
+                     *
                      * MailArchiveMessageStagingService lädt
                      * vollständige Rohmails read-only vom
                      * Mailserver und verifiziert sie lokal.
@@ -203,6 +207,9 @@ public partial class App : Application
                      */
                     services.AddSingleton<
                         LocalMailArchiveStorage>();
+
+                    services.AddSingleton<
+                        LocalMailArchiveReader>();
 
                     services.AddSingleton<
                         MailArchiveMessageStagingService>();
@@ -267,6 +274,15 @@ public partial class App : Application
 
                     services.AddTransient<
                         ComposeWindow>();
+
+                    /*
+                     * Das lokale Archivfenster ist transient.
+                     *
+                     * Bei jedem Öffnen wird damit ein frischer
+                     * Snapshot aus archive.db geladen.
+                     */
+                    services.AddTransient<
+                        ArchiveWindow>();
 
                     /*
                      * Das Einstellungsfenster ist transient.
