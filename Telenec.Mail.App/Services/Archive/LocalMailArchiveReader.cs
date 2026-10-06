@@ -420,6 +420,30 @@ public sealed class LocalMailArchiveReader
                 databasePath);
         }
 
+        /*
+         * WICHTIG:
+         *
+         * Der Archivbrowser ist ein reiner Snapshot-Reader.
+         * Er benötigt keinen SQLite Shared Cache.
+         *
+         * Eine gepoolte ReadOnly-Verbindung mit Shared Cache
+         * kann später mit einer schreibenden Restore-
+         * Verbindung kollidieren und zu
+         *
+         * "attempt to write a readonly database"
+         *
+         * führen.
+         *
+         * Deshalb verwenden wir hier bewusst:
+         *
+         * - ReadOnly
+         * - Private Cache
+         * - kein Connection Pooling
+         *
+         * Nach dem Snapshot bleibt damit kein ReadOnly-
+         * Datenbankhandle für spätere Schreiboperationen
+         * zurück.
+         */
         var connectionStringBuilder =
             new SqliteConnectionStringBuilder
             {
@@ -430,7 +454,10 @@ public sealed class LocalMailArchiveReader
                     SqliteOpenMode.ReadOnly,
 
                 Cache =
-                    SqliteCacheMode.Shared
+                    SqliteCacheMode.Private,
+
+                Pooling =
+                    false
             };
 
         var connection =

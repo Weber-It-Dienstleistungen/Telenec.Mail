@@ -156,76 +156,11 @@
                         Foreground="{StaticResource Text.Secondary}" />
 
                     <TextBlock
+                        Text="{Binding MissingFileCount, StringFormat={}{0} auffällige Datei(en)}"
                         Margin="0,3,0,0"
                         FontSize="13"
                         FontWeight="SemiBold"
-                        Foreground="{StaticResource Text.Primary}">
-
-                        <TextBlock.Style>
-
-                            <Style TargetType="TextBlock">
-
-                                <Setter
-                                    Property="Text"
-                                    Value="Archivdateien vollständig" />
-
-                                <Style.Triggers>
-
-                                    <DataTrigger
-                                        Binding="{Binding MissingFileCount}"
-                                        Value="1">
-
-                                        <Setter
-                                            Property="Text"
-                                            Value="1 Datei auffällig" />
-
-                                        <Setter
-                                            Property="Foreground"
-                                            Value="{StaticResource Status.Warning}" />
-
-                                    </DataTrigger>
-
-                                </Style.Triggers>
-
-                            </Style>
-
-                        </TextBlock.Style>
-
-                    </TextBlock>
-
-                    <TextBlock
-                        Text="{Binding MissingFileCount, StringFormat={}{0} auffällige Datei(en)}"
-                        Margin="0,3,0,0"
-                        FontSize="11"
-                        Foreground="{StaticResource Text.Secondary}">
-
-                        <TextBlock.Style>
-
-                            <Style TargetType="TextBlock">
-
-                                <Setter
-                                    Property="Visibility"
-                                    Value="Visible" />
-
-                                <Style.Triggers>
-
-                                    <DataTrigger
-                                        Binding="{Binding MissingFileCount}"
-                                        Value="0">
-
-                                        <Setter
-                                            Property="Visibility"
-                                            Value="Collapsed" />
-
-                                    </DataTrigger>
-
-                                </Style.Triggers>
-
-                            </Style>
-
-                        </TextBlock.Style>
-
-                    </TextBlock>
+                        Foreground="{StaticResource Text.Primary}" />
 
                 </StackPanel>
 
@@ -419,6 +354,7 @@
                         BorderThickness="0"
                         Padding="10"
                         ItemContainerStyle="{StaticResource ArchiveListItemStyle}"
+                        SelectionChanged="ArchiveMessageListBox_OnSelectionChanged"
                         ScrollViewer.HorizontalScrollBarVisibility="Disabled"
                         ScrollViewer.VerticalScrollBarVisibility="Auto">
 
@@ -564,6 +500,7 @@
                     <ColumnDefinition Width="*" />
                     <ColumnDefinition Width="Auto" />
                     <ColumnDefinition Width="Auto" />
+                    <ColumnDefinition Width="Auto" />
                 </Grid.ColumnDefinitions>
 
                 <TextBlock
@@ -576,9 +513,21 @@
                     TextWrapping="Wrap" />
 
                 <Button
-                    x:Name="OpenArchiveFolderButton"
+                    x:Name="RestoreArchiveMessageButton"
                     Grid.Column="1"
                     Width="155"
+                    Height="38"
+                    Margin="0,0,10,0"
+                    Content="Wiederherstellen"
+                    Cursor="Hand"
+                    IsEnabled="False"
+                    ToolTip="Ausgewählte Nachricht in den ursprünglichen Mailordner wiederherstellen"
+                    Click="RestoreArchiveMessageButton_OnClick" />
+
+                <Button
+                    x:Name="OpenArchiveFolderButton"
+                    Grid.Column="2"
+                    Width="145"
                     Height="38"
                     Margin="0,0,10,0"
                     Content="Ordner öffnen"
@@ -587,7 +536,7 @@
                     Click="OpenArchiveFolderButton_OnClick" />
 
                 <Button
-                    Grid.Column="2"
+                    Grid.Column="3"
                     Width="110"
                     Height="38"
                     Content="Schließen"
