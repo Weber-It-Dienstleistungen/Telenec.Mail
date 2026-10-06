@@ -189,15 +189,6 @@ public partial class MainWindow
             return;
         }
 
-        /*
-         * Verhalten analog zu anderen Mehrfachaktionen:
-         *
-         * Rechtsklick auf eine bereits ausgewählte Nachricht:
-         * gesamte aktuelle Auswahl verwenden.
-         *
-         * Rechtsklick auf eine nicht ausgewählte Nachricht:
-         * ausschließlich diese eine Nachricht verwenden.
-         */
         IReadOnlyList<MailMessageItemViewModel>
             messagesToArchive;
 
@@ -223,13 +214,6 @@ public partial class MainWindow
             return;
         }
 
-        /*
-         * Wir filtern ungültige UIDs niemals stillschweigend
-         * aus einer Mehrfachauswahl heraus.
-         *
-         * Entweder ist die gesamte Auswahl eindeutig
-         * identifizierbar oder der Vorgang beginnt gar nicht.
-         */
         var invalidMessages =
             messagesToArchive
                 .Where(
@@ -310,37 +294,17 @@ public partial class MainWindow
             {
                 try
                 {
-                    /*
-                     * Phase 1:
-                     *
-                     * Vollständige Servermail read-only
-                     * herunterladen und lokal verifizieren.
-                     */
                     using var stagedMessage =
                         await stagingService
                             .StageMessageAsync(
                                 selectedFolder.FolderId,
                                 message.UniqueId);
 
-                    /*
-                     * Phase 2:
-                     *
-                     * Endgültige lokale .eml erzeugen,
-                     * erneut verifizieren und archive.db
-                     * auf LocalStored setzen.
-                     */
                     var finalizedMessage =
                         await finalizationService
                             .FinalizeMessageAsync(
                                 stagedMessage);
 
-                    /*
-                     * Phase 3:
-                     *
-                     * Servermail erneut vollständig prüfen,
-                     * exakt diese UID entfernen und
-                     * archive.db auf Completed setzen.
-                     */
                     var deletionResult =
                         await serverDeletionService
                             .DeleteArchivedServerMessageAsync(
@@ -392,16 +356,6 @@ public partial class MainWindow
                 catch (MailArchiveServerDeletionException exception)
                     when (exception.ServerDeletionConfirmed)
                 {
-                    /*
-                     * Die Servermail wurde sicher entfernt und
-                     * die lokale Datei existiert.
-                     *
-                     * Lediglich der abschließende DB-Status
-                     * konnte nicht vollständig persistiert
-                     * werden.
-                     *
-                     * Der Batch wird deshalb sofort gestoppt.
-                     */
                     failure =
                         new ArchiveBatchFailure(
                             Subject:
@@ -425,11 +379,6 @@ public partial class MainWindow
                 catch (MailArchiveServerDeletionException exception)
                     when (exception.ServerStateUncertain)
                 {
-                    /*
-                     * Sobald der Serverzustand nicht eindeutig
-                     * feststeht, darf keine weitere Nachricht
-                     * dieses Auswahlvorgangs verarbeitet werden.
-                     */
                     failure =
                         new ArchiveBatchFailure(
                             Subject:
@@ -473,14 +422,6 @@ public partial class MainWindow
                 }
                 catch (Exception exception)
                 {
-                    /*
-                     * Jeder sonstige Fehler stoppt die
-                     * Mehrfachverarbeitung.
-                     *
-                     * Bereits vollständig abgeschlossene
-                     * vorherige Nachrichten werden nicht
-                     * zurückgerollt.
-                     */
                     failure =
                         new ArchiveBatchFailure(
                             Subject:
@@ -504,11 +445,6 @@ public partial class MainWindow
         }
         catch (Exception exception)
         {
-            /*
-             * Fehler außerhalb der Verarbeitung einer
-             * konkreten Nachricht, beispielsweise beim
-             * Auflösen eines benötigten Dienstes.
-             */
             failure =
                 new ArchiveBatchFailure(
                     Subject:
@@ -535,11 +471,35 @@ public partial class MainWindow
         }
 
         /*
-         * Nach einem Batch wird das Postfach genau einmal
-         * aktualisiert.
+         * Sobald mindestens eine Nachricht vollständig
+         * archiviert wurde, prüfen wir die Desktop-
+         * Verknüpfung.
          *
-         * Dadurch vermeiden wir nach jeder einzelnen Mail
-         * einen kompletten UI-Reload.
+         * Existiert sie bereits, passiert nichts.
+         * Fehlt sie, wird sie automatisch angelegt.
+         *
+         * Ein Fehler an dieser Stelle beeinflusst niemals
+         * den bereits erfolgreichen Archivierungsvorgang.
+         */
+        var shortcutNotice =
+            string.Empty;
+
+        if (successfullyArchivedCount > 0)
+        {
+            var shortcutResult =
+                await EnsureArchiveDesktopShortcutAsync();
+
+            if (shortcutResult.WasCreated)
+            {
+                shortcutNotice =
+                    "\n\nAuf dem Desktop wurde automatisch die Verknüpfung " +
+                    "„Telenec Mail Archiv“ erstellt.";
+            }
+        }
+
+        /*
+         * Nach dem vollständigen Batch wird das Postfach
+         * genau einmal aktualisiert.
          */
         var mailboxRefreshSucceeded =
             true;
@@ -566,6 +526,7 @@ public partial class MainWindow
                 messagesToArchive.Count,
                 successfullyArchivedCount,
                 failure,
+                shortcutNotice,
                 refreshNotice);
 
             return;
@@ -574,6 +535,7 @@ public partial class MainWindow
         ShowArchiveSuccess(
             messagesToArchive,
             successfullyArchivedFiles,
+            shortcutNotice,
             refreshNotice);
     }
 
@@ -679,6 +641,7 @@ public partial class MainWindow
     private void ShowArchiveSuccess(
         IReadOnlyList<MailMessageItemViewModel> messages,
         IReadOnlyList<string> archivedFiles,
+        string shortcutNotice,
         string refreshNotice)
     {
         if (messages.Count == 1)
@@ -694,6 +657,7 @@ public partial class MainWindow
                 $"Betreff:\n{messages[0].Subject}\n\n" +
                 $"Archivdatei:\n{archivedFile}\n\n" +
                 "Bitte berücksichtigen Sie den Ordner „Telenec Mail Archiv“ in Ihrer regelmäßigen Datensicherung." +
+                shortcutNotice +
                 refreshNotice,
                 "Archivierung abgeschlossen",
                 MessageBoxButton.OK,
@@ -707,6 +671,7 @@ public partial class MainWindow
             $"{messages.Count} Nachrichten wurden erfolgreich archiviert und vom Mailserver entfernt.\n\n" +
             "Alle ausgewählten Nachrichten wurden vollständig lokal gespeichert und verifiziert.\n\n" +
             "Bitte berücksichtigen Sie den Ordner „Telenec Mail Archiv“ in Ihrer regelmäßigen Datensicherung." +
+            shortcutNotice +
             refreshNotice,
             "Archivierung abgeschlossen",
             MessageBoxButton.OK,
@@ -717,6 +682,7 @@ public partial class MainWindow
         int totalMessageCount,
         int successfullyArchivedCount,
         ArchiveBatchFailure failure,
+        string shortcutNotice,
         string refreshNotice)
     {
         var progressText =
@@ -753,6 +719,7 @@ public partial class MainWindow
             progressText +
             remainingText +
             "\n\nBereits vollständig archivierte Nachrichten bleiben archiviert." +
+            shortcutNotice +
             refreshNotice,
             failure.Title,
             MessageBoxButton.OK,
