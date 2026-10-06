@@ -350,6 +350,7 @@
                         x:Name="ArchiveMessageListBox"
                         Grid.Row="1"
                         ItemsSource="{Binding Messages}"
+                        SelectionMode="Extended"
                         Background="Transparent"
                         BorderThickness="0"
                         Padding="10"
@@ -521,7 +522,7 @@
                     Content="Wiederherstellen"
                     Cursor="Hand"
                     IsEnabled="False"
-                    ToolTip="Ausgewählte Nachricht in den ursprünglichen Mailordner wiederherstellen"
+                    ToolTip="Ausgewählte Nachricht(en) in die ursprünglichen Mailordner wiederherstellen"
                     Click="RestoreArchiveMessageButton_OnClick" />
 
                 <Button

@@ -15,6 +15,12 @@ namespace Telenec.Mail.App;
 
 public partial class ArchiveWindow : Window
 {
+    private const int MaximumRestorePreviewMessageCount =
+        5;
+
+    private const int MaximumRestorePreviewSubjectLength =
+        80;
+
     private readonly LocalMailArchiveReader
         _archiveReader;
 
@@ -63,12 +69,6 @@ public partial class ArchiveWindow : Window
         _archiveMessageLoader =
             new LocalMailArchiveMessageLoader();
 
-        /*
-         * Die drei benötigten Abhängigkeiten sind bereits im
-         * vorhandenen DI-Container registriert.
-         *
-         * Deshalb ist keine Änderung an App.xaml.cs nötig.
-         */
         _archiveRestoreService =
             new MailArchiveRestoreService(
                 mailAccountStore,
@@ -222,8 +222,7 @@ public partial class ArchiveWindow : Window
 
         _archiveMessagesView.Refresh();
 
-        ArchiveMessageListBox.SelectedItem =
-            null;
+        ArchiveMessageListBox.UnselectAll();
 
         ArchiveMessageHeaderText.Text =
             $"Archivierte Nachrichten – {selectedFolder.DisplayName}";
@@ -240,21 +239,37 @@ public partial class ArchiveWindow : Window
 
     private void UpdateRestoreButtonState()
     {
-        var selectedMessage =
-            ArchiveMessageListBox.SelectedItem
-                as LocalMailArchiveMessageInfo;
+        var selectedMessages =
+            GetSelectedArchiveMessages();
 
         RestoreArchiveMessageButton.IsEnabled =
             !_isLoading &&
             !_isRestoringArchiveMessage &&
-            selectedMessage is not null &&
-            selectedMessage.LocalFileState ==
+            selectedMessages.Count > 0 &&
+            selectedMessages.All(
+                IsMessageEligibleForRestore);
+    }
+
+    private static bool IsMessageEligibleForRestore(
+        LocalMailArchiveMessageInfo message)
+    {
+        return
+            message.LocalFileState ==
                 LocalMailArchiveFileState.Available &&
-            selectedMessage.ServerDeleted &&
+            message.ServerDeleted &&
             string.Equals(
-                selectedMessage.OperationStatus,
+                message.OperationStatus,
                 "Completed",
                 StringComparison.Ordinal);
+    }
+
+    private IReadOnlyList<LocalMailArchiveMessageInfo>
+        GetSelectedArchiveMessages()
+    {
+        return ArchiveMessageListBox
+            .SelectedItems
+            .OfType<LocalMailArchiveMessageInfo>()
+            .ToArray();
     }
 
     private void ShowAllMessagesButton_OnClick(
@@ -274,8 +289,7 @@ public partial class ArchiveWindow : Window
         ArchiveFolderListBox.SelectedItem =
             null;
 
-        ArchiveMessageListBox.SelectedItem =
-            null;
+        ArchiveMessageListBox.UnselectAll();
 
         _archiveMessagesView.Filter =
             null;
@@ -292,20 +306,34 @@ public partial class ArchiveWindow : Window
         object sender,
         RoutedEventArgs e)
     {
-        if (_isRestoringArchiveMessage ||
-            ArchiveMessageListBox.SelectedItem
-                is not LocalMailArchiveMessageInfo archiveMessage)
+        if (_isRestoringArchiveMessage)
         {
             return;
         }
 
-        if (archiveMessage.LocalFileState !=
-                LocalMailArchiveFileState.Available ||
-            !archiveMessage.ServerDeleted)
+        var messagesToRestore =
+            GetSelectedArchiveMessages();
+
+        if (messagesToRestore.Count == 0)
+        {
+            return;
+        }
+
+        var invalidMessages =
+            messagesToRestore
+                .Where(
+                    message =>
+                        !IsMessageEligibleForRestore(
+                            message))
+                .ToArray();
+
+        if (invalidMessages.Length > 0)
         {
             MessageBox.Show(
                 this,
-                "Diese Archivnachricht kann derzeit nicht sicher wiederhergestellt werden.",
+                invalidMessages.Length == 1
+                    ? "Eine ausgewählte Archivnachricht kann derzeit nicht sicher wiederhergestellt werden."
+                    : $"{invalidMessages.Length} ausgewählte Archivnachrichten können derzeit nicht sicher wiederhergestellt werden.",
                 "Lokales Mailarchiv",
                 MessageBoxButton.OK,
                 MessageBoxImage.Warning);
@@ -313,21 +341,14 @@ public partial class ArchiveWindow : Window
             return;
         }
 
-        var subject =
-            string.IsNullOrWhiteSpace(
-                archiveMessage.Subject)
-                ? "(Kein Betreff)"
-                : archiveMessage.Subject;
-
         var confirmation =
             MessageBox.Show(
                 this,
-                "Soll diese Nachricht wieder auf den Mailserver zurückverschoben werden?\n\n" +
-                $"Betreff: {subject}\n" +
-                $"Zielordner: {archiveMessage.SourceFolderId}\n\n" +
-                "Die lokale Archivkopie wird erst entfernt, nachdem die neue Serverkopie vollständig hochgeladen " +
-                "und erneut anhand von Dateigröße und SHA-256 geprüft wurde.",
-                "Nachricht wiederherstellen",
+                CreateRestoreConfirmationText(
+                    messagesToRestore),
+                messagesToRestore.Count == 1
+                    ? "Nachricht wiederherstellen"
+                    : "Nachrichten wiederherstellen",
                 MessageBoxButton.YesNo,
                 MessageBoxImage.Question,
                 MessageBoxResult.No);
@@ -351,23 +372,243 @@ public partial class ArchiveWindow : Window
         Mouse.OverrideCursor =
             Cursors.Wait;
 
+        var successfullyRestoredCount =
+            0;
+
+        var restoreResults =
+            new List<ArchiveRestoreResult>();
+
+        ArchiveRestoreBatchFailure?
+            failure =
+                null;
+
         try
         {
-            var result =
-                await _archiveRestoreService
-                    .RestoreAsync(
-                        archiveMessage
-                            .ArchiveMessageId);
-
             /*
-             * Nach erfolgreichem Restore wird archive.db
-             * komplett neu eingelesen.
+             * Genau wie beim Archivieren werden mehrere
+             * Nachrichten bewusst nacheinander verarbeitet.
              *
-             * Die Nachricht verschwindet dadurch sofort aus
-             * dem Archiv und auch die Zähler sind aktuell.
+             * Jede Nachricht durchläuft vollständig den
+             * bereits getesteten Restore-Sicherheitsablauf,
+             * bevor die nächste Nachricht beginnt.
              */
-            await LoadArchiveAsync(
-                preferredArchiveFolderId);
+            foreach (var archiveMessage in
+                     messagesToRestore)
+            {
+                try
+                {
+                    var result =
+                        await _archiveRestoreService
+                            .RestoreAsync(
+                                archiveMessage
+                                    .ArchiveMessageId);
+
+                    restoreResults.Add(
+                        result);
+
+                    successfullyRestoredCount++;
+                }
+                catch (MailArchiveRestoreException exception)
+                {
+                    failure =
+                        new ArchiveRestoreBatchFailure(
+                            Subject:
+                                archiveMessage.Subject,
+
+                            Title:
+                                "Wiederherstellung nicht abgeschlossen",
+
+                            Message:
+                                CreateRestoreExceptionText(
+                                    exception),
+
+                            Image:
+                                MessageBoxImage.Warning);
+
+                    break;
+                }
+                catch (Exception exception)
+                {
+                    failure =
+                        new ArchiveRestoreBatchFailure(
+                            Subject:
+                                archiveMessage.Subject,
+
+                            Title:
+                                "Wiederherstellung fehlgeschlagen",
+
+                            Message:
+                                "Die Nachricht konnte nicht vollständig wiederhergestellt werden.\n\n" +
+                                "Die lokale Archivkopie wird nur dann entfernt, wenn die Serverkopie zuvor vollständig und bytegenau verifiziert wurde.\n\n" +
+                                "Fehler:\n" +
+                                exception.Message,
+
+                            Image:
+                                MessageBoxImage.Error);
+
+                    break;
+                }
+            }
+        }
+        finally
+        {
+            /*
+             * Die Archivansicht wird nach dem gesamten Batch
+             * genau einmal neu geladen.
+             *
+             * Bereits erfolgreich wiederhergestellte
+             * Nachrichten verschwinden damit aus dem Archiv.
+             */
+            try
+            {
+                await LoadArchiveAsync(
+                    preferredArchiveFolderId);
+            }
+            catch
+            {
+            }
+
+            Mouse.OverrideCursor =
+                null;
+
+            _isRestoringArchiveMessage =
+                false;
+
+            UpdateRestoreButtonState();
+        }
+
+        if (failure is not null)
+        {
+            ShowRestoreBatchFailure(
+                messagesToRestore.Count,
+                successfullyRestoredCount,
+                failure);
+
+            return;
+        }
+
+        ShowRestoreBatchSuccess(
+            messagesToRestore,
+            restoreResults);
+    }
+
+    private static string CreateRestoreExceptionText(
+        MailArchiveRestoreException exception)
+    {
+        var message =
+            exception.Message;
+
+        if (exception.ServerCopyVerified)
+        {
+            message +=
+                "\n\nDie Serverkopie wurde bereits vollständig verifiziert.";
+        }
+
+        if (exception.RetryIsSafe)
+        {
+            message +=
+                "\n\nEin erneuter Wiederherstellungsversuch ist zulässig. " +
+                "Telenec Mail prüft dabei zuerst, ob bereits eine Serverkopie existiert.";
+        }
+        else if (exception.RecoveryStateUnresolved)
+        {
+            message +=
+                "\n\nEs wird aus Sicherheitsgründen kein automatischer Neu-Upload durchgeführt.";
+        }
+
+        return message;
+    }
+
+    private static string CreateRestoreConfirmationText(
+        IReadOnlyList<LocalMailArchiveMessageInfo> messages)
+    {
+        if (messages.Count == 1)
+        {
+            var message =
+                messages[0];
+
+            var subject =
+                NormalizeRestorePreviewSubject(
+                    message.Subject);
+
+            return
+                "Soll diese Nachricht wieder auf den Mailserver zurückverschoben werden?\n\n" +
+                $"Betreff:\n{subject}\n\n" +
+                $"Zielordner:\n{message.SourceFolderId}\n\n" +
+                "Die lokale Archivkopie wird erst entfernt, nachdem die neue Serverkopie vollständig hochgeladen " +
+                "und erneut anhand von Dateigröße und SHA-256 geprüft wurde.";
+        }
+
+        var preview =
+            messages
+                .Take(
+                    MaximumRestorePreviewMessageCount)
+                .Select(
+                    message =>
+                        "• " +
+                        NormalizeRestorePreviewSubject(
+                            message.Subject) +
+                        "\n  → " +
+                        message.SourceFolderId)
+                .ToList();
+
+        if (messages.Count >
+            MaximumRestorePreviewMessageCount)
+        {
+            preview.Add(
+                $"… und {messages.Count - MaximumRestorePreviewMessageCount} weitere");
+        }
+
+        return
+            $"{messages.Count} ausgewählte Archivnachrichten werden wieder auf den Mailserver zurückverschoben.\n\n" +
+            "Jede Nachricht wird in ihren jeweils ursprünglichen Mailordner wiederhergestellt:\n\n" +
+            string.Join(
+                Environment.NewLine,
+                preview) +
+            "\n\nJede Nachricht wird einzeln hochgeladen und anschließend erneut anhand von Dateigröße und SHA-256 geprüft. " +
+            "Erst danach wird ihre jeweilige lokale Archivkopie entfernt.\n\n" +
+            "Falls bei einer Nachricht ein Fehler auftritt, wird der Vorgang an dieser Stelle gestoppt. " +
+            "Bereits erfolgreich wiederhergestellte Nachrichten bleiben auf dem Mailserver.\n\n" +
+            $"Möchten Sie die {messages.Count} Nachrichten jetzt wiederherstellen?";
+    }
+
+    private static string NormalizeRestorePreviewSubject(
+        string? subject)
+    {
+        var normalized =
+            string.IsNullOrWhiteSpace(
+                subject)
+                ? "(Ohne Betreff)"
+                : subject
+                    .Trim()
+                    .Replace(
+                        "\r",
+                        " ")
+                    .Replace(
+                        "\n",
+                        " ");
+
+        if (normalized.Length <=
+            MaximumRestorePreviewSubjectLength)
+        {
+            return normalized;
+        }
+
+        return
+            normalized[
+                ..MaximumRestorePreviewSubjectLength]
+                .TrimEnd() +
+            "…";
+    }
+
+    private void ShowRestoreBatchSuccess(
+        IReadOnlyList<LocalMailArchiveMessageInfo> messages,
+        IReadOnlyList<ArchiveRestoreResult> restoreResults)
+    {
+        if (messages.Count == 1)
+        {
+            var result =
+                restoreResults[0];
 
             var successMessage =
                 "Die Nachricht wurde erfolgreich wiederhergestellt.\n\n" +
@@ -393,67 +634,116 @@ public partial class ArchiveWindow : Window
                     "Nachricht wiederhergestellt",
                     MessageBoxButton.OK,
                     MessageBoxImage.Warning);
+
+                return;
             }
-            else
-            {
-                MessageBox.Show(
-                    this,
-                    successMessage,
-                    "Nachricht wiederhergestellt",
-                    MessageBoxButton.OK,
-                    MessageBoxImage.Information);
-            }
+
+            MessageBox.Show(
+                this,
+                successMessage,
+                "Nachricht wiederhergestellt",
+                MessageBoxButton.OK,
+                MessageBoxImage.Information);
+
+            return;
         }
-        catch (MailArchiveRestoreException exception)
+
+        var warnings =
+            restoreResults
+                .Where(
+                    result =>
+                        !string.IsNullOrWhiteSpace(
+                            result.Warning))
+                .Select(
+                    result =>
+                        result.Warning!)
+                .ToArray();
+
+        var recoveredCount =
+            restoreResults.Count(
+                result =>
+                    result.RecoveredInterruptedRestore);
+
+        var message =
+            $"{messages.Count} Nachrichten wurden erfolgreich wiederhergestellt.\n\n" +
+            "Alle ausgewählten Nachrichten wurden vollständig auf den Mailserver übertragen und anschließend bytegenau verifiziert.";
+
+        if (recoveredCount > 0)
         {
-            var message =
-                exception.Message;
+            message +=
+                recoveredCount == 1
+                    ? "\n\n1 zuvor unterbrochener Wiederherstellungsversuch wurde dabei sicher erkannt und abgeschlossen."
+                    : $"\n\n{recoveredCount} zuvor unterbrochene Wiederherstellungsversuche wurden dabei sicher erkannt und abgeschlossen.";
+        }
 
-            if (exception.ServerCopyVerified)
-            {
-                message +=
-                    "\n\nDie Serverkopie wurde bereits vollständig verifiziert.";
-            }
-
-            if (exception.RetryIsSafe)
-            {
-                message +=
-                    "\n\nEin erneuter Wiederherstellungsversuch ist zulässig. " +
-                    "Telenec Mail prüft dabei zuerst, ob bereits eine Serverkopie existiert.";
-            }
-            else if (exception.RecoveryStateUnresolved)
-            {
-                message +=
-                    "\n\nEs wird aus Sicherheitsgründen kein automatischer Neu-Upload durchgeführt.";
-            }
+        if (warnings.Length > 0)
+        {
+            message +=
+                "\n\nHinweise:\n" +
+                string.Join(
+                    Environment.NewLine,
+                    warnings);
 
             MessageBox.Show(
                 this,
                 message,
-                "Wiederherstellung nicht abgeschlossen",
+                "Nachrichten wiederhergestellt",
                 MessageBoxButton.OK,
                 MessageBoxImage.Warning);
-        }
-        catch (Exception exception)
-        {
-            MessageBox.Show(
-                this,
-                "Die Archivnachricht konnte nicht wiederhergestellt werden.\n\n" +
-                exception.Message,
-                "Lokales Mailarchiv",
-                MessageBoxButton.OK,
-                MessageBoxImage.Error);
-        }
-        finally
-        {
-            Mouse.OverrideCursor =
-                null;
 
-            _isRestoringArchiveMessage =
-                false;
-
-            UpdateRestoreButtonState();
+            return;
         }
+
+        MessageBox.Show(
+            this,
+            message,
+            "Nachrichten wiederhergestellt",
+            MessageBoxButton.OK,
+            MessageBoxImage.Information);
+    }
+
+    private void ShowRestoreBatchFailure(
+        int totalMessageCount,
+        int successfullyRestoredCount,
+        ArchiveRestoreBatchFailure failure)
+    {
+        var progressText =
+            successfullyRestoredCount == 0
+                ? "Vor dem Fehler wurde noch keine Nachricht dieses Vorgangs vollständig wiederhergestellt."
+                : successfullyRestoredCount == 1
+                    ? "1 Nachricht wurde vor dem Fehler bereits vollständig wiederhergestellt."
+                    : $"{successfullyRestoredCount} Nachrichten wurden vor dem Fehler bereits vollständig wiederhergestellt.";
+
+        var remainingCount =
+            totalMessageCount -
+            successfullyRestoredCount -
+            1;
+
+        var remainingText =
+            remainingCount <= 0
+                ? string.Empty
+                : remainingCount == 1
+                    ? "\n\n1 weitere ausgewählte Nachricht wurde anschließend nicht mehr verarbeitet."
+                    : $"\n\n{remainingCount} weitere ausgewählte Nachrichten wurden anschließend nicht mehr verarbeitet.";
+
+        var subjectText =
+            string.IsNullOrWhiteSpace(
+                failure.Subject)
+                ? string.Empty
+                : "\n\nBetroffene Nachricht:\n" +
+                  failure.Subject;
+
+        MessageBox.Show(
+            this,
+            failure.Message +
+            subjectText +
+            "\n\n" +
+            progressText +
+            remainingText +
+            "\n\nBereits vollständig wiederhergestellte Nachrichten bleiben auf dem Mailserver.",
+            failure.Title,
+            MessageBoxButton.OK,
+            failure.Image);
     }
 
     private async void ArchiveMessageListBox_OnMouseDoubleClick(
@@ -656,4 +946,10 @@ public partial class ArchiveWindow : Window
     {
         Close();
     }
+
+    private sealed record ArchiveRestoreBatchFailure(
+        string Subject,
+        string Title,
+        string Message,
+        MessageBoxImage Image);
 }

@@ -3,6 +3,7 @@ using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
 using Telenec.Mail.App.Services.Archive;
+using Telenec.Mail.App.Services.Mail;
 using Telenec.Mail.App.ViewModels;
 
 namespace Telenec.Mail.App;
@@ -144,6 +145,39 @@ public partial class MainWindow
             _isArchiveOperationInProgress ||
             sender is not MenuItem menuItem)
         {
+            return;
+        }
+
+        /*
+         * WICHTIGER SAFETY-GATE:
+         *
+         * Archivieren ist eine irreversible Serveroperation.
+         *
+         * Insbesondere darf niemals aufgrund einer lokalen
+         * Offline-/Cache-Ansicht eine UID als Grundlage für
+         * die Archivierung und anschließende Serverlöschung
+         * verwendet werden.
+         *
+         * Deshalb darf die Archivierung ausschließlich
+         * gestartet werden, wenn der Hauptclient den
+         * Mailserver aktuell ausdrücklich als verbunden
+         * betrachtet.
+         *
+         * Die nachfolgenden Archivdienste führen zusätzlich
+         * weiterhin ihre eigenen frischen IMAP-Verbindungen
+         * und Sicherheitsprüfungen durch.
+         */
+        if (_viewModel.ConnectionState !=
+            MailConnectionState.Connected)
+        {
+            MessageBox.Show(
+                this,
+                "Nachrichten können nur archiviert werden, wenn Telenec Mail aktuell mit dem Mailserver verbunden ist.\n\n" +
+                "Die Archivierung wurde nicht gestartet. Bitte stellen Sie die Verbindung wieder her und aktualisieren Sie das Postfach.",
+                "Archivieren nicht möglich",
+                MessageBoxButton.OK,
+                MessageBoxImage.Warning);
+
             return;
         }
 
