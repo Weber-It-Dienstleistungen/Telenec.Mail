@@ -94,6 +94,63 @@ public partial class MainWindow
                     this
             };
 
+        /*
+         * Das geöffnete Nachrichtenfenster besitzt keine
+         * eigene IMAP-Verbindung.
+         *
+         * Der Download läuft weiterhin ausschließlich über
+         * das bereits getestete MainViewModel und damit über
+         * denselben IMAP-/Offline-Sicherheitsweg wie in der
+         * Schnellansicht.
+         */
+        messageWindow.ConfigureAttachmentDownload(
+            async (
+                attachment,
+                destination) =>
+            {
+                var currentMessage =
+                    ResolveOpenedMessage(
+                        message,
+                        sourceFolderId);
+
+                if (currentMessage is null)
+                {
+                    ShowOpenedMessageContextWarning(
+                        sourceFolderDisplayName);
+
+                    return false;
+                }
+
+                /*
+                 * Nach einem zwischenzeitlichen Reload kann
+                 * das ViewModel eine neue Attachment-Instanz
+                 * besitzen.
+                 *
+                 * Deshalb wird nicht die alte Objektidentität
+                 * verwendet, sondern der IMAP-PartSpecifier.
+                 */
+                var currentAttachment =
+                    currentMessage
+                        .Attachments
+                        .FirstOrDefault(
+                            candidate =>
+                                string.Equals(
+                                    candidate.PartSpecifier,
+                                    attachment.PartSpecifier,
+                                    StringComparison.Ordinal));
+
+                if (currentAttachment is null)
+                {
+                    return false;
+                }
+
+                return await _viewModel
+                    .DownloadAttachmentAsync(
+                        currentMessage,
+                        currentAttachment,
+                        destination);
+            });
+
         messageWindow.Show();
     }
 

@@ -27,6 +27,9 @@ public partial class ArchiveWindow : Window
     private readonly LocalMailArchiveMessageLoader
         _archiveMessageLoader;
 
+    private readonly LocalMailArchiveAttachmentService
+        _archiveAttachmentService;
+
     private readonly MailArchiveRestoreService
         _archiveRestoreService;
 
@@ -68,6 +71,9 @@ public partial class ArchiveWindow : Window
 
         _archiveMessageLoader =
             new LocalMailArchiveMessageLoader();
+
+        _archiveAttachmentService =
+            new LocalMailArchiveAttachmentService();
 
         _archiveRestoreService =
             new MailArchiveRestoreService(
@@ -384,14 +390,6 @@ public partial class ArchiveWindow : Window
 
         try
         {
-            /*
-             * Genau wie beim Archivieren werden mehrere
-             * Nachrichten bewusst nacheinander verarbeitet.
-             *
-             * Jede Nachricht durchläuft vollständig den
-             * bereits getesteten Restore-Sicherheitsablauf,
-             * bevor die nächste Nachricht beginnt.
-             */
             foreach (var archiveMessage in
                      messagesToRestore)
             {
@@ -452,13 +450,6 @@ public partial class ArchiveWindow : Window
         }
         finally
         {
-            /*
-             * Die Archivansicht wird nach dem gesamten Batch
-             * genau einmal neu geladen.
-             *
-             * Bereits erfolgreich wiederhergestellte
-             * Nachrichten verschwinden damit aus dem Archiv.
-             */
             try
             {
                 await LoadArchiveAsync(
@@ -800,6 +791,18 @@ public partial class ArchiveWindow : Window
                     .LoadAsync(
                         archiveMessage);
 
+            var attachments =
+                await _archiveAttachmentService
+                    .LoadAttachmentsAsync(
+                        archiveMessage);
+
+            messageData =
+                messageData with
+                {
+                    Attachments =
+                        attachments
+                };
+
             var messageViewModel =
                 MailMessageItemViewModelFactory
                     .Create(
@@ -812,6 +815,22 @@ public partial class ArchiveWindow : Window
                     Owner =
                         this
                 };
+
+            /*
+             * Archivanhänge werden ausschließlich aus der
+             * bereits lokal archivierten .eml gelesen.
+             *
+             * Es gibt hier bewusst keinerlei IMAP-Zugriff.
+             */
+            messageWindow.ConfigureAttachmentDownload(
+                (
+                    attachment,
+                    destination) =>
+                    _archiveAttachmentService
+                        .SaveAttachmentAsync(
+                            archiveMessage,
+                            attachment,
+                            destination));
 
             messageWindow.Show();
         }
