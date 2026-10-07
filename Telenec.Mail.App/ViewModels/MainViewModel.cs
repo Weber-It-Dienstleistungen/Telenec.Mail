@@ -440,6 +440,60 @@ public sealed class MainViewModel : BaseViewModel
             cancellationToken);
     }
 
+    public async Task ReinitializeForAccountSwitchAsync(
+        CancellationToken cancellationToken = default)
+    {
+        /*
+         * Beim Kontowechsel darf keinerlei operative Aktion
+         * des alten Postfachs mehr laufen.
+         *
+         * Ein Wechsel während eines Mail-Moves, einer
+         * Synchronisierung oder eines Paging-Vorgangs könnte
+         * sonst nicht mehr eindeutig einem Konto zugeordnet
+         * werden.
+         */
+        if (IsLoading ||
+            IsLoadingMoreMessages ||
+            IsMailSynchronizationRunning ||
+            IsMailMoveOperationRunning)
+        {
+            throw new InvalidOperationException(
+                "Das Postfach ist momentan beschäftigt und kann nicht gewechselt werden.");
+        }
+
+        CancelCurrentFolderLoad();
+
+        /*
+         * Ein Undo-Snapshot gehört ausschließlich zu dem
+         * Konto, in dem die ursprüngliche Verschiebeoperation
+         * stattgefunden hat.
+         *
+         * Er darf unter keinen Umständen auf ein anderes
+         * Postfach übertragen werden.
+         */
+        SetLastMoveOperation(
+            null);
+
+        /*
+         * InitializeCoreAsync räumt anschließend bewusst
+         * Folder-, Nachrichten-, UIDVALIDITY- und Paging-
+         * Zustand vollständig auf.
+         *
+         * Durch _isInitialized = false verhält sich der
+         * Vorgang semantisch wie eine komplette frische
+         * Postfachinitialisierung, ohne dass dafür ein neues
+         * Window oder ein neues MainViewModel benötigt wird.
+         */
+        _isInitialized =
+            false;
+
+        await InitializeCoreAsync(
+            preferredFolderId: null,
+            preferredMessageUniqueId: null,
+            preferredMessageId: null,
+            cancellationToken);
+    }
+
     public Task SynchronizeAsync(
         CancellationToken cancellationToken = default)
     {

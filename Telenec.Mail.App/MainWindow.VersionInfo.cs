@@ -92,6 +92,18 @@ public partial class MainWindow
          */
         Loaded +=
             MainWindowPrinting_OnLoaded;
+
+        /*
+         * Die Mehrkonten-Verwaltung ergänzt das bestehende
+         * Kontomenü erst nach dem vollständigen Aufbau des
+         * Hauptfensters.
+         *
+         * Dadurch bleibt MainWindow.xaml unangetastet und
+         * weitere Kontofunktionen können später isoliert in
+         * MainWindow.Accounts.cs erweitert werden.
+         */
+        Loaded +=
+            MainWindowAccounts_OnLoaded;
     }
 
     private void MainWindowVersionInfo_OnLoaded(

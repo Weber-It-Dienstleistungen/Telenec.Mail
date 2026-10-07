@@ -4,7 +4,18 @@ namespace Telenec.Mail.App.Services.Storage;
 
 public interface IMailAccountStore
 {
+    Task<IReadOnlyList<MailAccount>> GetAccountsAsync(
+        CancellationToken cancellationToken = default);
+
+    Task<MailAccount?> GetAccountByEmailAddressAsync(
+        string emailAddress,
+        CancellationToken cancellationToken = default);
+
     Task<MailAccount?> GetActiveAccountAsync(
+        CancellationToken cancellationToken = default);
+
+    Task SetActiveAccountAsync(
+        Guid accountId,
         CancellationToken cancellationToken = default);
 
     Task SaveAsync(

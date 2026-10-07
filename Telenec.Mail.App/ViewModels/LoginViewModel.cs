@@ -208,50 +208,125 @@ public sealed class LoginViewModel : BaseViewModel
         string password,
         CancellationToken cancellationToken)
     {
-        var existingAccount =
-            await _mailAccountStore
-                .GetActiveAccountAsync(
-                    cancellationToken);
+        /*
+         * Mehrkonten-Unterbau:
+         *
+         * Eine erfolgreiche Anmeldung darf niemals einfach
+         * den aktuell aktiven Account überschreiben.
+         *
+         * Stattdessen wird anhand der E-Mail-Adresse geprüft,
+         * ob dieses Konto bereits lokal bekannt ist.
+         *
+         * Bestehende Konten behalten damit dauerhaft ihre
+         * AccountId und damit auch alle accountbezogenen
+         * Einstellungen, Regeln, Cache-Daten und Zugangsdaten.
+         */
+        MailAccount? existingAccount;
 
+        try
+        {
+            existingAccount =
+                await _mailAccountStore
+                    .GetAccountByEmailAddressAsync(
+                        emailAddress,
+                        cancellationToken);
+        }
+        catch
+        {
+            StatusMessage =
+                "Die Anmeldung war erfolgreich, das E-Mail-Konto konnte jedoch nicht lokal vorbereitet werden.";
+
+            return false;
+        }
+
+        if (existingAccount is not null)
+        {
+            return await CompleteExistingAccountLoginAsync(
+                existingAccount,
+                emailAddress,
+                password,
+                cancellationToken);
+        }
+
+        return await CompleteNewAccountLoginAsync(
+            emailAddress,
+            password,
+            cancellationToken);
+    }
+
+    private async Task<bool> CompleteExistingAccountLoginAsync(
+        MailAccount existingAccount,
+        string emailAddress,
+        string password,
+        CancellationToken cancellationToken)
+    {
+        /*
+         * Bei einem bereits bekannten Konto werden zuerst
+         * die erfolgreich geprüften Zugangsdaten aktualisiert.
+         *
+         * Erst danach wird dieses Konto zum aktiven Konto.
+         *
+         * SetActiveAccountAsync arbeitet transaktional.
+         * Schlägt die Aktivierung fehl, bleibt deshalb das
+         * bisher aktive Konto unverändert.
+         */
+        try
+        {
+            await _credentialStore.SaveAsync(
+                existingAccount.AccountId,
+                emailAddress,
+                password,
+                cancellationToken);
+
+            await _mailAccountStore.SetActiveAccountAsync(
+                existingAccount.AccountId,
+                cancellationToken);
+        }
+        catch
+        {
+            StatusMessage =
+                "Die Anmeldung war erfolgreich, das E-Mail-Konto konnte jedoch nicht vollständig aktiviert werden.";
+
+            return false;
+        }
+
+        return await CompleteAccountPreparationAsync(
+            emailAddress,
+            password,
+            cancellationToken);
+    }
+
+    private async Task<bool> CompleteNewAccountLoginAsync(
+        string emailAddress,
+        string password,
+        CancellationToken cancellationToken)
+    {
         var account =
-            existingAccount is null
-                ? new MailAccount
-                {
-                    AccountId =
-                        Guid.NewGuid(),
+            new MailAccount
+            {
+                AccountId =
+                    Guid.NewGuid(),
 
-                    EmailAddress =
-                        emailAddress,
+                EmailAddress =
+                    emailAddress,
 
-                    DisplayName =
-                        null,
+                DisplayName =
+                    null,
 
-                    IsActive =
-                        true,
+                /*
+                 * Ein neues Konto wird absichtlich zunächst
+                 * inaktiv gespeichert.
+                 *
+                 * Dadurch bleibt das bisher aktive Konto so
+                 * lange unangetastet, bis auch die neuen
+                 * Zugangsdaten sicher gespeichert wurden.
+                 */
+                IsActive =
+                    false,
 
-                    CreatedAtUtc =
-                        DateTime.UtcNow
-                }
-                : new MailAccount
-                {
-                    AccountId =
-                        existingAccount.AccountId,
-
-                    EmailAddress =
-                        emailAddress,
-
-                    DisplayName =
-                        existingAccount.DisplayName,
-
-                    IsActive =
-                        true,
-
-                    CreatedAtUtc =
-                        existingAccount.CreatedAtUtc
-                };
-
-        var accountWasNew =
-            existingAccount is null;
+                CreatedAtUtc =
+                    DateTime.UtcNow
+            };
 
         try
         {
@@ -269,12 +344,41 @@ public sealed class LoginViewModel : BaseViewModel
             }
             catch
             {
-                if (accountWasNew)
-                {
-                    await _mailAccountStore.DeleteAsync(
-                        account.AccountId,
-                        CancellationToken.None);
-                }
+                /*
+                 * Ohne sicher gespeicherte Zugangsdaten darf
+                 * kein unvollständiges neues Konto erhalten
+                 * bleiben.
+                 */
+                await _mailAccountStore.DeleteAsync(
+                    account.AccountId,
+                    CancellationToken.None);
+
+                throw;
+            }
+
+            try
+            {
+                await _mailAccountStore.SetActiveAccountAsync(
+                    account.AccountId,
+                    cancellationToken);
+            }
+            catch
+            {
+                /*
+                 * Auch bei einer fehlgeschlagenen Aktivierung
+                 * wird das neu angelegte Konto wieder vollständig
+                 * entfernt.
+                 *
+                 * Das zuvor aktive Konto bleibt durch die
+                 * transaktionale Aktivierung unangetastet.
+                 */
+                await _credentialStore.DeleteAsync(
+                    account.AccountId,
+                    CancellationToken.None);
+
+                await _mailAccountStore.DeleteAsync(
+                    account.AccountId,
+                    CancellationToken.None);
 
                 throw;
             }
@@ -282,11 +386,22 @@ public sealed class LoginViewModel : BaseViewModel
         catch
         {
             StatusMessage =
-                "Die Anmeldung war erfolgreich, die Zugangsdaten konnten jedoch nicht sicher gespeichert werden.";
+                "Die Anmeldung war erfolgreich, das neue E-Mail-Konto konnte jedoch nicht sicher gespeichert werden.";
 
             return false;
         }
 
+        return await CompleteAccountPreparationAsync(
+            emailAddress,
+            password,
+            cancellationToken);
+    }
+
+    private async Task<bool> CompleteAccountPreparationAsync(
+        string emailAddress,
+        string password,
+        CancellationToken cancellationToken)
+    {
         /*
          * CardDAV wird nach dem erfolgreichen Mail-Login
          * automatisch vorbereitet.
