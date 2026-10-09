@@ -74,6 +74,40 @@ public sealed class ReleaseNotesService
     {
         return version switch
         {
+            "0.1.0-test.9" =>
+                new ReleaseNotesInfo(
+                    Version:
+                        "0.1.0-test.9",
+                    Title:
+                        "Telenec Mail wurde aktualisiert",
+                    Intro:
+                        "Diese letzte Testversion bereitet Telenec Mail auf die " +
+                        "erste Produktivversion vor und ergänzt wichtige Funktionen " +
+                        "für die Verwaltung von Mailkonten.",
+                    Changes:
+                    [
+                        "Telenec Mail kann jetzt mehrere Telenec-Mailkonten auf " +
+                        "einem Rechner verwalten. Die Konten werden getrennt " +
+                        "gespeichert und können direkt innerhalb der Anwendung " +
+                        "gewechselt werden.",
+
+                        "Für jedes eingerichtete Konto werden Zugangsdaten, " +
+                        "Einstellungen, Signaturen, Regeln und lokale Daten " +
+                        "getrennt verwaltet.",
+
+                        "Das Passwort eines Telenec-Mailkontos kann jetzt direkt " +
+                        "in Telenec Mail geändert werden. Nach erfolgreicher " +
+                        "Änderung wird das neue Passwort sicher im Windows " +
+                        "Credential Manager gespeichert und die Mailverbindung " +
+                        "automatisch neu aufgebaut.",
+
+                        "Die Update-Infrastruktur wurde auf den zukünftigen " +
+                        "Produktivbetrieb vorbereitet. Zukünftige Programmupdates " +
+                        "werden direkt über die Telenec-Infrastruktur bereitgestellt."
+                    ],
+                    Footer:
+                        "Vielen Dank für eure Unterstützung während des Betatests!"),
+
             "0.1.0-test.8" =>
                 new ReleaseNotesInfo(
                     Version:

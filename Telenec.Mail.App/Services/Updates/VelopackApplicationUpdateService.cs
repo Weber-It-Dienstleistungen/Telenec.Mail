@@ -1,14 +1,16 @@
 ﻿using System.Diagnostics;
 using Velopack;
-using Velopack.Sources;
 
 namespace Telenec.Mail.App.Services.Updates;
 
 public sealed class VelopackApplicationUpdateService
     : IApplicationUpdateService
 {
-    private const string RepositoryUrl =
-        "https://github.com/Weber-It-Dienstleistungen/Telenec.Mail";
+    private const string UpdateBaseUrl =
+        "https://dav.necnet.de/updates/telenec-mail";
+
+    private const string ProductionChannel =
+        "win";
 
     private static readonly TimeSpan UpdateCheckTimeout =
         TimeSpan.FromSeconds(5);
@@ -22,14 +24,32 @@ public sealed class VelopackApplicationUpdateService
     {
         try
         {
-            var source =
-                new GithubSource(
-                    RepositoryUrl,
-                    accessToken: null,
-                    prerelease: true);
+            /*
+             * Ab 0.1.0-test.9 werden Updates nicht mehr direkt
+             * über GitHub bezogen.
+             *
+             * Die Testversion 0.1.0-test.9 wird noch einmal über
+             * den bisherigen GitHub-Testkanal verteilt.
+             *
+             * Nach ihrer Installation sucht Telenec Mail jedoch
+             * ausschließlich im neuen produktiven Updatepfad
+             * nach dem Velopack-Kanal "win".
+             *
+             * Dadurch können bestehende Testinstallationen ohne
+             * Neuinstallation auf die Produktivversion 1.0.0
+             * migriert werden.
+             */
+            var options =
+                new UpdateOptions
+                {
+                    ExplicitChannel =
+                        ProductionChannel
+                };
 
             var updateManager =
-                new UpdateManager(source);
+                new UpdateManager(
+                    UpdateBaseUrl,
+                    options);
 
             /*
              * Ein normaler Debug-/Publish-Start außerhalb einer
@@ -123,6 +143,11 @@ public sealed class VelopackApplicationUpdateService
             /*
              * Ein Updateproblem darf niemals verhindern,
              * dass der Benutzer seine E-Mails erreicht.
+             *
+             * Das ist insbesondere für die Brückenversion
+             * wichtig: Solange noch keine releases.win.json
+             * auf dem neuen Updatehost liegt, darf Telenec Mail
+             * trotzdem ganz normal starten.
              */
             Trace.WriteLine(
                 $"Telenec Mail update failed: {exception}");
