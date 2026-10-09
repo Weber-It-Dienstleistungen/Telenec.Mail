@@ -74,6 +74,53 @@ public sealed class ReleaseNotesService
     {
         return version switch
         {
+            "1.0.0" =>
+                new ReleaseNotesInfo(
+                    Version:
+                        "1.0.0",
+                    Title:
+                        "Telenec Mail 1.0 ist da",
+                    Intro:
+                        "Mit Version 1.0.0 verlässt Telenec Mail die Testphase. " +
+                        "Die erste Produktivversion bündelt die Funktionen und " +
+                        "Verbesserungen aus dem bisherigen Betatest.",
+                    Changes:
+                    [
+                        "Mehrere Telenec-Mailkonten können auf einem Rechner " +
+                        "getrennt verwaltet und direkt innerhalb der Anwendung " +
+                        "gewechselt werden.",
+
+                        "Das Passwort eines Telenec-Mailkontos kann direkt in " +
+                        "Telenec Mail geändert werden. Zugangsdaten werden " +
+                        "kontobezogen im Windows Credential Manager gespeichert.",
+
+                        "Das persönliche Adressbuch wird über CardDAV mit der " +
+                        "Telenec-Infrastruktur synchronisiert und unterstützt " +
+                        "unter anderem mehrere E-Mail-Adressen, Telefonnummern, " +
+                        "Adressen, Notizen, Kontaktfotos und Gruppen.",
+
+                        "Telenec Mail unterstützt Signaturen, Mailregeln, " +
+                        "Kategorien, Wichtigkeit, Lesebestätigungen, Drucken, " +
+                        "Suche, Unterordner, Benachrichtigungen, Autostart, " +
+                        "Tray-Betrieb und die Anzeige des verfügbaren " +
+                        "Postfachspeichers.",
+
+                        "Der Offline-Betrieb ermöglicht weiterhin den Zugriff " +
+                        "auf bereits geladene Ordner und Nachrichten, wenn " +
+                        "vorübergehend keine Verbindung zum Mailserver besteht.",
+
+                        "Die freiwillige Nutzungsstatistik bleibt vollständig " +
+                        "optional. Sie überträgt ausschließlich technische " +
+                        "Installations- und Versionsinformationen und kann " +
+                        "jederzeit widerrufen werden.",
+
+                        "Programmupdates werden ab Version 1.0 direkt über die " +
+                        "Telenec-Infrastruktur bereitgestellt."
+                    ],
+                    Footer:
+                        "Vielen Dank an alle, die Telenec Mail während des " +
+                        "Betatests begleitet und mit ihrem Feedback verbessert haben!"),
+
             "0.1.0-test.9" =>
                 new ReleaseNotesInfo(
                     Version:

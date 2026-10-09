@@ -25,19 +25,13 @@ public sealed class VelopackApplicationUpdateService
         try
         {
             /*
-             * Ab 0.1.0-test.9 werden Updates nicht mehr direkt
-             * über GitHub bezogen.
+             * Produktivversionen von Telenec Mail beziehen
+             * Programmupdates ausschließlich über die
+             * Telenec-Updateinfrastruktur.
              *
-             * Die Testversion 0.1.0-test.9 wird noch einmal über
-             * den bisherigen GitHub-Testkanal verteilt.
-             *
-             * Nach ihrer Installation sucht Telenec Mail jedoch
-             * ausschließlich im neuen produktiven Updatepfad
-             * nach dem Velopack-Kanal "win".
-             *
-             * Dadurch können bestehende Testinstallationen ohne
-             * Neuinstallation auf die Produktivversion 1.0.0
-             * migriert werden.
+             * Der explizite Kanal "win" stellt sicher,
+             * dass nur für den Produktivbetrieb veröffentlichte
+             * Releases angeboten werden.
              */
             var options =
                 new UpdateOptions
@@ -142,12 +136,7 @@ public sealed class VelopackApplicationUpdateService
         {
             /*
              * Ein Updateproblem darf niemals verhindern,
-             * dass der Benutzer seine E-Mails erreicht.
-             *
-             * Das ist insbesondere für die Brückenversion
-             * wichtig: Solange noch keine releases.win.json
-             * auf dem neuen Updatehost liegt, darf Telenec Mail
-             * trotzdem ganz normal starten.
+             * dass der Benutzer Telenec Mail normal verwenden kann.
              */
             Trace.WriteLine(
                 $"Telenec Mail update failed: {exception}");
