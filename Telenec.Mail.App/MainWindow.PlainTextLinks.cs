@@ -307,6 +307,11 @@ public partial class MainWindow
                 hyperlink.RequestNavigate +=
                     PlainTextHyperlink_OnRequestNavigate;
 
+                hyperlink.ContextMenu =
+                    CreatePlainTextHyperlinkContextMenu(
+                        webAddress,
+                        uri);
+
                 target.Inlines.Add(
                     hyperlink);
 
@@ -488,6 +493,59 @@ public partial class MainWindow
         }
 
         return count;
+    }
+
+    private static ContextMenu CreatePlainTextHyperlinkContextMenu(
+        string webAddress,
+        Uri uri)
+    {
+        var contextMenu =
+            new ContextMenu();
+
+        var openItem =
+            new MenuItem
+            {
+                Header =
+                    "Link öffnen"
+            };
+
+        openItem.Click +=
+            (_, _) =>
+                OpenExternalWebUri(
+                    uri.AbsoluteUri);
+
+        var copyItem =
+            new MenuItem
+            {
+                Header =
+                    "Link-Adresse kopieren"
+            };
+
+        copyItem.Click +=
+            (_, _) =>
+            {
+                try
+                {
+                    Clipboard.SetText(
+                        webAddress);
+                }
+                catch
+                {
+                    MessageBox.Show(
+                        "Die Link-Adresse konnte nicht in die Zwischenablage kopiert werden.",
+                        "Telenec Mail",
+                        MessageBoxButton.OK,
+                        MessageBoxImage.Information);
+                }
+            };
+
+        contextMenu.Items.Add(
+            openItem);
+
+        contextMenu.Items.Add(
+            copyItem);
+
+        return contextMenu;
     }
 
     private void PlainTextHyperlink_OnRequestNavigate(
