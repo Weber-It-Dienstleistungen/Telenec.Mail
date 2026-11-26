@@ -556,7 +556,7 @@ public partial class MainWindow
             }
 
             current =
-                VisualTreeHelper.GetParent(
+                GetVisualOrLogicalParent(
                     current);
         }
 
@@ -1940,7 +1940,7 @@ public partial class MainWindow
             }
 
             current =
-                VisualTreeHelper.GetParent(
+                GetVisualOrLogicalParent(
                     current);
         }
 
