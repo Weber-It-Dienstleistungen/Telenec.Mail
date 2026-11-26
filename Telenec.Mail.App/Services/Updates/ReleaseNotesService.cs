@@ -74,6 +74,37 @@ public sealed class ReleaseNotesService
     {
         return version switch
         {
+            "1.0.1" =>
+                new ReleaseNotesInfo(
+                    Version:
+                        "1.0.1",
+                    Title:
+                        "Telenec Mail wurde aktualisiert – Version 1.0.1",
+                    Intro:
+                        "Mit diesem Update setzen wir erste Rückmeldungen unserer " +
+                        "Kunden nach der Veröffentlichung von Telenec Mail um. " +
+                        "Im Mittelpunkt stehen Verbesserungen der Stabilität und Bedienbarkeit.",
+                    Changes:
+                    [
+                        "Ein Fehler, der beim Anklicken von Links in E-Mails " +
+                        "zum Beenden der Anwendung führen konnte, wurde behoben.",
+
+                        "Links in reinen Textnachrichten können jetzt direkt " +
+                        "über das Rechtsklick-Menü kopiert werden.",
+
+                        "Nachrichtentexte in der Textvorschau lassen sich jetzt " +
+                        "mit der Maus markieren und über das Kontextmenü oder " +
+                        "Strg+C kopieren. Auch die Auswahl des gesamten Textes " +
+                        "über Strg+A wird unterstützt.",
+
+                        "Wird Telenec Mail erneut gestartet, während das Programm " +
+                        "bereits im Hintergrund läuft, öffnet sich das bestehende " +
+                        "Programmfenster. Mehrfachstarts werden verhindert."
+                    ],
+                    Footer:
+                        "Vielen Dank für Ihre Rückmeldungen! Sie helfen uns dabei, " +
+                        "Telenec Mail kontinuierlich zu verbessern."),
+
             "1.0.0" =>
                 new ReleaseNotesInfo(
                     Version:
