@@ -2,7 +2,6 @@
 using System.Text.RegularExpressions;
 using System.Windows;
 using System.Windows.Controls;
-using System.Windows.Data;
 using System.Windows.Documents;
 using System.Windows.Input;
 using System.Windows.Media;
@@ -27,338 +26,279 @@ public partial class MainWindow
                 RegexOptions.CultureInvariant |
                 RegexOptions.Compiled);
 
-    private TextBlock?
-        _plainTextBodySource;
-
-    private TextBlock?
-        _plainTextBodyWithLinks;
-
-    private DependencyPropertyDescriptor?
-        _plainTextBodyTextDescriptor;
+    private RichTextBox? _plainTextReader;
 
     private void MainWindowPlainTextLinks_OnLoaded(
         object sender,
         RoutedEventArgs e)
     {
-        Loaded -=
-            MainWindowPlainTextLinks_OnLoaded;
+        Loaded -= MainWindowPlainTextLinks_OnLoaded;
 
-        InitializePlainTextLinkRendering();
-    }
-
-    private void InitializePlainTextLinkRendering()
-    {
-        if (_plainTextBodySource is not null)
+        if (_plainTextReader is not null ||
+            PlainTextMailView.Content is not StackPanel originalPanel)
         {
             return;
         }
 
-        var sourceTextBlock =
-            FindPlainTextBodyTextBlock(
-                PlainTextMailView);
-
-        if (sourceTextBlock is null ||
-            sourceTextBlock.Parent
-                is not Panel parent)
+        var reader = new RichTextBox
         {
-            return;
-        }
-
-        var sourceIndex =
-            parent.Children.IndexOf(
-                sourceTextBlock);
-
-        if (sourceIndex < 0)
-        {
-            return;
-        }
-
-        var linkTextBlock =
-            CreatePlainTextLinkTextBlock(
-                sourceTextBlock);
-
-        /*
-         * Der neue TextBlock wird exakt an derselben Stelle
-         * wie der bisherige Body-Text eingefügt.
-         *
-         * Der originale, gebundene TextBlock bleibt bestehen
-         * und dient weiterhin als zuverlässige Datenquelle.
-         */
-        parent.Children.Insert(
-            sourceIndex + 1,
-            linkTextBlock);
-
-        _plainTextBodySource =
-            sourceTextBlock;
-
-        _plainTextBodyWithLinks =
-            linkTextBlock;
-
-        _plainTextBodyTextDescriptor =
-            DependencyPropertyDescriptor
-                .FromProperty(
-                    TextBlock.TextProperty,
-                    typeof(TextBlock));
-
-        _plainTextBodyTextDescriptor?
-            .AddValueChanged(
-                sourceTextBlock,
-                PlainTextBodySource_OnTextChanged);
-
-        Closed +=
-            MainWindowPlainTextLinks_OnClosed;
-
-        UpdatePlainTextLinkRendering();
-    }
-
-    private static TextBlock?
-        FindPlainTextBodyTextBlock(
-            DependencyObject root)
-    {
-        var childCount =
-            VisualTreeHelper.GetChildrenCount(
-                root);
-
-        for (var index = 0;
-             index < childCount;
-             index++)
-        {
-            var child =
-                VisualTreeHelper.GetChild(
-                    root,
-                    index);
-
-            if (child is TextBlock textBlock)
+            IsReadOnly = true,
+            IsReadOnlyCaretVisible = true,
+            IsDocumentEnabled = true,
+            IsUndoEnabled = false,
+            BorderThickness = new Thickness(0),
+            Background = Brushes.Transparent,
+            Padding = new Thickness(0),
+            Margin = originalPanel.Margin,
+            MaxWidth = originalPanel.MaxWidth,
+            HorizontalAlignment = HorizontalAlignment.Stretch,
+            VerticalAlignment = VerticalAlignment.Stretch,
+            VerticalScrollBarVisibility = ScrollBarVisibility.Auto,
+            HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled,
+            FontSize = 14,
+            Document = new FlowDocument
             {
-                var binding =
-                    BindingOperations.GetBinding(
-                        textBlock,
-                        TextBlock.TextProperty);
-
-                if (string.Equals(
-                        binding?
-                            .Path?
-                            .Path,
-                        "SelectedMessage.Body",
-                        StringComparison.Ordinal))
-                {
-                    return textBlock;
-                }
+                PagePadding = new Thickness(0),
+                FontSize = 14
             }
-
-            var nested =
-                FindPlainTextBodyTextBlock(
-                    child);
-
-            if (nested is not null)
-            {
-                return nested;
-            }
-        }
-
-        return null;
-    }
-
-    private TextBlock CreatePlainTextLinkTextBlock(
-        TextBlock source)
-    {
-        return new TextBlock
-        {
-            Margin =
-                source.Margin,
-
-            Padding =
-                source.Padding,
-
-            FontFamily =
-                source.FontFamily,
-
-            FontSize =
-                source.FontSize,
-
-            FontStyle =
-                source.FontStyle,
-
-            FontWeight =
-                source.FontWeight,
-
-            FontStretch =
-                source.FontStretch,
-
-            Foreground =
-                source.Foreground,
-
-            LineHeight =
-                source.LineHeight,
-
-            LineStackingStrategy =
-                source.LineStackingStrategy,
-
-            TextAlignment =
-                source.TextAlignment,
-
-            TextWrapping =
-                source.TextWrapping,
-
-            TextTrimming =
-                source.TextTrimming,
-
-            Visibility =
-                Visibility.Collapsed
         };
+
+        reader.SetResourceReference(
+            Control.ForegroundProperty,
+            "Text.Primary");
+
+        reader.Document.SetResourceReference(
+            FlowDocument.ForegroundProperty,
+            "Text.Primary");
+
+        System.Windows.Automation.AutomationProperties.SetName(
+            reader,
+            "Nachrichtentext");
+
+        reader.ContextMenu = CreatePlainTextSelectionMenu(reader);
+
+        // Nur die innere Leseansicht scrollt. Damit bleiben auch
+        // Auswahl und Tastaturnavigation bei langen Mails nutzbar.
+        PlainTextMailView.VerticalScrollBarVisibility =
+            ScrollBarVisibility.Disabled;
+        PlainTextMailView.HorizontalScrollBarVisibility =
+            ScrollBarVisibility.Disabled;
+
+        _plainTextReader = reader;
+        PlainTextMailView.Content = reader;
+
+        _viewModel.PropertyChanged += PlainTextReader_OnMessageChanged;
+        Closed += MainWindowPlainTextLinks_OnClosed;
+
+        UpdatePlainTextLinkRendering();
     }
 
-    private void PlainTextBodySource_OnTextChanged(
+    private void PlainTextReader_OnMessageChanged(
         object? sender,
-        EventArgs e)
+        PropertyChangedEventArgs e)
     {
-        UpdatePlainTextLinkRendering();
+        if (string.IsNullOrEmpty(e.PropertyName) ||
+            e.PropertyName == nameof(ViewModels.MainViewModel.SelectedMessage))
+        {
+            UpdatePlainTextLinkRendering();
+        }
     }
 
     private void UpdatePlainTextLinkRendering()
     {
-        var source =
-            _plainTextBodySource;
+        var reader = _plainTextReader;
 
-        var target =
-            _plainTextBodyWithLinks;
-
-        if (source is null ||
-            target is null)
+        if (reader is null)
         {
             return;
         }
 
-        var text =
-            source.Text
-            ?? string.Empty;
+        var document = reader.Document;
+        document.Blocks.Clear();
 
-        if (!PlainTextWebAddressRegex.IsMatch(
-                text))
+        var message = _viewModel.SelectedMessage;
+
+        if (message is not null)
         {
-            target.Inlines.Clear();
+            AddPlainTextParagraph(document, reader, message.Greeting,
+                new Thickness(0, 0, 0, 20));
 
-            target.Visibility =
-                Visibility.Collapsed;
+            AddPlainTextParagraph(document, reader, message.Body,
+                new Thickness(0));
 
-            source.Visibility =
-                Visibility.Visible;
-
-            return;
-        }
-
-        target.Inlines.Clear();
-
-        var currentIndex =
-            0;
-
-        foreach (Match match in
-                 PlainTextWebAddressRegex.Matches(
-                     text))
-        {
-            if (match.Index >
-                currentIndex)
+            if (message.HasHighlight)
             {
-                target.Inlines.Add(
-                    new Run(
-                        text.Substring(
-                            currentIndex,
-                            match.Index -
-                            currentIndex)));
+                var highlight = new Paragraph
+                {
+                    Margin = new Thickness(0, 28, 0, 28),
+                    Padding = new Thickness(18),
+                    LineHeight = 22
+                };
+
+                highlight.SetResourceReference(
+                    TextElement.BackgroundProperty,
+                    "Brand.PrimaryLight");
+
+                if (!string.IsNullOrEmpty(message.HighlightTitle))
+                {
+                    var title = new Span { FontWeight = FontWeights.SemiBold };
+                    AppendPlainTextInlines(title.Inlines, reader, message.HighlightTitle);
+                    highlight.Inlines.Add(title);
+                }
+
+                if (!string.IsNullOrEmpty(message.HighlightText))
+                {
+                    if (highlight.Inlines.Count > 0)
+                    {
+                        highlight.Inlines.Add(new LineBreak());
+                    }
+
+                    var detail = new Span { FontSize = 12 };
+                    detail.SetResourceReference(
+                        TextElement.ForegroundProperty,
+                        "Text.Secondary");
+                    AppendPlainTextInlines(detail.Inlines, reader, message.HighlightText);
+                    highlight.Inlines.Add(detail);
+                }
+
+                document.Blocks.Add(highlight);
             }
 
-            var matchedText =
-                match.Value;
+            AddPlainTextParagraph(document, reader, message.Closing,
+                new Thickness(0));
 
-            var webAddress =
-                TrimTrailingUrlPunctuation(
-                    matchedText);
+            AddPlainTextParagraph(document, reader, message.Signature,
+                new Thickness(0, 5, 0, 0), true);
+        }
 
-            if (TryCreateSafeWebUri(
-                    webAddress,
-                    out var uri))
+        if (document.Blocks.Count == 0)
+        {
+            document.Blocks.Add(new Paragraph());
+        }
+
+        reader.Selection.Select(document.ContentStart, document.ContentStart);
+        reader.ScrollToHome();
+    }
+
+    private void AddPlainTextParagraph(
+        FlowDocument document,
+        RichTextBox reader,
+        string? text,
+        Thickness margin,
+        bool bold = false)
+    {
+        if (string.IsNullOrEmpty(text))
+        {
+            return;
+        }
+
+        var paragraph = new Paragraph
+        {
+            Margin = margin,
+            LineHeight = 22,
+            FontWeight = bold ? FontWeights.SemiBold : FontWeights.Normal
+        };
+
+        AppendPlainTextInlines(paragraph.Inlines, reader, text);
+        document.Blocks.Add(paragraph);
+    }
+
+    private void AppendPlainTextInlines(
+        InlineCollection inlines,
+        RichTextBox reader,
+        string text)
+    {
+        var currentIndex = 0;
+
+        foreach (Match match in PlainTextWebAddressRegex.Matches(text))
+        {
+            if (match.Index > currentIndex)
             {
-                var hyperlink =
-                    new Hyperlink(
-                        new Run(
-                            webAddress))
-                    {
-                        NavigateUri =
-                            uri,
+                AddPlainTextRuns(inlines, text[currentIndex..match.Index]);
+            }
 
-                        Cursor =
-                            Cursors.Hand,
+            var matchedText = match.Value;
+            var webAddress = TrimTrailingUrlPunctuation(matchedText);
 
-                        ToolTip =
-                            webAddress
-                    };
-
-                var linkBrush =
-                    TryFindResource(
-                        "Brand.Primary")
-                    as Brush;
-
-                if (linkBrush is not null)
+            if (TryCreateSafeWebUri(webAddress, out var uri))
+            {
+                var hyperlink = new Hyperlink(new Run(webAddress))
                 {
-                    hyperlink.Foreground =
-                        linkBrush;
-                }
+                    NavigateUri = uri,
+                    Cursor = Cursors.Hand,
+                    ToolTip = webAddress
+                };
+
+                hyperlink.SetResourceReference(
+                    TextElement.ForegroundProperty,
+                    "Brand.Primary");
 
                 hyperlink.RequestNavigate +=
                     PlainTextHyperlink_OnRequestNavigate;
 
                 hyperlink.ContextMenu =
-                    CreatePlainTextHyperlinkContextMenu(
-                        webAddress,
-                        uri);
+                    CreatePlainTextHyperlinkContextMenu(reader, webAddress, uri);
 
-                target.Inlines.Add(
-                    hyperlink);
+                inlines.Add(hyperlink);
 
-                /*
-                 * Satzzeichen wie Punkt oder Komma gehören
-                 * nicht zum eigentlichen Link und bleiben
-                 * deshalb normaler Text.
-                 */
-                if (webAddress.Length <
-                    matchedText.Length)
+                if (webAddress.Length < matchedText.Length)
                 {
-                    target.Inlines.Add(
-                        new Run(
-                            matchedText[
-                                webAddress.Length..]));
+                    AddPlainTextRuns(inlines, matchedText[webAddress.Length..]);
                 }
             }
             else
             {
-                /*
-                 * Sollte eine Regex-Erkennung wider Erwarten
-                 * keine gültige HTTP-/HTTPS-URI ergeben,
-                 * bleibt sie normaler Plaintext.
-                 */
-                target.Inlines.Add(
-                    new Run(
-                        matchedText));
+                AddPlainTextRuns(inlines, matchedText);
             }
 
-            currentIndex =
-                match.Index +
-                match.Length;
+            currentIndex = match.Index + match.Length;
         }
 
-        if (currentIndex <
-            text.Length)
+        if (currentIndex < text.Length)
         {
-            target.Inlines.Add(
-                new Run(
-                    text[currentIndex..]));
+            AddPlainTextRuns(inlines, text[currentIndex..]);
         }
+    }
 
-        source.Visibility =
-            Visibility.Collapsed;
+    private static void AddPlainTextRuns(InlineCollection inlines, string text)
+    {
+        var lines = text.Replace("\r\n", "\n").Replace('\r', '\n').Split('\n');
 
-        target.Visibility =
-            Visibility.Visible;
+        for (var index = 0; index < lines.Length; index++)
+        {
+            if (index > 0)
+            {
+                inlines.Add(new LineBreak());
+            }
+
+            if (lines[index].Length > 0)
+            {
+                inlines.Add(new Run(lines[index]));
+            }
+        }
+    }
+
+    private static ContextMenu CreatePlainTextSelectionMenu(RichTextBox reader)
+    {
+        var menu = new ContextMenu();
+
+        menu.Items.Add(new MenuItem
+        {
+            Header = "Kopieren",
+            Command = ApplicationCommands.Copy,
+            CommandTarget = reader,
+            InputGestureText = "Strg+C"
+        });
+
+        menu.Items.Add(new MenuItem
+        {
+            Header = "Alles auswählen",
+            Command = ApplicationCommands.SelectAll,
+            CommandTarget = reader,
+            InputGestureText = "Strg+A"
+        });
+
+        return menu;
     }
 
     private static bool TryCreateSafeWebUri(
@@ -496,11 +436,12 @@ public partial class MainWindow
     }
 
     private static ContextMenu CreatePlainTextHyperlinkContextMenu(
+        RichTextBox reader,
         string webAddress,
         Uri uri)
     {
-        var contextMenu =
-            new ContextMenu();
+        var contextMenu = CreatePlainTextSelectionMenu(reader);
+        contextMenu.Items.Add(new Separator());
 
         var openItem =
             new MenuItem
@@ -573,24 +514,8 @@ public partial class MainWindow
         object? sender,
         EventArgs e)
     {
-        if (_plainTextBodySource is not null)
-        {
-            _plainTextBodyTextDescriptor?
-                .RemoveValueChanged(
-                    _plainTextBodySource,
-                    PlainTextBodySource_OnTextChanged);
-        }
-
-        _plainTextBodyTextDescriptor =
-            null;
-
-        _plainTextBodySource =
-            null;
-
-        _plainTextBodyWithLinks =
-            null;
-
-        Closed -=
-            MainWindowPlainTextLinks_OnClosed;
+        _viewModel.PropertyChanged -= PlainTextReader_OnMessageChanged;
+        _plainTextReader = null;
+        Closed -= MainWindowPlainTextLinks_OnClosed;
     }
 }
