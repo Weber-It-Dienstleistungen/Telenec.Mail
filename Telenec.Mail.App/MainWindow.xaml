@@ -439,17 +439,17 @@
                     SelectedItem="{Binding SelectedMessage, Mode=TwoWay}"
                     SelectionMode="Extended"
                     Style="{StaticResource MailList.MessageList}"
+                    ItemContainerStyle="{StaticResource MailList.MessageItem}"
                     PreviewMouseLeftButtonDown="MessageListBox_OnPreviewMouseLeftButtonDown"
                     PreviewMouseMove="MessageListBox_OnPreviewMouseMove">
 
-                    <ListBox.ItemContainerStyle>
+                    <ListBox.ItemTemplate>
 
-                        <Style TargetType="ListBoxItem"
-                               BasedOn="{StaticResource MailList.MessageItem}">
+                        <DataTemplate>
 
-                            <Setter Property="ContextMenu">
+                            <StackPanel Background="Transparent">
 
-                                <Setter.Value>
+                                <StackPanel.ContextMenu>
 
                                     <ContextMenu
                                         DataContext="{Binding PlacementTarget.DataContext,
@@ -505,109 +505,114 @@
 
                                     </ContextMenu>
 
-                                </Setter.Value>
+                                </StackPanel.ContextMenu>
 
-                            </Setter>
+                                <StackPanel
+                                    x:Name="MessageInnerContent"
+                                    Margin="18,15">
 
-                        </Style>
+                                    <Grid>
 
-                    </ListBox.ItemContainerStyle>
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*" />
+                                            <ColumnDefinition Width="Auto" />
+                                        </Grid.ColumnDefinitions>
 
-                    <ListBox.ItemTemplate>
+                                        <StackPanel
+                                            Grid.Column="0"
+                                            Orientation="Horizontal">
 
-                        <DataTemplate>
+                                            <Ellipse
+                                                x:Name="UnreadIndicator"
+                                                Width="7"
+                                                Height="7"
+                                                Margin="0,0,8,0"
+                                                Fill="{StaticResource Brand.Primary}"
+                                                VerticalAlignment="Center"
+                                                Visibility="Collapsed" />
 
-                            <StackPanel>
+                                            <TextBlock
+                                                x:Name="SenderText"
+                                                Text="{Binding Sender}"
+                                                FontSize="13"
+                                                Foreground="{StaticResource Text.Primary}" />
 
-
-                                <Grid>
-
-                                    <Grid.ColumnDefinitions>
-                                        <ColumnDefinition Width="*" />
-                                        <ColumnDefinition Width="Auto" />
-                                    </Grid.ColumnDefinitions>
-
-                                    <StackPanel
-                                        Grid.Column="0"
-                                        Orientation="Horizontal">
-
-                                        <Ellipse
-                                            x:Name="UnreadIndicator"
-                                            Width="7"
-                                            Height="7"
-                                            Margin="0,0,8,0"
-                                            Fill="{StaticResource Brand.Primary}"
-                                            VerticalAlignment="Center"
-                                            Visibility="Collapsed" />
+                                        </StackPanel>
 
                                         <TextBlock
-                                            x:Name="SenderText"
-                                            Text="{Binding Sender}"
-                                            FontSize="13"
-                                            Foreground="{StaticResource Text.Primary}" />
+                                            Grid.Column="1"
+                                            Text="{Binding DisplayTime}"
+                                            FontSize="11"
+                                            Foreground="{StaticResource Text.Secondary}" />
 
-                                    </StackPanel>
+                                    </Grid>
 
                                     <TextBlock
-                                        Grid.Column="1"
-                                        Text="{Binding DisplayTime}"
-                                        FontSize="11"
-                                        Foreground="{StaticResource Text.Secondary}" />
+                                        x:Name="SubjectText"
+                                        Margin="0,7,0,0"
+                                        Text="{Binding Subject}"
+                                        FontSize="14"
+                                        Foreground="{StaticResource Text.Primary}" />
 
-                                </Grid>
+                                    <TextBlock
+                                        Margin="0,5,0,0"
+                                        Text="{Binding Preview}"
+                                        FontSize="12"
+                                        Foreground="{StaticResource Text.Secondary}"
+                                        TextTrimming="CharacterEllipsis" />
 
-                                <TextBlock
-                                    x:Name="SubjectText"
-                                    Margin="0,7,0,0"
-                                    Text="{Binding Subject}"
-                                    FontSize="14"
-                                    Foreground="{StaticResource Text.Primary}" />
+                                    <ItemsControl
+                                        ItemsSource="{Binding AssignedCategories}">
 
-                                <TextBlock
-                                    Margin="0,5,0,0"
-                                    Text="{Binding Preview}"
-                                    FontSize="12"
-                                    Foreground="{StaticResource Text.Secondary}"
-                                    TextTrimming="CharacterEllipsis" />
+                                        <ItemsControl.ItemsPanel>
 
-                                <ItemsControl
-                                    ItemsSource="{Binding AssignedCategories}">
+                                            <ItemsPanelTemplate>
+                                                <WrapPanel />
+                                            </ItemsPanelTemplate>
 
-                                    <ItemsControl.ItemsPanel>
+                                        </ItemsControl.ItemsPanel>
 
-                                        <ItemsPanelTemplate>
-                                            <WrapPanel />
-                                        </ItemsPanelTemplate>
+                                        <ItemsControl.ItemTemplate>
 
-                                    </ItemsControl.ItemsPanel>
+                                            <DataTemplate>
 
-                                    <ItemsControl.ItemTemplate>
+                                                <Border
+                                                    Margin="0,6,6,0"
+                                                    Padding="6,2"
+                                                    CornerRadius="3"
+                                                    Background="{Binding Background}">
 
-                                        <DataTemplate>
+                                                    <TextBlock
+                                                        Text="{Binding DisplayName}"
+                                                        FontSize="10"
+                                                        FontWeight="SemiBold"
+                                                        Foreground="{Binding Foreground}" />
 
-                                            <Border
-                                                Margin="0,6,6,0"
-                                                Padding="6,2"
-                                                CornerRadius="3"
-                                                Background="{Binding Background}">
+                                                </Border>
 
-                                                <TextBlock
-                                                    Text="{Binding DisplayName}"
-                                                    FontSize="10"
-                                                    FontWeight="SemiBold"
-                                                    Foreground="{Binding Foreground}" />
+                                            </DataTemplate>
 
-                                            </Border>
+                                        </ItemsControl.ItemTemplate>
 
-                                        </DataTemplate>
+                                    </ItemsControl>
 
-                                    </ItemsControl.ItemTemplate>
 
-                                </ItemsControl>
+                                </StackPanel>
 
                             </StackPanel>
 
                             <DataTemplate.Triggers>
+
+                                <DataTrigger
+                                    Binding="{Binding IsSelected, RelativeSource={RelativeSource AncestorType=ListBoxItem}}"
+                                    Value="True">
+
+                                    <Setter
+                                        TargetName="MessageInnerContent"
+                                        Property="Margin"
+                                        Value="31,15,18,15" />
+
+                                </DataTrigger>
 
                                 <DataTrigger
                                     Binding="{Binding IsUnread}"

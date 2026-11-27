@@ -831,9 +831,8 @@
 
                             <ContentPresenter
                                 x:Name="MessageContent"
-                                Margin="18,15"
                                 HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}"
-                                VerticalAlignment="Center" />
+                                VerticalAlignment="Stretch" />
 
                         </Grid>
 
@@ -863,11 +862,6 @@
                                 TargetName="SelectionIndicator"
                                 Property="Visibility"
                                 Value="Visible" />
-
-                            <Setter
-                                TargetName="MessageContent"
-                                Property="Margin"
-                                Value="31,15,18,15" />
 
                         </Trigger>
 
