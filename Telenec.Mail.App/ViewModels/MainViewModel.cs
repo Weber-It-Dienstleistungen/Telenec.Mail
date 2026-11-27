@@ -1347,6 +1347,77 @@ public sealed class MainViewModel : BaseViewModel
         }
     }
 
+    public async Task<bool> CopyMessagesAsync(
+        IReadOnlyList<MailMessageItemViewModel> messages,
+        MailFolderItemViewModel targetFolder,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(messages);
+        ArgumentNullException.ThrowIfNull(targetFolder);
+
+        var sourceFolder = _selectedFolder;
+
+        if (sourceFolder is null ||
+            IsLoading ||
+            IsLoadingMoreMessages ||
+            IsMailSynchronizationRunning ||
+            messages.Count == 0 ||
+            !MailFolders.Contains(targetFolder) ||
+            string.Equals(sourceFolder.FolderId, targetFolder.FolderId,
+                StringComparison.OrdinalIgnoreCase) ||
+            messages.Any(message => message is null ||
+                message.UniqueId == 0 || !Messages.Contains(message)) ||
+            !_uidValidityByFolder.TryGetValue(
+                sourceFolder.FolderId, out var expectedUidValidity) ||
+            expectedUidValidity == 0)
+        {
+            return false;
+        }
+
+        var uniqueIds = NormalizeMessages(messages)
+            .Select(message => message.UniqueId)
+            .ToList();
+
+        if (uniqueIds.Count == 0 || !TryBeginMailMoveOperation())
+        {
+            return false;
+        }
+
+        try
+        {
+            // COPY has no undo snapshot. Do not undo an older MOVE instead.
+            SetLastMoveOperation(null);
+
+            await _mailDataSource.CopyMessagesAsync(
+                sourceFolder.FolderId,
+                targetFolder.FolderId,
+                expectedUidValidity,
+                uniqueIds,
+                cancellationToken);
+
+            await ReloadAsync(cancellationToken);
+            return true;
+        }
+        catch
+        {
+            // The server may have accepted some or all copies.
+            // Refresh the folder counts, but never automatically retry COPY.
+            try
+            {
+                await ReloadAsync(CancellationToken.None);
+            }
+            catch
+            {
+            }
+
+            throw;
+        }
+        finally
+        {
+            EndMailMoveOperation();
+        }
+    }
+
     public async Task<bool> UndoLastMoveAsync(
         CancellationToken cancellationToken = default)
     {

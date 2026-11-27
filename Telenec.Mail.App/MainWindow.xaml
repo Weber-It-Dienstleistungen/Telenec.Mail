@@ -496,6 +496,10 @@
                                             Header="Verschieben nach"
                                             Tag="MoveToFolder" />
 
+                                        <MenuItem
+                                            Header="Kopieren nach"
+                                            Tag="CopyToFolder" />
+
                                         <Separator />
 
                                         <MenuItem

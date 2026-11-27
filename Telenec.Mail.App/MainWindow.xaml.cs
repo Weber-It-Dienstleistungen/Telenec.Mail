@@ -503,6 +503,85 @@ public partial class MainWindow : Window
         }
     }
 
+    private async Task CopyMessagesFromUiAsync(
+        IReadOnlyList<MailMessageItemViewModel> messages,
+        MailFolderItemViewModel sourceFolder,
+        MailFolderItemViewModel targetFolder)
+    {
+        if (_isMessageMoveFromUiRunning ||
+            _isReadStateChangeRunning ||
+            _isAccountOperationInProgress ||
+            _isLoggingOut ||
+            _searchIsActive ||
+            _searchIsRunning ||
+            _viewModel.IsLoading ||
+            _viewModel.IsLoadingMoreMessages ||
+            messages.Count == 0 ||
+            !ReferenceEquals(_viewModel.SelectedFolder, sourceFolder) ||
+            !_viewModel.MailFolders.Contains(targetFolder) ||
+            string.Equals(sourceFolder.FolderId, targetFolder.FolderId,
+                StringComparison.OrdinalIgnoreCase) ||
+            messages.Any(message =>
+                message.UniqueId == 0 || !_viewModel.Messages.Contains(message)))
+        {
+            return;
+        }
+
+        _isMessageMoveFromUiRunning = true;
+        var folderListWasEnabled = FolderListBox.IsEnabled;
+        var messageListWasEnabled = MessageListBox.IsEnabled;
+        var restartAutomaticSynchronization = false;
+
+        try
+        {
+            FolderListBox.IsEnabled = false;
+            MessageListBox.IsEnabled = false;
+            SetSearchControlsEnabled(false);
+
+            restartAutomaticSynchronization =
+                await PauseAutomaticSynchronizationAsync();
+
+            // Revalidate the captured source and selection after the pause.
+            var completed =
+                ReferenceEquals(_viewModel.SelectedFolder, sourceFolder) &&
+                await _viewModel.CopyMessagesAsync(messages, targetFolder);
+
+            if (!completed)
+            {
+                MessageBox.Show(
+                    this,
+                    "Die ausgewählten Nachrichten konnten momentan nicht kopiert werden.\n\n" +
+                    "Bitte warten Sie, bis das Postfach bereit ist, und versuchen Sie es erneut.",
+                    "Telenec Mail",
+                    MessageBoxButton.OK,
+                    MessageBoxImage.Information);
+            }
+        }
+        catch
+        {
+            MessageBox.Show(
+                this,
+                "Das Kopieren konnte nicht eindeutig bestätigt werden.\n\n" +
+                "Ein Teil oder alle Kopien können bereits im Zielordner vorhanden sein. " +
+                "Bitte prüfen Sie den Zielordner, bevor Sie die Aktion erneut ausführen.",
+                "Telenec Mail",
+                MessageBoxButton.OK,
+                MessageBoxImage.Warning);
+        }
+        finally
+        {
+            FolderListBox.IsEnabled = folderListWasEnabled;
+            MessageListBox.IsEnabled = messageListWasEnabled;
+            SetSearchControlsEnabled(true);
+            _isMessageMoveFromUiRunning = false;
+
+            if (restartAutomaticSynchronization && IsVisible)
+            {
+                StartAutomaticSynchronization();
+            }
+        }
+    }
+
     private MailMessageItemViewModel?
         GetMessageFromElement(
             DependencyObject? element)
@@ -1338,7 +1417,8 @@ public partial class MainWindow : Window
         IReadOnlyList<MailMessageItemViewModel> messages,
         bool desiredUnread)
     {
-        if (_isReadStateChangeRunning ||
+        if (_isMessageMoveFromUiRunning ||
+            _isReadStateChangeRunning ||
             _isAccountOperationInProgress ||
             _isLoggingOut ||
             _searchIsActive ||
@@ -1408,7 +1488,11 @@ public partial class MainWindow : Window
                 }
                 else if (Equals(item.Tag, "MoveToFolder"))
                 {
-                    PopulateMoveToFolderMenu(item, selection);
+                    PopulateTransferToFolderMenu(item, selection, copy: false);
+                }
+                else if (Equals(item.Tag, "CopyToFolder"))
+                {
+                    PopulateTransferToFolderMenu(item, selection, copy: true);
                 }
             }
         }
@@ -1435,9 +1519,10 @@ public partial class MainWindow : Window
                 : "Löschen";
     }
 
-    private void PopulateMoveToFolderMenu(
+    private void PopulateTransferToFolderMenu(
         MenuItem menu,
-        IReadOnlyList<MailMessageItemViewModel> messages)
+        IReadOnlyList<MailMessageItemViewModel> messages,
+        bool copy)
     {
         menu.Items.Clear();
 
@@ -1460,9 +1545,11 @@ public partial class MainWindow : Window
             return;
         }
 
+        var actionLabel = copy ? "Kopieren nach" : "Verschieben nach";
+
         menu.Header = selection.Length > 1
-            ? $"Verschieben nach ({selection.Length})"
-            : "Verschieben nach";
+            ? $"{actionLabel} ({selection.Length})"
+            : actionLabel;
 
         var folders = _viewModel.MailFolders.ToArray();
 
@@ -1491,8 +1578,16 @@ public partial class MainWindow : Window
 
             targetItem.Click += async (_, _) =>
             {
-                await MoveMessagesFromUiAsync(
-                    selection, sourceFolder, targetFolder);
+                if (copy)
+                {
+                    await CopyMessagesFromUiAsync(
+                        selection, sourceFolder, targetFolder);
+                }
+                else
+                {
+                    await MoveMessagesFromUiAsync(
+                        selection, sourceFolder, targetFolder);
+                }
             };
 
             menu.Items.Add(targetItem);
@@ -1917,7 +2012,7 @@ public partial class MainWindow : Window
 
     private async Task RefreshMailboxFromUiAsync()
     {
-        if (_viewModel.IsLoading)
+        if (_isMessageMoveFromUiRunning || _viewModel.IsLoading)
         {
             return;
         }
