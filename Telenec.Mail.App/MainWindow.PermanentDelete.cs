@@ -51,7 +51,9 @@ public partial class MainWindow
     protected override void OnPreviewKeyDown(
         KeyEventArgs e)
     {
-        if (_isEmptyTrashOperationRunning &&
+        if ((_isEmptyTrashOperationRunning ||
+             _isMessageMoveFromUiRunning ||
+             _searchMutationIsRunning) &&
             (e.Key == Key.F5 ||
              e.Key == Key.Delete))
         {
@@ -66,6 +68,7 @@ public partial class MainWindow
 
         if (e.Key == Key.Delete &&
             !e.IsRepeat &&
+            !_searchIsActive &&
             Keyboard.FocusedElement is not TextBoxBase &&
             !_viewModel.IsLoading &&
             _viewModel.IsTrashFolderSelected)

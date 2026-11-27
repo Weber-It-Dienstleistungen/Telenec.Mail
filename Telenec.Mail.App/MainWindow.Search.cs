@@ -1804,67 +1804,11 @@ public partial class MainWindow
 
         menu.Items.Add(markUnreadItem);
 
-        var moveMenu =
-            new MenuItem
-            {
-                Header =
-                    actionSelection.Count > 1
-                        ? $"Verschieben nach ({actionSelection.Count})"
-                        : "Verschieben nach"
-            };
+        menu.Items.Add(CreateSearchTransferMenu(
+            actionSelection, copy: false));
 
-        foreach (var folder in
-                 _viewModel.MailFolders)
-        {
-            var targetFolder =
-                folder;
-
-            /*
-             * Bei Mehrfachauswahl aus unterschiedlichen
-             * Ursprungsordnern darf ein Ziel trotzdem
-             * angeboten werden.
-             *
-             * Nachrichten, die bereits in diesem Ziel liegen,
-             * werden beim Ausführen einfach übersprungen.
-             */
-            var anyMessageCanMove =
-                actionSelection.Any(
-                    selected =>
-                        !string.Equals(
-                            selected.Hit.FolderId,
-                            targetFolder.FolderId,
-                            StringComparison.OrdinalIgnoreCase));
-
-            if (!anyMessageCanMove)
-            {
-                continue;
-            }
-
-            var targetItem =
-                new MenuItem
-                {
-                    Header =
-                        targetFolder.DisplayName
-                };
-
-            targetItem.Click +=
-                async (_, _) =>
-                {
-                    await MoveSearchResultsFromUiAsync(
-                        GetSelectedSearchResultsForAction(
-                            state),
-                        targetFolder);
-                };
-
-            moveMenu.Items.Add(
-                targetItem);
-        }
-
-        moveMenu.IsEnabled =
-            moveMenu.Items.Count > 0;
-
-        menu.Items.Add(
-            moveMenu);
+        menu.Items.Add(CreateSearchTransferMenu(
+            actionSelection, copy: true));
 
         var selectionContainsTrash =
             actionSelection.Any(
@@ -1903,6 +1847,51 @@ public partial class MainWindow
         menu.Items.Add(
             deleteItem);
 
+        return menu;
+    }
+
+    private MenuItem CreateSearchTransferMenu(
+        IReadOnlyList<SearchResultCardState> states,
+        bool copy)
+    {
+        var selection = NormalizeSearchResultSelection(states);
+        var actionLabel = copy ? "Kopieren nach" : "Verschieben nach";
+        var menu = new MenuItem
+        {
+            Header = selection.Count > 1
+                ? $"{actionLabel} ({selection.Count})"
+                : actionLabel
+        };
+
+        var folders = _viewModel.MailFolders.ToArray();
+
+        foreach (var targetFolder in folders)
+        {
+            if (!selection.Any(state => !string.Equals(
+                    state.Hit.FolderId, targetFolder.FolderId,
+                    StringComparison.OrdinalIgnoreCase)))
+            {
+                continue;
+            }
+
+            var targetItem = CreateTransferTargetMenuItem(targetFolder, folders);
+
+            targetItem.Click += async (_, _) =>
+            {
+                if (copy)
+                {
+                    await CopySearchResultsFromUiAsync(selection, targetFolder);
+                }
+                else
+                {
+                    await MoveSearchResultsFromUiAsync(selection, targetFolder);
+                }
+            };
+
+            menu.Items.Add(targetItem);
+        }
+
+        menu.IsEnabled = menu.Items.Count > 0;
         return menu;
     }
 
@@ -3065,6 +3054,136 @@ public partial class MainWindow
             targetFolder,
             moveToTrash:
                 false);
+    }
+
+    private async Task CopySearchResultsFromUiAsync(
+        IReadOnlyList<SearchResultCardState> states,
+        MailFolderItemViewModel targetFolder)
+    {
+        if (!_searchIsActive ||
+            _searchIsRunning ||
+            _searchMutationIsRunning ||
+            _searchResultIsLoading ||
+            _searchAttachmentDownloadRunning ||
+            _searchDragInProgress ||
+            _isAccountOperationInProgress ||
+            _isLoggingOut ||
+            _isReadStateChangeRunning ||
+            _isMessageMoveFromUiRunning ||
+            _viewModel.IsLoading ||
+            _viewModel.IsLoadingMoreMessages ||
+            !_viewModel.MailFolders.Contains(targetFolder))
+        {
+            return;
+        }
+
+        var selection = NormalizeSearchResultSelection(states)
+            .Where(state => !string.Equals(
+                state.Hit.FolderId, targetFolder.FolderId,
+                StringComparison.OrdinalIgnoreCase))
+            .ToArray();
+
+        if (selection.Length == 0 ||
+            selection.Any(state => !GetSearchResultStatesInDisplayOrder().Contains(state)))
+        {
+            return;
+        }
+
+        _searchMutationIsRunning = true;
+        var folderListWasEnabled = FolderListBox.IsEnabled;
+        var searchResultsHost = _searchResultsHost;
+        var resultsWereEnabled = searchResultsHost?.IsEnabled ?? true;
+        var restartAutomaticSynchronization = false;
+        var attemptedCopy = false;
+        var failed = false;
+
+        try
+        {
+            SetSearchControlsEnabled(false);
+            FolderListBox.IsEnabled = false;
+
+            if (searchResultsHost is not null)
+            {
+                searchResultsHost.IsEnabled = false;
+            }
+
+            restartAutomaticSynchronization =
+                await PauseAutomaticSynchronizationAsync();
+
+            if (!_searchIsActive ||
+                !_viewModel.MailFolders.Contains(targetFolder) ||
+                selection.Any(state => !GetSearchResultStatesInDisplayOrder().Contains(state)))
+            {
+                failed = true;
+            }
+            else
+            {
+                var searchService =
+                    _serviceProvider.GetRequiredService<IMailSearchService>();
+
+                // A COPY must not cause Ctrl+Z to undo an older MOVE.
+                _viewModel.InvalidateMoveUndoForCopy();
+
+                foreach (var state in selection)
+                {
+                    attemptedCopy = true;
+                    await searchService.CopyAsync(state.Hit, targetFolder.FolderId);
+                }
+            }
+        }
+        catch
+        {
+            // Some copies may already exist. Never automatically retry.
+            failed = true;
+        }
+        finally
+        {
+            try
+            {
+                if (attemptedCopy)
+                {
+                    await TrySynchronizeAfterSearchMutationAsync();
+                }
+            }
+            finally
+            {
+                _searchMutationIsRunning = false;
+                FolderListBox.IsEnabled = folderListWasEnabled;
+
+                if (searchResultsHost is not null)
+                {
+                    searchResultsHost.IsEnabled = resultsWereEnabled;
+                }
+
+                SetSearchControlsEnabled(true);
+                UpdateSearchVisualState();
+
+                if (restartAutomaticSynchronization && IsVisible)
+                {
+                    StartAutomaticSynchronization();
+                }
+            }
+        }
+
+        if (attemptedCopy && _searchIsActive)
+        {
+            await ExecuteSearchAsync();
+        }
+
+        if (failed)
+        {
+            MessageBox.Show(
+                this,
+                attemptedCopy
+                    ? "Das Kopieren konnte nicht eindeutig bestätigt werden.\n\n" +
+                      "Ein Teil oder alle Kopien können bereits im Zielordner vorhanden sein. " +
+                      "Bitte prüfen Sie den Zielordner, bevor Sie die Aktion erneut ausführen."
+                    : "Die ausgewählten Nachrichten konnten momentan nicht kopiert werden.\n\n" +
+                      "Bitte führen Sie die Suche erneut aus und versuchen Sie es erneut.",
+                "Telenec Mail",
+                MessageBoxButton.OK,
+                MessageBoxImage.Warning);
+        }
     }
 
     private static IReadOnlyList<SearchResultCardState>

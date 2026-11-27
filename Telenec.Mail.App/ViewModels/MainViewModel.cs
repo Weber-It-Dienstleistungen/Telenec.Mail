@@ -1386,7 +1386,7 @@ public sealed class MainViewModel : BaseViewModel
         try
         {
             // COPY has no undo snapshot. Do not undo an older MOVE instead.
-            SetLastMoveOperation(null);
+            InvalidateMoveUndoForCopy();
 
             await _mailDataSource.CopyMessagesAsync(
                 sourceFolder.FolderId,
@@ -1416,6 +1416,11 @@ public sealed class MainViewModel : BaseViewModel
         {
             EndMailMoveOperation();
         }
+    }
+
+    internal void InvalidateMoveUndoForCopy()
+    {
+        SetLastMoveOperation(null);
     }
 
     public async Task<bool> UndoLastMoveAsync(

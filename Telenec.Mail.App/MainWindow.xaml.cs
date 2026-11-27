@@ -1561,20 +1561,7 @@ public partial class MainWindow : Window
                 continue;
             }
 
-            var needsPath = targetFolder.HierarchyDepth > 0 ||
-                folders.Count(folder => string.Equals(
-                    folder.DisplayName, targetFolder.DisplayName,
-                    StringComparison.CurrentCultureIgnoreCase)) > 1;
-
-            var label = needsPath
-                ? $"{targetFolder.DisplayName} ({targetFolder.FolderId})"
-                : targetFolder.DisplayName;
-
-            var targetItem = new MenuItem
-            {
-                Header = label.Replace("_", "__"),
-                ToolTip = targetFolder.FolderId
-            };
+            var targetItem = CreateTransferTargetMenuItem(targetFolder, folders);
 
             targetItem.Click += async (_, _) =>
             {
@@ -1594,6 +1581,26 @@ public partial class MainWindow : Window
         }
 
         menu.IsEnabled = menu.Items.Count > 0;
+    }
+
+    private static MenuItem CreateTransferTargetMenuItem(
+        MailFolderItemViewModel targetFolder,
+        IReadOnlyList<MailFolderItemViewModel> folders)
+    {
+        var needsPath = targetFolder.HierarchyDepth > 0 ||
+            folders.Count(folder => string.Equals(
+                folder.DisplayName, targetFolder.DisplayName,
+                StringComparison.CurrentCultureIgnoreCase)) > 1;
+
+        var label = needsPath
+            ? $"{targetFolder.DisplayName} ({targetFolder.FolderId})"
+            : targetFolder.DisplayName;
+
+        return new MenuItem
+        {
+            Header = label.Replace("_", "__"),
+            ToolTip = targetFolder.FolderId
+        };
     }
 
     private async void ReplyMenuItem_OnClick(
@@ -2012,7 +2019,9 @@ public partial class MainWindow : Window
 
     private async Task RefreshMailboxFromUiAsync()
     {
-        if (_isMessageMoveFromUiRunning || _viewModel.IsLoading)
+        if (_isMessageMoveFromUiRunning ||
+            _searchMutationIsRunning ||
+            _viewModel.IsLoading)
         {
             return;
         }
