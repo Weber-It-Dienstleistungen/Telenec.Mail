@@ -297,6 +297,27 @@ public partial class MainWindow
             return;
         }
 
+        if (e.Key == Key.A &&
+            modifiers == ModifierKeys.Control)
+        {
+            // Text selection in the search field and message preview
+            // must remain independent of the search result selection.
+            if (Keyboard.FocusedElement is PasswordBox ||
+                window.HtmlMailView.IsKeyboardFocusWithin)
+            {
+                return;
+            }
+
+            e.Handled = true;
+
+            if (!e.IsRepeat)
+            {
+                window.SelectAllSearchResults();
+            }
+
+            return;
+        }
+
         if (e.Key == Key.R &&
             modifiers ==
             (ModifierKeys.Control |
@@ -2230,6 +2251,40 @@ public partial class MainWindow
 
         SelectOnlySearchResult(
             state);
+    }
+
+    private void SelectAllSearchResults()
+    {
+        if (!_searchIsActive ||
+            _searchIsRunning ||
+            _searchResultIsLoading ||
+            _searchMutationIsRunning ||
+            _searchAttachmentDownloadRunning ||
+            _searchDragInProgress ||
+            _isAccountOperationInProgress ||
+            _isLoggingOut)
+        {
+            return;
+        }
+
+        var states = GetSearchResultStatesInDisplayOrder();
+
+        if (states.Count == 0)
+        {
+            return;
+        }
+
+        _selectedSearchResults.Clear();
+        _selectedSearchResults.AddRange(states);
+
+        _searchSelectionAnchor =
+            _selectedSearchResult is not null &&
+            states.Contains(_selectedSearchResult)
+                ? _selectedSearchResult
+                : states[0];
+
+        // Selecting results must not open messages or change read flags.
+        RefreshSearchSelectionAppearance();
     }
 
     private void SelectOnlySearchResult(
