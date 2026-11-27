@@ -1810,6 +1810,8 @@ public partial class MainWindow
         menu.Items.Add(CreateSearchTransferMenu(
             actionSelection, copy: true));
 
+        AddSearchSpamClassificationMenuItems(menu, actionSelection);
+
         var selectionContainsTrash =
             actionSelection.Any(
                 selected =>
@@ -1848,6 +1850,140 @@ public partial class MainWindow
             deleteItem);
 
         return menu;
+    }
+
+    private void AddSearchSpamClassificationMenuItems(
+        ContextMenu menu,
+        IReadOnlyList<SearchResultCardState> states)
+    {
+        var selection = NormalizeSearchResultSelection(states);
+        var spamFolders = _viewModel.MailFolders
+            .Where(folder => folder.IsSpamFolder)
+            .ToArray();
+
+        if (spamFolders.Length != 1)
+        {
+            menu.Items.Add(new MenuItem
+            {
+                Header = "Als Spam markieren",
+                IsEnabled = false,
+                ToolTip = "Kein eindeutiger Spamordner verfügbar."
+            });
+            return;
+        }
+
+        var spamFolder = spamFolders[0];
+
+        foreach (var markAsSpam in new[] { true, false })
+        {
+            var eligible = SelectSearchSpamClassificationStates(
+                selection, spamFolder, markAsSpam);
+
+            if (eligible.Count == 0)
+            {
+                continue;
+            }
+
+            var target = markAsSpam
+                ? spamFolder
+                : ResolveSpamClassificationTarget(spamFolder);
+
+            var label = markAsSpam ? "Als Spam markieren" : "Kein Spam";
+            var item = new MenuItem
+            {
+                Header = selection.Count > 1
+                    ? $"{label} ({eligible.Count})"
+                    : label,
+                IsEnabled = target is not null,
+                ToolTip = target is null
+                    ? "Kein eindeutiger Zielordner verfügbar."
+                    : markAsSpam
+                        ? "In den Spamordner verschieben"
+                        : "In den Posteingang verschieben"
+            };
+
+            item.Click += async (_, _) =>
+            {
+                if (target is not null)
+                {
+                    await ClassifySearchResultsFromUiAsync(
+                        eligible, spamFolder, target, markAsSpam);
+                }
+            };
+
+            menu.Items.Add(item);
+        }
+    }
+
+    private static IReadOnlyList<SearchResultCardState> SelectSearchSpamClassificationStates(
+        IReadOnlyList<SearchResultCardState> states,
+        MailFolderItemViewModel spamFolder,
+        bool markAsSpam)
+    {
+        return states.Where(state =>
+            string.Equals(state.Hit.FolderId, spamFolder.FolderId,
+                StringComparison.OrdinalIgnoreCase) != markAsSpam)
+            .ToArray();
+    }
+
+    private async Task ClassifySearchResultsFromUiAsync(
+        IReadOnlyList<SearchResultCardState> states,
+        MailFolderItemViewModel spamFolder,
+        MailFolderItemViewModel targetFolder,
+        bool markAsSpam)
+    {
+        if (!_searchIsActive ||
+            _searchIsRunning ||
+            _searchMutationIsRunning ||
+            _searchResultIsLoading ||
+            _searchAttachmentDownloadRunning ||
+            _searchDragInProgress ||
+            _isAccountOperationInProgress ||
+            _isLoggingOut ||
+            _isReadStateChangeRunning ||
+            _isMessageMoveFromUiRunning ||
+            _viewModel.IsLoading ||
+            _viewModel.IsLoadingMoreMessages ||
+            !IsCurrentSearchSpamClassificationTarget(
+                spamFolder, targetFolder, markAsSpam))
+        {
+            return;
+        }
+
+        var selection = SelectSearchSpamClassificationStates(
+            NormalizeSearchResultSelection(states), spamFolder, markAsSpam);
+
+        var visibleStates = GetSearchResultStatesInDisplayOrder();
+        if (selection.Count == 0 ||
+            selection.Any(state => !visibleStates.Contains(state)))
+        {
+            return;
+        }
+
+        await ExecuteSearchMoveMutationAsync(
+            selection, targetFolder, moveToTrash: false,
+            spamClassificationIsValid: () =>
+                IsCurrentSearchSpamClassificationTarget(
+                    spamFolder, targetFolder, markAsSpam) &&
+                _searchIsActive &&
+                selection.All(state => GetSearchResultStatesInDisplayOrder().Contains(state)));
+    }
+
+    private bool IsCurrentSearchSpamClassificationTarget(
+        MailFolderItemViewModel spamFolder,
+        MailFolderItemViewModel targetFolder,
+        bool markAsSpam)
+    {
+        var spamFolders = _viewModel.MailFolders
+            .Where(folder => folder.IsSpamFolder)
+            .ToArray();
+
+        return spamFolders.Length == 1 &&
+            ReferenceEquals(spamFolders[0], spamFolder) &&
+            _viewModel.MailFolders.Contains(targetFolder) &&
+            ReferenceEquals(targetFolder, markAsSpam
+                ? spamFolder
+                : ResolveSpamClassificationTarget(spamFolder));
     }
 
     private MenuItem CreateSearchTransferMenu(
@@ -3212,7 +3348,8 @@ public partial class MainWindow
     private async Task ExecuteSearchMoveMutationAsync(
         IReadOnlyList<SearchResultCardState> states,
         MailFolderItemViewModel? targetFolder,
-        bool moveToTrash)
+        bool moveToTrash,
+        Func<bool>? spamClassificationIsValid = null)
     {
         var normalizedStates =
             NormalizeSearchResultSelection(
@@ -3251,6 +3388,18 @@ public partial class MainWindow
         {
             restartAutomaticSynchronization =
                 await PauseAutomaticSynchronizationAsync();
+
+            if (spamClassificationIsValid is not null &&
+                !spamClassificationIsValid())
+            {
+                MessageBox.Show(
+                    this,
+                    "Die Auswahl oder der Spamordner hat sich geändert. Bitte führen Sie die Suche erneut aus.",
+                    "Telenec Mail",
+                    MessageBoxButton.OK,
+                    MessageBoxImage.Information);
+                return;
+            }
 
             var searchService =
                 _serviceProvider
