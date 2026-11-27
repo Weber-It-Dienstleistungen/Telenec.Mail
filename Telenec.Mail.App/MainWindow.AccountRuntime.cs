@@ -7,7 +7,8 @@ public partial class MainWindow
     private async Task<bool> PauseAccountRuntimeAsync(
         bool resetVisualState = true)
     {
-        if (_isReadStateChangeRunning ||
+        if (_isMessageMoveFromUiRunning ||
+            _isReadStateChangeRunning ||
             _searchIsRunning ||
             _searchResultIsLoading ||
             _searchAttachmentDownloadRunning ||

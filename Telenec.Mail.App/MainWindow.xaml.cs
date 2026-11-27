@@ -42,6 +42,7 @@ public partial class MainWindow : Window
     private bool _isLoaded;
     private bool _isMessageDragInProgress;
     private bool _isReadStateChangeRunning;
+    private bool _isMessageMoveFromUiRunning;
 
     private Task? _webViewInitializationTask;
     private int _renderVersion;
@@ -433,29 +434,72 @@ public partial class MainWindow : Window
             return;
         }
 
+        var moved = await MoveMessagesFromUiAsync(
+            messages, sourceFolder, targetFolder);
+
+        e.Effects = moved
+            ? DragDropEffects.Move
+            : DragDropEffects.None;
+    }
+
+    private async Task<bool> MoveMessagesFromUiAsync(
+        IReadOnlyList<MailMessageItemViewModel> messages,
+        MailFolderItemViewModel sourceFolder,
+        MailFolderItemViewModel targetFolder)
+    {
+        if (_isMessageMoveFromUiRunning ||
+            _isReadStateChangeRunning ||
+            _isAccountOperationInProgress ||
+            _isLoggingOut ||
+            _searchIsActive ||
+            _viewModel.IsLoading ||
+            _viewModel.IsLoadingMoreMessages ||
+            messages.Count == 0 ||
+            !ReferenceEquals(_viewModel.SelectedFolder, sourceFolder) ||
+            !_viewModel.MailFolders.Contains(targetFolder) ||
+            string.Equals(sourceFolder.FolderId, targetFolder.FolderId,
+                StringComparison.OrdinalIgnoreCase) ||
+            messages.Any(message =>
+                message.UniqueId == 0 || !_viewModel.Messages.Contains(message)))
+        {
+            return false;
+        }
+
+        _isMessageMoveFromUiRunning = true;
+
         try
         {
-            await _viewModel
-                .MoveMessagesAsync(
-                    messages,
-                    targetFolder);
+            var moved = await _viewModel.MoveMessagesAsync(
+                messages, targetFolder);
 
-            e.Effects =
-                DragDropEffects.Move;
+            if (!moved)
+            {
+                MessageBox.Show(
+                    this,
+                    "Die ausgewählten Nachrichten konnten momentan nicht verschoben werden.\n\n" +
+                    "Bitte warten Sie, bis das Postfach bereit ist, und versuchen Sie es erneut.",
+                    "Telenec Mail",
+                    MessageBoxButton.OK,
+                    MessageBoxImage.Information);
+            }
+
+            return moved;
         }
         catch
         {
-            var messageText =
-                messages.Count == 1
-                    ? "Die Nachricht konnte nicht verschoben werden."
-                    : "Die Nachrichten konnten nicht verschoben werden.";
-
             MessageBox.Show(
-                messageText +
-                "\n\nBitte prüfen Sie die Verbindung und versuchen Sie es erneut.",
+                this,
+                "Das Verschieben konnte nicht eindeutig bestätigt werden.\n\n" +
+                "Bitte prüfen Sie die betroffenen Ordner und die Verbindung, bevor Sie es erneut versuchen.",
                 "Telenec Mail",
                 MessageBoxButton.OK,
-                MessageBoxImage.Error);
+                MessageBoxImage.Warning);
+
+            return false;
+        }
+        finally
+        {
+            _isMessageMoveFromUiRunning = false;
         }
     }
 
@@ -1266,7 +1310,7 @@ public partial class MainWindow : Window
             menuItem.DataContext is MailMessageItemViewModel message)
         {
             await SetMessagesUnreadStateFromUiAsync(
-                GetReadStateActionSelection(message), desiredUnread: true);
+                GetMessageActionSelection(message), desiredUnread: true);
         }
     }
 
@@ -1278,11 +1322,11 @@ public partial class MainWindow : Window
             menuItem.DataContext is MailMessageItemViewModel message)
         {
             await SetMessagesUnreadStateFromUiAsync(
-                GetReadStateActionSelection(message), desiredUnread: false);
+                GetMessageActionSelection(message), desiredUnread: false);
         }
     }
 
-    private IReadOnlyList<MailMessageItemViewModel> GetReadStateActionSelection(
+    private IReadOnlyList<MailMessageItemViewModel> GetMessageActionSelection(
         MailMessageItemViewModel clickedMessage)
     {
         return MessageListBox.SelectedItems.Contains(clickedMessage)
@@ -1350,7 +1394,7 @@ public partial class MainWindow : Window
 
         if (contextMenu.DataContext is MailMessageItemViewModel clickedMessage)
         {
-            var selection = GetReadStateActionSelection(clickedMessage);
+            var selection = GetMessageActionSelection(clickedMessage);
 
             foreach (var item in contextMenu.Items.OfType<MenuItem>())
             {
@@ -1361,6 +1405,10 @@ public partial class MainWindow : Window
                 else if (Equals(item.Tag, "MarkUnread"))
                 {
                     item.IsEnabled = selection.Any(message => !message.IsUnread);
+                }
+                else if (Equals(item.Tag, "MoveToFolder"))
+                {
+                    PopulateMoveToFolderMenu(item, selection);
                 }
             }
         }
@@ -1385,6 +1433,72 @@ public partial class MainWindow : Window
             _viewModel.IsTrashFolderSelected
                 ? "Wiederherstellen"
                 : "Löschen";
+    }
+
+    private void PopulateMoveToFolderMenu(
+        MenuItem menu,
+        IReadOnlyList<MailMessageItemViewModel> messages)
+    {
+        menu.Items.Clear();
+
+        var sourceFolder = _viewModel.SelectedFolder;
+        var selection = messages.ToArray();
+
+        if (sourceFolder is null ||
+            selection.Length == 0 ||
+            _viewModel.IsLoading ||
+            _viewModel.IsLoadingMoreMessages ||
+            _isMessageMoveFromUiRunning ||
+            _isReadStateChangeRunning ||
+            _isAccountOperationInProgress ||
+            _isLoggingOut ||
+            _searchIsActive ||
+            selection.Any(message =>
+                message.UniqueId == 0 || !_viewModel.Messages.Contains(message)))
+        {
+            menu.IsEnabled = false;
+            return;
+        }
+
+        menu.Header = selection.Length > 1
+            ? $"Verschieben nach ({selection.Length})"
+            : "Verschieben nach";
+
+        var folders = _viewModel.MailFolders.ToArray();
+
+        foreach (var targetFolder in folders)
+        {
+            if (string.Equals(sourceFolder.FolderId, targetFolder.FolderId,
+                    StringComparison.OrdinalIgnoreCase))
+            {
+                continue;
+            }
+
+            var needsPath = targetFolder.HierarchyDepth > 0 ||
+                folders.Count(folder => string.Equals(
+                    folder.DisplayName, targetFolder.DisplayName,
+                    StringComparison.CurrentCultureIgnoreCase)) > 1;
+
+            var label = needsPath
+                ? $"{targetFolder.DisplayName} ({targetFolder.FolderId})"
+                : targetFolder.DisplayName;
+
+            var targetItem = new MenuItem
+            {
+                Header = label.Replace("_", "__"),
+                ToolTip = targetFolder.FolderId
+            };
+
+            targetItem.Click += async (_, _) =>
+            {
+                await MoveMessagesFromUiAsync(
+                    selection, sourceFolder, targetFolder);
+            };
+
+            menu.Items.Add(targetItem);
+        }
+
+        menu.IsEnabled = menu.Items.Count > 0;
     }
 
     private async void ReplyMenuItem_OnClick(

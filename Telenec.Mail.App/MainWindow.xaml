@@ -492,6 +492,10 @@
 
                                         </MenuItem>
 
+                                        <MenuItem
+                                            Header="Verschieben nach"
+                                            Tag="MoveToFolder" />
+
                                         <Separator />
 
                                         <MenuItem
