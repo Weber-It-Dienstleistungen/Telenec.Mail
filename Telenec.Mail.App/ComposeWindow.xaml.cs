@@ -90,6 +90,15 @@ public partial class ComposeWindow : Window
         DataContext =
             _viewModel;
 
+        // Handle Explorer files before child text controls consume the drop.
+        AllowDrop = true;
+        AddHandler(DragDrop.PreviewDragEnterEvent,
+            new DragEventHandler(ComposeWindow_OnPreviewFileDragOver), true);
+        AddHandler(DragDrop.PreviewDragOverEvent,
+            new DragEventHandler(ComposeWindow_OnPreviewFileDragOver), true);
+        AddHandler(DragDrop.PreviewDropEvent,
+            new DragEventHandler(ComposeWindow_OnPreviewFileDrop), true);
+
         Loaded +=
             ComposeWindow_OnLoaded;
 
@@ -675,19 +684,81 @@ public partial class ComposeWindow : Window
             return;
         }
 
+        AddAttachmentFilesFromUi(fileDialog.FileNames);
+    }
+
+    private bool CanAcceptAttachmentDrop =>
+        _viewModel.CanModifyAttachments &&
+        !_isProcessingCloseSave &&
+        !_richTextEditorWindowClosed;
+
+    private void ComposeWindow_OnPreviewFileDragOver(
+        object sender, DragEventArgs e)
+    {
+        if (!e.Data.GetDataPresent(DataFormats.FileDrop, false))
+        {
+            return;
+        }
+
+        e.Handled = true;
+        e.Effects = CanAcceptAttachmentDrop &&
+            (e.AllowedEffects & DragDropEffects.Copy) != 0
+                ? DragDropEffects.Copy
+                : DragDropEffects.None;
+    }
+
+    private void ComposeWindow_OnPreviewFileDrop(
+        object sender, DragEventArgs e)
+    {
+        if (!e.Data.GetDataPresent(DataFormats.FileDrop, false))
+        {
+            return;
+        }
+
+        e.Handled = true;
+        e.Effects = DragDropEffects.None;
+
+        if (!CanAcceptAttachmentDrop ||
+            (e.AllowedEffects & DragDropEffects.Copy) == 0)
+        {
+            return;
+        }
+
+        if (e.Data.GetData(DataFormats.FileDrop, false) is string[] paths &&
+            AddAttachmentFilesFromUi(paths))
+        {
+            e.Effects = DragDropEffects.Copy;
+        }
+    }
+
+    private bool AddAttachmentFilesFromUi(IReadOnlyList<string> paths)
+    {
+        if (!CanAcceptAttachmentDrop)
+        {
+            return false;
+        }
+
         try
         {
-            _viewModel.AddAttachmentFiles(
-                fileDialog.FileNames);
+            if (paths.Count == 0 ||
+                paths.Any(path => string.IsNullOrWhiteSpace(path)))
+            {
+                throw new ArgumentException("Keine gültigen Dateipfade erhalten.");
+            }
+
+            _viewModel.AddAttachmentFiles(paths);
+            return true;
         }
         catch
         {
             MessageBox.Show(
+                this,
                 "Mindestens eine der ausgewählten Dateien konnte nicht als Anhang geöffnet werden.\n\n" +
-                "Bitte prüfen Sie, ob die Datei noch vorhanden und lesbar ist.",
+                "Bitte wählen Sie vorhandene, lesbare Dateien aus. Ordner können nicht direkt angehängt werden.",
                 "Anhang konnte nicht hinzugefügt werden",
                 MessageBoxButton.OK,
                 MessageBoxImage.Warning);
+            return false;
         }
     }
 

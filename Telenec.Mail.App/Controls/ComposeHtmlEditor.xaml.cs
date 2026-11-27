@@ -40,6 +40,9 @@ public partial class ComposeHtmlEditor :
         ComposeHtmlEditorContentChangedEventArgs>?
         ContentChanged;
 
+    public event Action<ComposeHtmlEditor, IReadOnlyList<string>>?
+        AttachmentFilesDropped;
+
     public string PlainText
     {
         get;
@@ -401,6 +404,45 @@ public partial class ComposeHtmlEditor :
         if (string.IsNullOrWhiteSpace(
                 message))
         {
+            return;
+        }
+
+        if (string.Equals(message, "attachmentFilesDropped", StringComparison.Ordinal) ||
+            string.Equals(message, "attachmentFilesDropFailed", StringComparison.Ordinal))
+        {
+            // Only our local, NavigateToString editor may request an attachment.
+            if (!string.Equals(e.Source, "about:blank", StringComparison.OrdinalIgnoreCase))
+            {
+                return;
+            }
+
+            IReadOnlyList<string> paths = Array.Empty<string>();
+
+            if (message == "attachmentFilesDropped")
+            {
+                try
+                {
+                    var nativePaths = e.AdditionalObjects.Select(item => item switch
+                    {
+                        CoreWebView2File file => file.Path,
+                        FileInfo fileInfo => fileInfo.FullName,
+                        _ => string.Empty
+                    }).ToArray();
+
+                    if (nativePaths.Length > 0 &&
+                        nativePaths.All(path => !string.IsNullOrWhiteSpace(path) &&
+                            Path.IsPathFullyQualified(path)))
+                    {
+                        paths = nativePaths;
+                    }
+                }
+                catch
+                {
+                    // Treat unsupported native file objects as a rejected drop.
+                }
+            }
+
+            AttachmentFilesDropped?.Invoke(this, paths);
             return;
         }
 
@@ -822,11 +864,49 @@ public partial class ComposeHtmlEditor :
                             notifyChanged();
                         });
 
-                    editor.addEventListener(
-                        "drop",
-                        event => {
-                            event.preventDefault();
-                        });
+                    function hasDroppedFiles(event) {
+                        return Array.from(event.dataTransfer?.types ?? [])
+                            .includes("Files");
+                    }
+
+                    function attachmentDragOver(event) {
+                        if (!hasDroppedFiles(event)) {
+                            return;
+                        }
+
+                        event.preventDefault();
+                        event.dataTransfer.dropEffect =
+                            editor.isContentEditable ? "copy" : "none";
+                    }
+
+                    document.addEventListener("dragenter", attachmentDragOver, true);
+                    document.addEventListener("dragover", attachmentDragOver, true);
+
+                    document.addEventListener("drop", event => {
+                        // Never let Chromium navigate to or insert a dropped file.
+                        event.preventDefault();
+
+                        if (!event.isTrusted ||
+                            !editor.isContentEditable ||
+                            !hasDroppedFiles(event)) {
+                            return;
+                        }
+
+                        const files = Array.from(event.dataTransfer?.files ?? []);
+
+                        try {
+                            if (files.length === 0) {
+                                throw new Error("No native files");
+                            }
+
+                            window.chrome.webview.postMessageWithAdditionalObjects(
+                                "attachmentFilesDropped", files);
+                        }
+                        catch {
+                            window.chrome.webview.postMessage(
+                                "attachmentFilesDropFailed");
+                        }
+                    }, true);
 
                     editor.addEventListener(
                         "click",

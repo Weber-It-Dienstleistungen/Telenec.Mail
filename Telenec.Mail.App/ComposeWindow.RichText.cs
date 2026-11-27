@@ -155,6 +155,8 @@ public partial class ComposeWindow
             editor.ContentChanged +=
                 BodyHtmlEditor_OnContentChanged;
 
+            editor.AttachmentFilesDropped += BodyHtmlEditor_OnAttachmentFilesDropped;
+
             _bodyHtmlEditor =
                 editor;
 
@@ -187,6 +189,7 @@ public partial class ComposeWindow
         {
             editor.ContentChanged -=
                 BodyHtmlEditor_OnContentChanged;
+            editor.AttachmentFilesDropped -= BodyHtmlEditor_OnAttachmentFilesDropped;
 
             RestorePlainTextLayout(
                 bodyGrid,
@@ -810,6 +813,20 @@ public partial class ComposeWindow
             e.HtmlBody;
     }
 
+    private void BodyHtmlEditor_OnAttachmentFilesDropped(
+        ComposeHtmlEditor editor, IReadOnlyList<string> paths)
+    {
+        // Do not show modal dialogs from a WebView2 event callback.
+        _ = Dispatcher.InvokeAsync(() =>
+        {
+            if (ReferenceEquals(_bodyHtmlEditor, editor) &&
+                CanAcceptAttachmentDrop)
+            {
+                AddAttachmentFilesFromUi(paths);
+            }
+        });
+    }
+
     private void ComposeWindowRichText_OnClosed(
         object? sender,
         EventArgs e)
@@ -836,6 +853,7 @@ public partial class ComposeWindow
 
         editor.ContentChanged -=
             BodyHtmlEditor_OnContentChanged;
+        editor.AttachmentFilesDropped -= BodyHtmlEditor_OnAttachmentFilesDropped;
     }
 
     private sealed record RichTextCommandOption(
