@@ -439,17 +439,17 @@
                     SelectedItem="{Binding SelectedMessage, Mode=TwoWay}"
                     SelectionMode="Extended"
                     Style="{StaticResource MailList.MessageList}"
-                    ItemContainerStyle="{StaticResource MailList.MessageItem}"
                     PreviewMouseLeftButtonDown="MessageListBox_OnPreviewMouseLeftButtonDown"
                     PreviewMouseMove="MessageListBox_OnPreviewMouseMove">
 
-                    <ListBox.ItemTemplate>
+                    <ListBox.ItemContainerStyle>
 
-                        <DataTemplate>
+                        <Style TargetType="ListBoxItem"
+                               BasedOn="{StaticResource MailList.MessageItem}">
 
-                            <StackPanel>
+                            <Setter Property="ContextMenu">
 
-                                <StackPanel.ContextMenu>
+                                <Setter.Value>
 
                                     <ContextMenu
                                         DataContext="{Binding PlacementTarget.DataContext,
@@ -505,7 +505,20 @@
 
                                     </ContextMenu>
 
-                                </StackPanel.ContextMenu>
+                                </Setter.Value>
+
+                            </Setter>
+
+                        </Style>
+
+                    </ListBox.ItemContainerStyle>
+
+                    <ListBox.ItemTemplate>
+
+                        <DataTemplate>
+
+                            <StackPanel>
+
 
                                 <Grid>
 
