@@ -267,14 +267,35 @@ public partial class MainWindow
             return;
         }
 
+        var modifiers =
+            Keyboard.Modifiers;
+
+        if ((e.Key == Key.U || e.Key == Key.Q) &&
+            modifiers == ModifierKeys.Control)
+        {
+            if (Keyboard.FocusedElement is TextBoxBase { IsReadOnly: false } ||
+                Keyboard.FocusedElement is PasswordBox)
+            {
+                return;
+            }
+
+            e.Handled = true;
+
+            if (!e.IsRepeat)
+            {
+                _ = window.SetSearchResultsUnreadStateFromUiAsync(
+                    window.GetSelectedSearchResults(),
+                    desiredUnread: e.Key == Key.U);
+            }
+
+            return;
+        }
+
         if (Keyboard.FocusedElement
             is TextBoxBase)
         {
             return;
         }
-
-        var modifiers =
-            Keyboard.Modifiers;
 
         if (e.Key == Key.R &&
             modifiers ==
@@ -1382,7 +1403,10 @@ public partial class MainWindow
                     Cursors.Hand,
 
                 ToolTip =
-                    "E-Mail öffnen"
+                    "E-Mail öffnen",
+
+                Focusable =
+                    true
             };
 
         container.SetResourceReference(
@@ -1727,38 +1751,37 @@ public partial class MainWindow
         menu.Items.Add(
             new Separator());
 
-        var readStateItem =
-            new MenuItem
-            {
-                Header =
-                    state.Hit.IsUnread
-                        ? "Als gelesen markieren"
-                        : "Als ungelesen markieren",
+        var markReadItem = new MenuItem
+        {
+            Header = "Als gelesen markieren",
+            InputGestureText = "Strg+Q",
+            IsEnabled = actionSelection.Any(selected => selected.Hit.IsUnread)
+        };
 
-                /*
-                 * Read/Unread bleibt vorerst bewusst eine
-                 * Einzelaktion.
-                 *
-                 * Massenverschieben/-löschen ist davon
-                 * unabhängig.
-                 */
-                IsEnabled =
-                    isSingleSelection
-            };
+        markReadItem.Click += async (_, _) =>
+        {
+            await SetSearchResultsUnreadStateFromUiAsync(
+                GetSelectedSearchResultsForAction(state),
+                desiredUnread: false);
+        };
 
-        readStateItem.Click +=
-            async (_, _) =>
-            {
-                await SetSearchResultUnreadStateAsync(
-                    state,
-                    desiredUnread:
-                        !state.Hit.IsUnread,
-                    showError:
-                        true);
-            };
+        menu.Items.Add(markReadItem);
 
-        menu.Items.Add(
-            readStateItem);
+        var markUnreadItem = new MenuItem
+        {
+            Header = "Als ungelesen markieren",
+            InputGestureText = "Strg+U",
+            IsEnabled = actionSelection.Any(selected => !selected.Hit.IsUnread)
+        };
+
+        markUnreadItem.Click += async (_, _) =>
+        {
+            await SetSearchResultsUnreadStateFromUiAsync(
+                GetSelectedSearchResultsForAction(state),
+                desiredUnread: true);
+        };
+
+        menu.Items.Add(markUnreadItem);
 
         var moveMenu =
             new MenuItem
@@ -1945,6 +1968,8 @@ public partial class MainWindow
 
             return;
         }
+
+        card.Focus();
 
         _searchDragCandidate =
             state;
@@ -2516,100 +2541,204 @@ public partial class MainWindow
             bool desiredUnread,
             bool showError)
     {
-        if (_searchMutationIsRunning ||
-            state.Hit.IsUnread ==
-                desiredUnread)
+        if (_searchMutationIsRunning)
         {
             return;
         }
 
         try
         {
-            var searchService =
-                _serviceProvider
-                    .GetRequiredService<
-                        IMailSearchService>();
-
-            if (desiredUnread)
+            await SetSearchResultUnreadStateCoreAsync(state, desiredUnread);
+        }
+        catch
+        {
+            if (showError)
             {
-                await searchService
-                    .MarkAsUnreadAsync(
-                        state.Hit);
+                MessageBox.Show(
+                    this,
+                    "Der Lesestatus der Nachricht konnte nicht geändert werden.\n\n" +
+                    "Bitte prüfen Sie die Verbindung und versuchen Sie es erneut.",
+                    "Telenec Mail",
+                    MessageBoxButton.OK,
+                    MessageBoxImage.Warning);
             }
-            else
+        }
+    }
+
+    private async Task SetSearchResultsUnreadStateFromUiAsync(
+        IReadOnlyList<SearchResultCardState> states,
+        bool desiredUnread)
+    {
+        if (!_searchIsActive ||
+            _searchIsRunning ||
+            _searchMutationIsRunning ||
+            _searchResultIsLoading ||
+            _searchAttachmentDownloadRunning ||
+            _searchDragInProgress ||
+            _isAccountOperationInProgress ||
+            _isLoggingOut ||
+            _isReadStateChangeRunning)
+        {
+            return;
+        }
+
+        var selection = NormalizeSearchResultSelection(states)
+            .Where(state => state.Hit.IsUnread != desiredUnread)
+            .ToArray();
+
+        if (selection.Length == 0)
+        {
+            return;
+        }
+
+        _searchMutationIsRunning = true;
+        SetSearchControlsEnabled(false);
+
+        if (_searchResultsHost is not null)
+        {
+            _searchResultsHost.IsHitTestVisible = false;
+        }
+
+        FolderListBox.IsHitTestVisible = false;
+
+        var restartAutomaticSynchronization = false;
+        var failed = false;
+
+        try
+        {
+            restartAutomaticSynchronization =
+                await PauseAutomaticSynchronizationAsync();
+
+            foreach (var state in selection)
             {
-                await searchService
-                    .MarkAsReadAsync(
-                        state.Hit);
-            }
-
-            var wasUnread =
-                state.Hit.IsUnread;
-
-            state.Hit =
-                state.Hit with
+                if (!_searchIsActive ||
+                    !GetSearchResultStatesInDisplayOrder().Contains(state))
                 {
-                    IsUnread =
-                        desiredUnread
-                };
-
-            if (wasUnread !=
-                desiredUnread)
-            {
-                var folder =
-                    FindSearchFolder(
-                        state.Hit.FolderId);
-
-                if (folder is not null)
-                {
-                    if (desiredUnread)
-                    {
-                        folder.IncrementUnreadCount();
-                    }
-                    else
-                    {
-                        folder.DecrementUnreadCount();
-                    }
+                    failed = true;
+                    break;
                 }
-            }
 
-            UpdateSearchResultReadAppearance(
-                state);
-
-            if (ReferenceEquals(
-                    _selectedSearchResult,
-                    state) &&
-                _searchPreviewMessage is not null)
-            {
-                if (desiredUnread)
-                {
-                    _searchPreviewMessage
-                        .MarkAsUnread();
-                }
-                else
-                {
-                    _searchPreviewMessage
-                        .MarkAsRead();
-                }
+                await SetSearchResultUnreadStateCoreAsync(state, desiredUnread);
             }
         }
         catch
         {
-            if (!showError)
+            failed = true;
+        }
+        finally
+        {
+            try
             {
-                return;
+                await TrySynchronizeAfterSearchMutationAsync();
             }
+            finally
+            {
+                _searchMutationIsRunning = false;
+                FolderListBox.IsHitTestVisible = true;
 
+                if (_searchResultsHost is not null)
+                {
+                    _searchResultsHost.IsHitTestVisible = true;
+                }
+
+                SetSearchControlsEnabled(true);
+                UpdateSearchVisualState();
+
+                if (restartAutomaticSynchronization && IsVisible)
+                {
+                    StartAutomaticSynchronization();
+                }
+            }
+        }
+
+        if (failed)
+        {
             MessageBox.Show(
                 this,
-                desiredUnread
-                    ? "Die Nachricht konnte nicht als ungelesen markiert werden.\n\n" +
-                      "Bitte prüfen Sie die Verbindung und versuchen Sie es erneut."
-                    : "Die Nachricht konnte nicht als gelesen markiert werden.\n\n" +
-                      "Bitte prüfen Sie die Verbindung und versuchen Sie es erneut.",
+                "Der Lesestatus konnte nicht für alle ausgewählten Nachrichten bestätigt werden.\n\n" +
+                "Ein Teil der Nachrichten kann bereits geändert worden sein. " +
+                "Bitte führen Sie die Suche erneut aus und prüfen Sie den aktuellen Status.",
                 "Telenec Mail",
                 MessageBoxButton.OK,
                 MessageBoxImage.Warning);
+        }
+    }
+
+    private async Task SetSearchResultUnreadStateCoreAsync(
+        SearchResultCardState state,
+        bool desiredUnread)
+    {
+        if (state.Hit.IsUnread == desiredUnread)
+        {
+            return;
+        }
+
+        var searchService =
+            _serviceProvider
+                .GetRequiredService<
+                    IMailSearchService>();
+
+        if (desiredUnread)
+        {
+            await searchService
+                .MarkAsUnreadAsync(
+                    state.Hit);
+        }
+        else
+        {
+            await searchService
+                .MarkAsReadAsync(
+                    state.Hit);
+        }
+
+        var wasUnread =
+            state.Hit.IsUnread;
+
+        state.Hit =
+            state.Hit with
+            {
+                IsUnread =
+                    desiredUnread
+            };
+
+        if (wasUnread !=
+            desiredUnread)
+        {
+            var folder =
+                FindSearchFolder(
+                    state.Hit.FolderId);
+
+            if (folder is not null)
+            {
+                if (desiredUnread)
+                {
+                    folder.IncrementUnreadCount();
+                }
+                else
+                {
+                    folder.DecrementUnreadCount();
+                }
+            }
+        }
+
+        UpdateSearchResultReadAppearance(
+            state);
+
+        if (ReferenceEquals(
+                _selectedSearchResult,
+                state) &&
+            _searchPreviewMessage is not null)
+        {
+            if (desiredUnread)
+            {
+                _searchPreviewMessage
+                    .MarkAsUnread();
+            }
+            else
+            {
+                _searchPreviewMessage
+                    .MarkAsRead();
+            }
         }
     }
 
