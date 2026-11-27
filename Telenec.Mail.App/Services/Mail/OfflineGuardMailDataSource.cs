@@ -166,6 +166,22 @@ public sealed class OfflineGuardMailDataSource :
                 cancellationToken);
     }
 
+    public Task CopyMessagesAsync(
+        string sourceFolderId,
+        string targetFolderId,
+        uint expectedUidValidity,
+        IReadOnlyList<uint> uniqueIds,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(uniqueIds);
+
+        EnsureOnlineOperationAllowed();
+
+        return _inner.CopyMessagesAsync(
+            sourceFolderId, targetFolderId, expectedUidValidity,
+            uniqueIds, cancellationToken);
+    }
+
     public Task<MailMoveResult> MoveMessagesAsync(
         string sourceFolderId,
         string targetFolderId,

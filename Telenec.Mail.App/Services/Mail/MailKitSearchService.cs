@@ -638,6 +638,87 @@ public sealed class MailKitSearchService :
         }
     }
 
+    public async Task CopyAsync(
+        MailSearchHitData searchHit,
+        string targetFolderId,
+        CancellationToken cancellationToken = default)
+    {
+        ValidateSearchHit(searchHit);
+        ValidateFolderId(targetFolderId);
+
+        if (MailboxConnectivityState.IsOfflineCacheActive)
+        {
+            throw new InvalidOperationException(
+                "Diese Aktion benötigt eine aktive Verbindung zum Mailserver.");
+        }
+
+        if (string.Equals(searchHit.FolderId, targetFolderId,
+                StringComparison.OrdinalIgnoreCase))
+        {
+            throw new ArgumentException(
+                "Quell- und Zielordner dürfen nicht identisch sein.",
+                nameof(targetFolderId));
+        }
+
+        _logger.LogInformation("Search message copy started.");
+
+        using var client = await CreateAuthenticatedClientAsync(cancellationToken);
+
+        try
+        {
+            var sourceFolder = await client.GetFolderAsync(
+                searchHit.FolderId, cancellationToken);
+            var targetFolder = await client.GetFolderAsync(
+                targetFolderId, cancellationToken);
+
+            if (sourceFolder.Attributes.HasFlag(FolderAttributes.NoSelect) ||
+                targetFolder.Attributes.HasFlag(FolderAttributes.NoSelect) ||
+                string.Equals(sourceFolder.FullName, targetFolder.FullName,
+                    StringComparison.OrdinalIgnoreCase))
+            {
+                throw new InvalidOperationException(
+                    "Der Quell- oder Zielordner ist für diese Kopieraktion ungeeignet.");
+            }
+
+            await sourceFolder.OpenAsync(FolderAccess.ReadOnly, cancellationToken);
+
+            ValidateFolderIdentity(sourceFolder, searchHit);
+
+            if (!await ConfirmSearchHitIdentityInOpenFolderAsync(
+                    sourceFolder, searchHit, cancellationToken))
+            {
+                throw new InvalidOperationException(
+                    "Die E-Mail ist in diesem Serverzustand nicht mehr eindeutig verfügbar.");
+            }
+
+            ValidateFolderIdentity(sourceFolder, searchHit);
+
+            var sourceId = new UniqueId(searchHit.UniqueId);
+            var mapping = await sourceFolder.CopyToAsync(
+                new[] { sourceId }, targetFolder, cancellationToken);
+
+            if (!mapping.TryGetValue(sourceId, out var targetId) ||
+                !targetId.IsValid)
+            {
+                throw new InvalidOperationException(
+                    "Der Mailserver hat die Kopie nicht eindeutig bestätigt.");
+            }
+
+            _logger.LogInformation("Search message copy completed.");
+        }
+        catch (Exception exception)
+        {
+            _logger.LogWarning(
+                "Search message copy could not be confirmed. ExceptionType={ExceptionType}.",
+                exception.GetType().Name);
+            throw;
+        }
+        finally
+        {
+            await DisconnectSafelyAsync(client);
+        }
+    }
+
     public async Task<MailMoveResult>
         MoveAsync(
             MailSearchHitData searchHit,

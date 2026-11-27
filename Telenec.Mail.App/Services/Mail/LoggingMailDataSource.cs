@@ -403,6 +403,24 @@ public sealed class LoggingMailDataSource :
                 cancellationToken);
     }
 
+    public Task CopyMessagesAsync(
+        string sourceFolderId,
+        string targetFolderId,
+        uint expectedUidValidity,
+        IReadOnlyList<uint> uniqueIds,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(uniqueIds);
+
+        return ExecuteMutationAsync(
+            operation: "Message copy",
+            messageCount: uniqueIds.Count,
+            action: () => _inner.CopyMessagesAsync(
+                sourceFolderId, targetFolderId, expectedUidValidity,
+                uniqueIds, cancellationToken),
+            cancellationToken: cancellationToken);
+    }
+
     public Task<MailMoveResult> MoveMessagesAsync(
         string sourceFolderId,
         string targetFolderId,

@@ -746,6 +746,100 @@ public sealed class ImapMailDataSource : IMailDataSource
         }
     }
 
+    public async Task CopyMessagesAsync(
+        string sourceFolderId,
+        string targetFolderId,
+        uint expectedUidValidity,
+        IReadOnlyList<uint> uniqueIds,
+        CancellationToken cancellationToken = default)
+    {
+        ValidateFolderId(sourceFolderId, nameof(sourceFolderId));
+        ValidateFolderId(targetFolderId, nameof(targetFolderId));
+        ArgumentNullException.ThrowIfNull(uniqueIds);
+
+        if (expectedUidValidity == 0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(expectedUidValidity));
+        }
+
+        if (uniqueIds.Any(id => id == 0))
+        {
+            throw new ArgumentException(
+                "Ungültige Nachrichten-ID.", nameof(uniqueIds));
+        }
+
+        var normalizedIds = NormalizeUniqueIds(uniqueIds)
+            .Select(id => new UniqueId(id))
+            .ToList();
+
+        if (string.Equals(sourceFolderId, targetFolderId,
+                StringComparison.OrdinalIgnoreCase))
+        {
+            throw new ArgumentException(
+                "Quell- und Zielordner dürfen nicht identisch sein.",
+                nameof(targetFolderId));
+        }
+
+        using var client = await CreateAuthenticatedClientAsync(cancellationToken);
+
+        try
+        {
+            var sourceFolder = await client.GetFolderAsync(
+                sourceFolderId, cancellationToken);
+            var targetFolder = await client.GetFolderAsync(
+                targetFolderId, cancellationToken);
+
+            if (sourceFolder.Attributes.HasFlag(FolderAttributes.NoSelect) ||
+                targetFolder.Attributes.HasFlag(FolderAttributes.NoSelect) ||
+                string.Equals(sourceFolder.FullName, targetFolder.FullName,
+                    StringComparison.OrdinalIgnoreCase))
+            {
+                throw new InvalidOperationException(
+                    "Der Quell- oder Zielordner ist für diese Kopieraktion ungeeignet.");
+            }
+
+            // COPY requires no modification of the source folder.
+            await sourceFolder.OpenAsync(FolderAccess.ReadOnly, cancellationToken);
+
+            if (sourceFolder.UidValidity != expectedUidValidity)
+            {
+                throw new InvalidOperationException(
+                    "Der Quellordner wurde seit dem Laden serverseitig verändert.");
+            }
+
+            var summaries = await sourceFolder.FetchAsync(
+                normalizedIds, MessageSummaryItems.UniqueId, cancellationToken);
+
+            var availableIds = summaries
+                .Where(summary => summary.UniqueId.IsValid)
+                .Select(summary => summary.UniqueId)
+                .ToHashSet();
+
+            if (sourceFolder.UidValidity != expectedUidValidity ||
+                normalizedIds.Any(id => !availableIds.Contains(id)))
+            {
+                throw new InvalidOperationException(
+                    "Nicht alle ausgewählten Nachrichten sind noch eindeutig verfügbar.");
+            }
+
+            var mapping = await sourceFolder.CopyToAsync(
+                normalizedIds, targetFolder, cancellationToken);
+
+            // An absent or partial mapping cannot prove that all copies exist.
+            // Never retry automatically: the server may already have copied them.
+            if (normalizedIds.Any(id =>
+                    !mapping.TryGetValue(id, out var targetId) || !targetId.IsValid))
+            {
+                throw new InvalidOperationException(
+                    "Der Mailserver hat nicht alle Kopien eindeutig bestätigt.");
+            }
+        }
+        finally
+        {
+            await DisconnectSafelyAsync(client);
+        }
+    }
+
     public async Task<MailMoveResult> MoveMessagesAsync(
         string sourceFolderId,
         string targetFolderId,

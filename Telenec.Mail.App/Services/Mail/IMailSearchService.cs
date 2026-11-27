@@ -47,6 +47,11 @@ public interface IMailSearchService
         MailSearchHitData searchHit,
         CancellationToken cancellationToken = default);
 
+    Task CopyAsync(
+        MailSearchHitData searchHit,
+        string targetFolderId,
+        CancellationToken cancellationToken = default);
+
     Task<MailMoveResult> MoveAsync(
         MailSearchHitData searchHit,
         string targetFolderId,

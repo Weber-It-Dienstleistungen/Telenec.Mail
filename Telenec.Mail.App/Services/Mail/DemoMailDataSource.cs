@@ -260,6 +260,20 @@ public sealed class DemoMailDataSource : IMailDataSource
                     mappings));
     }
 
+    public Task CopyMessagesAsync(
+        string sourceFolderId,
+        string targetFolderId,
+        uint expectedUidValidity,
+        IReadOnlyList<uint> uniqueIds,
+        CancellationToken cancellationToken = default)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+
+        // The demo source has no persistent mailbox to receive copies.
+        throw new NotSupportedException(
+            "Das Kopieren von Nachrichten ist im Demomodus nicht verfügbar.");
+    }
+
     public Task<MailMoveResult> MoveMessagesAsync(
         string sourceFolderId,
         string targetFolderId,
