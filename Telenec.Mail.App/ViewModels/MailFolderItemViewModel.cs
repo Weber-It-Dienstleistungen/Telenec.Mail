@@ -18,7 +18,8 @@ public sealed class MailFolderItemViewModel : BaseViewModel
         int unreadCount = 0,
         bool hasSeparatorAfter = false,
         int messageCount = 0,
-        int hierarchyDepth = 0)
+        int hierarchyDepth = 0,
+        bool isSpamFolder = false)
     {
         FolderId =
             folderId;
@@ -42,6 +43,8 @@ public sealed class MailFolderItemViewModel : BaseViewModel
 
         HasSeparatorAfter =
             hasSeparatorAfter;
+
+        IsSpamFolder = isSpamFolder;
     }
 
     public string FolderId { get; }
@@ -260,6 +263,19 @@ public sealed class MailFolderItemViewModel : BaseViewModel
         UnreadCount > 0;
 
     public bool HasSeparatorAfter { get; }
+
+    public bool IsSpamFolder { get; private set; }
+
+    public void UpdateSpamFolderRole(bool isSpamFolder)
+    {
+        if (IsSpamFolder == isSpamFolder)
+        {
+            return;
+        }
+
+        IsSpamFolder = isSpamFolder;
+        OnPropertyChanged(nameof(IsSpamFolder));
+    }
 
     public void UpdateState(
         string headerSubtitle,

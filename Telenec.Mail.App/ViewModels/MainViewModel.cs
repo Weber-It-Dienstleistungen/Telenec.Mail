@@ -2360,6 +2360,8 @@ public sealed class MainViewModel : BaseViewModel
                     serverFolder.UnreadCount,
                     serverFolder.MessageCount);
 
+                existingFolder.UpdateSpamFolderRole(serverFolder.IsSpamFolder);
+
                 var currentIndex =
                     MailFolders.IndexOf(
                         existingFolder);
@@ -2543,7 +2545,10 @@ public sealed class MainViewModel : BaseViewModel
                 folder.HasSeparatorAfter,
 
             messageCount:
-                folder.MessageCount);
+                folder.MessageCount,
+
+            isSpamFolder:
+                folder.IsSpamFolder);
     }
 
     private static MailMessageItemViewModel

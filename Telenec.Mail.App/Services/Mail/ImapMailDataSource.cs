@@ -112,6 +112,8 @@ public sealed class ImapMailDataSource : IMailDataSource
                         StringComparer.CurrentCultureIgnoreCase)
                     .ToList();
 
+            var spamFolderId = ResolveSpamFolderId(uniqueFolders, client.Inbox.FullName);
+
             return uniqueFolders
                 .Select(
                     folder =>
@@ -147,7 +149,11 @@ public sealed class ImapMailDataSource : IMailDataSource
                                 unreadCount,
 
                             MessageCount:
-                                messageCount);
+                                messageCount,
+
+                            IsSpamFolder:
+                                string.Equals(folder.FullName, spamFolderId,
+                                    StringComparison.OrdinalIgnoreCase));
                     })
                 .ToList();
         }
@@ -156,6 +162,43 @@ public sealed class ImapMailDataSource : IMailDataSource
             await DisconnectSafelyAsync(
                 client);
         }
+    }
+
+    private static string? ResolveSpamFolderId(
+        IReadOnlyList<IMailFolder> folders,
+        string inboxFullName)
+    {
+        var specialUseFolders = folders
+            .Where(folder => folder.Attributes.HasFlag(FolderAttributes.Junk))
+            .ToArray();
+
+        if (specialUseFolders.Length > 0)
+        {
+            return specialUseFolders.Length == 1
+                ? specialUseFolders[0].FullName
+                : null;
+        }
+
+        // A custom nested folder named Spam is not necessarily the junk folder.
+        // Only accept a unique conventional top-level folder or direct INBOX child.
+        var candidates = folders.Where(folder =>
+        {
+            var name = folder.Name;
+            if (!string.Equals(name, "Spam", StringComparison.OrdinalIgnoreCase) &&
+                !string.Equals(name, "Junk", StringComparison.OrdinalIgnoreCase))
+            {
+                return false;
+            }
+
+            return string.Equals(folder.FullName, name,
+                       StringComparison.OrdinalIgnoreCase) ||
+                (folder.DirectorySeparator != '\0' &&
+                    string.Equals(folder.FullName,
+                        $"{inboxFullName}{folder.DirectorySeparator}{name}",
+                        StringComparison.OrdinalIgnoreCase));
+        }).ToArray();
+
+        return candidates.Length == 1 ? candidates[0].FullName : null;
     }
 
     public Task<IReadOnlyList<MailMessageData>> GetMessagesAsync(

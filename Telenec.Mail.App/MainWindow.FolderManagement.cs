@@ -1862,7 +1862,10 @@ public partial class MainWindow
                         folder.HasSeparatorAfter,
 
                     messageCount:
-                        folder.MessageCount);
+                        folder.MessageCount,
+
+                    isSpamFolder:
+                        folder.IsSpamFolder);
 
             _viewModel.MailFolders.Add(
                 folderViewModel);

@@ -38,7 +38,8 @@ public sealed class DemoMailDataSource : IMailDataSource
             new MailFolderData(
                 FolderId: "Junk",
                 DisplayName: "Junk",
-                HeaderSubtitle: "Als Junk erkannte Nachrichten"),
+                HeaderSubtitle: "Als Junk erkannte Nachrichten",
+                IsSpamFolder: true),
 
             new MailFolderData(
                 FolderId: "Trash",

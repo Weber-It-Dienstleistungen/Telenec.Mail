@@ -1494,6 +1494,10 @@ public partial class MainWindow : Window
                 {
                     PopulateTransferToFolderMenu(item, selection, copy: true);
                 }
+                else if (Equals(item.Tag, "SpamClassification"))
+                {
+                    UpdateSpamClassificationMenuItem(item, selection);
+                }
             }
         }
 
@@ -1517,6 +1521,74 @@ public partial class MainWindow : Window
             _viewModel.IsTrashFolderSelected
                 ? "Wiederherstellen"
                 : "Löschen";
+    }
+
+    private MailFolderItemViewModel? ResolveSpamClassificationTarget(
+        MailFolderItemViewModel sourceFolder)
+    {
+        if (sourceFolder.IsSpamFolder)
+        {
+            return _viewModel.MailFolders.FirstOrDefault(folder =>
+                string.Equals(folder.FolderId, "INBOX", StringComparison.OrdinalIgnoreCase) &&
+                !folder.IsSpamFolder);
+        }
+
+        var spamFolders = _viewModel.MailFolders
+            .Where(folder => folder.IsSpamFolder)
+            .ToArray();
+
+        return spamFolders.Length == 1 ? spamFolders[0] : null;
+    }
+
+    private void UpdateSpamClassificationMenuItem(
+        MenuItem item, IReadOnlyList<MailMessageItemViewModel> selection)
+    {
+        var sourceFolder = _viewModel.SelectedFolder;
+        item.Header = sourceFolder?.IsSpamFolder == true
+            ? "Kein Spam"
+            : "Als Spam markieren";
+
+        item.IsEnabled = sourceFolder is not null &&
+            ResolveSpamClassificationTarget(sourceFolder) is not null &&
+            selection.Count > 0 &&
+            !_viewModel.IsLoading &&
+            !_viewModel.IsLoadingMoreMessages &&
+            !_isMessageMoveFromUiRunning &&
+            !_isReadStateChangeRunning &&
+            !_isAccountOperationInProgress &&
+            !_isLoggingOut &&
+            !_searchIsActive &&
+            selection.All(message =>
+                message.UniqueId != 0 && _viewModel.Messages.Contains(message));
+
+        item.ToolTip = sourceFolder is null ||
+            ResolveSpamClassificationTarget(sourceFolder) is null
+                ? "Kein eindeutiger Zielordner verfügbar."
+                : sourceFolder.IsSpamFolder
+                    ? "In den Posteingang verschieben"
+                    : "In den Spamordner verschieben";
+    }
+
+    private async void SpamClassificationMenuItem_OnClick(
+        object sender, RoutedEventArgs e)
+    {
+        if (sender is not FrameworkElement element ||
+            element.DataContext is not MailMessageItemViewModel clickedMessage ||
+            _viewModel.SelectedFolder is not { } sourceFolder)
+        {
+            return;
+        }
+
+        var targetFolder = ResolveSpamClassificationTarget(sourceFolder);
+        if (targetFolder is null)
+        {
+            return;
+        }
+
+        await MoveMessagesFromUiAsync(
+            GetMessageActionSelection(clickedMessage),
+            sourceFolder,
+            targetFolder);
     }
 
     private void PopulateTransferToFolderMenu(

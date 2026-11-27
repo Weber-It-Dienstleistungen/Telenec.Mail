@@ -6,4 +6,5 @@ public sealed record MailFolderData(
     string HeaderSubtitle,
     int UnreadCount = 0,
     bool HasSeparatorAfter = false,
-    int MessageCount = 0);
+    int MessageCount = 0,
+    bool IsSpamFolder = false);
