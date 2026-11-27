@@ -9,6 +9,10 @@ public sealed record MailSendAttachmentData(
     string? SourcePartSpecifier = null,
     string? SourceMessageId = null)
 {
+    // In-memory provenance for duplicate detection after adopting a saved draft.
+    // This is not a file source and must never be transmitted in a MIME header.
+    public string? OriginalLocalFilePath { get; init; }
+
     public bool IsLocalFile =>
         !string.IsNullOrWhiteSpace(
             FilePath);

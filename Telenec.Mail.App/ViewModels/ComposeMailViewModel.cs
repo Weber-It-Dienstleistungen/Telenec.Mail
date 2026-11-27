@@ -485,16 +485,13 @@ public sealed class ComposeMailViewModel : BaseViewModel
             return;
         }
 
-        var knownPaths =
-            Attachments
-                .Where(
-                    attachment =>
-                        attachment.IsLocalFile)
-                .Select(
-                    attachment =>
-                        attachment.FilePath)
-                .ToHashSet(
-                    StringComparer.OrdinalIgnoreCase);
+        var knownPaths = Attachments
+            .Select(attachment => attachment.IsLocalFile
+                ? attachment.FilePath
+                : attachment.OriginalLocalFilePath)
+            .OfType<string>()
+            .Where(path => !string.IsNullOrWhiteSpace(path))
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
 
         var newAttachments =
             new List<MailSendAttachmentData>();
@@ -944,7 +941,55 @@ public sealed class ComposeMailViewModel : BaseViewModel
             draft.RequestReadReceipt;
 
         ReplaceAttachments(
-            draft.Attachments);
+            PreserveAttachmentOrigins(draft.Attachments));
+    }
+
+    private IReadOnlyList<MailSendAttachmentData> PreserveAttachmentOrigins(
+        IReadOnlyList<MailSendAttachmentData> savedAttachments)
+    {
+        var previous = Attachments.ToArray();
+        var saved = savedAttachments.ToArray();
+
+        // Our MIME writer creates multipart/mixed with the body at part 1
+        // and all attachments in their existing order at parts 2, 3, ...
+        // If the verified server structure differs, do not guess a mapping.
+        if (previous.Length != saved.Length)
+        {
+            return saved;
+        }
+
+        for (var i = 0; i < saved.Length; i++)
+        {
+            if (!saved[i].IsServerAttachment ||
+                !string.Equals(saved[i].SourcePartSpecifier,
+                    (i + 2).ToString(System.Globalization.CultureInfo.InvariantCulture),
+                    StringComparison.Ordinal) ||
+                !string.Equals(previous[i].FileName, saved[i].FileName,
+                    StringComparison.Ordinal))
+            {
+                return saved;
+            }
+        }
+
+        for (var i = 0; i < saved.Length; i++)
+        {
+            var origin = previous[i].IsLocalFile
+                ? previous[i].FilePath
+                : previous[i].OriginalLocalFilePath;
+
+            if (!string.IsNullOrWhiteSpace(origin))
+            {
+                saved[i] = saved[i] with
+                {
+                    OriginalLocalFilePath = origin,
+                    // Retain the original displayed file size rather than
+                    // switching to the transfer-encoded MIME octet count.
+                    SizeBytes = previous[i].SizeBytes
+                };
+            }
+        }
+
+        return saved;
     }
 
     private void ReplaceAttachments(
