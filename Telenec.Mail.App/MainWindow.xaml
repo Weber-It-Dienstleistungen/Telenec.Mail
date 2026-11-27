@@ -471,8 +471,15 @@
                                         <Separator />
 
                                         <MenuItem
+                                            Header="Als gelesen markieren"
+                                            Tag="MarkRead"
+                                            InputGestureText="Strg+Q"
+                                            Click="MarkAsReadMenuItem_OnClick" />
+
+                                        <MenuItem
                                             Header="Als ungelesen markieren"
-                                            IsEnabled="{Binding CanMarkAsUnread}"
+                                            Tag="MarkUnread"
+                                            InputGestureText="Strg+U"
                                             Click="MarkAsUnreadMenuItem_OnClick" />
 
                                         <MenuItem

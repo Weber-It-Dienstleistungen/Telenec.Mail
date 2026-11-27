@@ -53,6 +53,9 @@ public sealed class MainViewModel : BaseViewModel
 
     private bool _suppressAutomaticReadMarking;
 
+    private readonly SemaphoreSlim _readStateGate = new(1, 1);
+    private bool _isExplicitReadStateChangeRunning;
+
     private string _loadingMessage =
         "Postfach wird geladen …";
 
@@ -991,41 +994,106 @@ public sealed class MainViewModel : BaseViewModel
         return true;
     }
 
-    public async Task<bool> MarkMessageAsUnreadAsync(
-        MailMessageItemViewModel message,
+    public async Task<bool> SetMessagesUnreadStateAsync(
+        IReadOnlyList<MailMessageItemViewModel> messages,
+        bool desiredUnread,
         CancellationToken cancellationToken = default)
     {
-        ArgumentNullException.ThrowIfNull(
-            message);
+        ArgumentNullException.ThrowIfNull(messages);
 
-        var folder =
-            _selectedFolder;
+        var folder = _selectedFolder;
 
         if (folder is null ||
-            message.IsUnread ||
-            message.UniqueId == 0 ||
-            !Messages.Contains(
-                message))
+            IsLoading ||
+            IsLoadingMoreMessages ||
+            IsMailMoveOperationRunning ||
+            IsMailSynchronizationRunning ||
+            _isExplicitReadStateChangeRunning ||
+            messages.Count == 0)
         {
             return false;
         }
 
-        await _mailDataSource
-            .MarkAsUnreadAsync(
-                folder.FolderId,
-                message.UniqueId,
-                cancellationToken);
+        var selection = messages.Distinct().ToArray();
 
-        if (message.IsUnread)
+        if (selection.Any(message =>
+                message.UniqueId == 0 || !Messages.Contains(message)))
         {
-            return true;
+            return false;
         }
 
-        message.MarkAsUnread();
+        _isExplicitReadStateChangeRunning = true;
 
-        folder.IncrementUnreadCount();
+        try
+        {
+            // Wait for automatic read marking already triggered by selection.
+            await _readStateGate.WaitAsync(cancellationToken);
 
-        return true;
+            try
+            {
+                foreach (var message in selection)
+                {
+                    if (!ReferenceEquals(_selectedFolder, folder) ||
+                        IsLoading ||
+                        !Messages.Contains(message))
+                    {
+                        return false;
+                    }
+
+                    await SetMessageUnreadStateCoreAsync(
+                        folder, message, desiredUnread, cancellationToken);
+                }
+
+                return true;
+            }
+            finally
+            {
+                _readStateGate.Release();
+            }
+        }
+        finally
+        {
+            _isExplicitReadStateChangeRunning = false;
+        }
+    }
+
+    private async Task SetMessageUnreadStateCoreAsync(
+        MailFolderItemViewModel folder,
+        MailMessageItemViewModel message,
+        bool desiredUnread,
+        CancellationToken cancellationToken = default)
+    {
+        if (message.IsUnread == desiredUnread || message.UniqueId == 0)
+        {
+            return;
+        }
+
+        if (desiredUnread)
+        {
+            await _mailDataSource.MarkAsUnreadAsync(
+                folder.FolderId, message.UniqueId, cancellationToken);
+        }
+        else
+        {
+            await _mailDataSource.MarkAsReadAsync(
+                folder.FolderId, message.UniqueId, cancellationToken);
+        }
+
+        if (message.IsUnread == desiredUnread)
+        {
+            return;
+        }
+
+        if (desiredUnread)
+        {
+            message.MarkAsUnread();
+            folder.IncrementUnreadCount();
+        }
+        else
+        {
+            message.MarkAsRead();
+            folder.DecrementUnreadCount();
+        }
     }
 
     public Task<bool> DeleteMessageAsync(
@@ -1406,7 +1474,7 @@ public sealed class MainViewModel : BaseViewModel
 
     private bool TryBeginMailMoveOperation()
     {
-        if (IsLoadingMoreMessages)
+        if (IsLoadingMoreMessages || _isExplicitReadStateChangeRunning)
         {
             return false;
         }
@@ -1446,7 +1514,7 @@ public sealed class MainViewModel : BaseViewModel
 
     private bool TryBeginSynchronization()
     {
-        if (IsLoadingMoreMessages)
+        if (IsLoadingMoreMessages || _isExplicitReadStateChangeRunning)
         {
             return false;
         }
@@ -1481,7 +1549,8 @@ public sealed class MainViewModel : BaseViewModel
     private bool TryBeginMessagePageLoad()
     {
         if (IsMailSynchronizationRunning ||
-            IsMailMoveOperationRunning)
+            IsMailMoveOperationRunning ||
+            _isExplicitReadStateChangeRunning)
         {
             return false;
         }
@@ -2495,30 +2564,31 @@ public sealed class MainViewModel : BaseViewModel
         MailFolderItemViewModel folder,
         MailMessageItemViewModel message)
     {
-        if (!message.IsUnread ||
-            message.UniqueId == 0)
+        if (!message.IsUnread || message.UniqueId == 0)
         {
             return;
         }
 
+        await _readStateGate.WaitAsync();
+
         try
         {
-            await _mailDataSource
-                .MarkAsReadAsync(
-                    folder.FolderId,
-                    message.UniqueId);
-
-            if (!message.IsUnread)
+            if (!ReferenceEquals(_selectedFolder, folder) ||
+                !Messages.Contains(message))
             {
                 return;
             }
 
-            message.MarkAsRead();
-
-            folder.DecrementUnreadCount();
+            await SetMessageUnreadStateCoreAsync(
+                folder, message, desiredUnread: false);
         }
         catch
         {
+            // Automatic read marking must not interrupt message preview.
+        }
+        finally
+        {
+            _readStateGate.Release();
         }
     }
 

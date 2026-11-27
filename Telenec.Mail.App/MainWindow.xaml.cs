@@ -41,6 +41,7 @@ public partial class MainWindow : Window
     private bool _isLoggingOut;
     private bool _isLoaded;
     private bool _isMessageDragInProgress;
+    private bool _isReadStateChangeRunning;
 
     private Task? _webViewInitializationTask;
     private int _renderVersion;
@@ -562,6 +563,23 @@ public partial class MainWindow : Window
 
         if (Keyboard.FocusedElement is TextBoxBase)
         {
+            return;
+        }
+
+        if ((e.Key == Key.U || e.Key == Key.Q) &&
+            Keyboard.Modifiers == ModifierKeys.Control &&
+            !_searchIsActive &&
+            MessageListBox.IsKeyboardFocusWithin)
+        {
+            e.Handled = true;
+
+            if (!e.IsRepeat)
+            {
+                await SetMessagesUnreadStateFromUiAsync(
+                    GetSelectedMessages(),
+                    desiredUnread: e.Key == Key.U);
+            }
+
             return;
         }
 
@@ -1229,27 +1247,80 @@ public partial class MainWindow : Window
         object sender,
         RoutedEventArgs e)
     {
-        if (sender is not FrameworkElement menuItem ||
-            menuItem.DataContext is not MailMessageItemViewModel message ||
-            !message.CanMarkAsUnread)
+        if (sender is FrameworkElement menuItem &&
+            menuItem.DataContext is MailMessageItemViewModel message)
+        {
+            await SetMessagesUnreadStateFromUiAsync(
+                GetReadStateActionSelection(message), desiredUnread: true);
+        }
+    }
+
+    private async void MarkAsReadMenuItem_OnClick(
+        object sender,
+        RoutedEventArgs e)
+    {
+        if (sender is FrameworkElement menuItem &&
+            menuItem.DataContext is MailMessageItemViewModel message)
+        {
+            await SetMessagesUnreadStateFromUiAsync(
+                GetReadStateActionSelection(message), desiredUnread: false);
+        }
+    }
+
+    private IReadOnlyList<MailMessageItemViewModel> GetReadStateActionSelection(
+        MailMessageItemViewModel clickedMessage)
+    {
+        return MessageListBox.SelectedItems.Contains(clickedMessage)
+            ? GetSelectedMessages()
+            : new[] { clickedMessage };
+    }
+
+    private async Task SetMessagesUnreadStateFromUiAsync(
+        IReadOnlyList<MailMessageItemViewModel> messages,
+        bool desiredUnread)
+    {
+        if (_isReadStateChangeRunning ||
+            _isAccountOperationInProgress ||
+            _isLoggingOut ||
+            _searchIsActive ||
+            messages.Count == 0)
         {
             return;
         }
 
+        _isReadStateChangeRunning = true;
+
         try
         {
-            await _viewModel
-                .MarkMessageAsUnreadAsync(
-                    message);
+            var completed = await _viewModel.SetMessagesUnreadStateAsync(
+                messages, desiredUnread);
+
+            if (!completed)
+            {
+                MessageBox.Show(
+                    this,
+                    "Der Vorgang konnte nicht vollständig ausgeführt werden.\n\n" +
+                    "Bitte warten Sie, bis das Postfach bereit ist, und versuchen Sie es erneut.",
+                    "Telenec Mail",
+                    MessageBoxButton.OK,
+                    MessageBoxImage.Information);
+            }
         }
         catch
         {
             MessageBox.Show(
-                "Die Nachricht konnte auf dem Mailserver nicht als ungelesen markiert werden.\n\n" +
-                "Bitte prüfen Sie die Verbindung und versuchen Sie es erneut.",
+                this,
+                (desiredUnread
+                    ? "Nicht alle ausgewählten Nachrichten konnten als ungelesen markiert werden."
+                    : "Nicht alle ausgewählten Nachrichten konnten als gelesen markiert werden.") +
+                "\n\nBitte prüfen Sie die Verbindung und versuchen Sie es erneut.",
                 "Telenec Mail",
                 MessageBoxButton.OK,
-                MessageBoxImage.Error);
+                MessageBoxImage.Warning);
+        }
+        finally
+        {
+            _isReadStateChangeRunning = false;
         }
     }
 
@@ -1260,6 +1331,23 @@ public partial class MainWindow : Window
         if (sender is not ContextMenu contextMenu)
         {
             return;
+        }
+
+        if (contextMenu.DataContext is MailMessageItemViewModel clickedMessage)
+        {
+            var selection = GetReadStateActionSelection(clickedMessage);
+
+            foreach (var item in contextMenu.Items.OfType<MenuItem>())
+            {
+                if (Equals(item.Tag, "MarkRead"))
+                {
+                    item.IsEnabled = selection.Any(message => message.IsUnread);
+                }
+                else if (Equals(item.Tag, "MarkUnread"))
+                {
+                    item.IsEnabled = selection.Any(message => !message.IsUnread);
+                }
+            }
         }
 
         var actionMenuItem =
