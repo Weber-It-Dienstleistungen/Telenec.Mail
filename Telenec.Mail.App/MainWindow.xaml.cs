@@ -561,25 +561,40 @@ public partial class MainWindow : Window
             return;
         }
 
-        if (Keyboard.FocusedElement is TextBoxBase)
-        {
-            return;
-        }
-
         if ((e.Key == Key.U || e.Key == Key.Q) &&
             Keyboard.Modifiers == ModifierKeys.Control &&
-            !_searchIsActive &&
-            MessageListBox.IsKeyboardFocusWithin)
+            !_searchIsActive)
         {
+            // Like the existing mail shortcuts, act on the selection
+            // even when the message list does not own keyboard focus.
+            // Editable text controls must retain their own shortcuts.
+            if (Keyboard.FocusedElement is TextBoxBase { IsReadOnly: false } ||
+                Keyboard.FocusedElement is PasswordBox)
+            {
+                return;
+            }
+
+            var readStateSelection = GetSelectedMessages();
+
+            if (readStateSelection.Count == 0)
+            {
+                return;
+            }
+
             e.Handled = true;
 
             if (!e.IsRepeat)
             {
                 await SetMessagesUnreadStateFromUiAsync(
-                    GetSelectedMessages(),
+                    readStateSelection,
                     desiredUnread: e.Key == Key.U);
             }
 
+            return;
+        }
+
+        if (Keyboard.FocusedElement is TextBoxBase)
+        {
             return;
         }
 
